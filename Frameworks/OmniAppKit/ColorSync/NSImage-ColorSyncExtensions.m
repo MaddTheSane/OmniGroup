@@ -48,7 +48,7 @@ RCS_ID("$Id$");
             layout = kColorSyncAlphaNone | kColorSyncByteOrderDefault;
             switch([bitmap bitsPerSample]) {
             case 5:
-                aDepth = kColorSync16BitInteger;
+                aDepth = kColorSync16BitInteger; break;
             case 8:
                 aDepth = kColorSync32BitInteger;
                 if ([bitmap bitsPerPixel] == 24) {

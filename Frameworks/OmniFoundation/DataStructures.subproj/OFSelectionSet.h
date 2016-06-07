@@ -11,26 +11,30 @@
 
 #import <OmniFoundation/OFUtilities.h> // OFPredicateBlock
 
-@class NSArray, NSPredicate;
+@class NSArray<ObjectType>, NSPredicate;
 
-@interface OFSelectionSet : NSObject
+NS_ASSUME_NONNULL_BEGIN
 
-- (void)addObject:(id)object;
-- (void)addObjectsFromArray:(NSArray *)objects;
-- (void)removeObject:(id)object;
-- (void)removeObjectsInArray:(NSArray *)toRemove;
+@interface OFSelectionSet<__covariant ObjectType> : NSObject
+
+- (void)addObject:(ObjectType)object;
+- (void)addObjectsFromArray:(NSArray<ObjectType> *)objects;
+- (void)removeObject:(ObjectType)object;
+- (void)removeObjectsInArray:(NSArray<ObjectType> *)toRemove;
 - (void)removeAllObjects;
 
-- (BOOL)containsObject:(id)object;
+- (BOOL)containsObject:(ObjectType)object;
 - (NSUInteger)count;
 
-- (NSArray *)allObjects;
+- (NSArray<ObjectType> *)allObjects;
 
-- (NSArray *)copyObjectsSatisfyingPredicateBlock:(OFPredicateBlock)predicate;
-- (NSArray *)copyObjectsSatisfyingPredicate:(NSPredicate *)predicate;
+- (NSArray<ObjectType> *)copyObjectsSatisfyingPredicateBlock:(OFPredicateBlock)predicate;
+- (NSArray<ObjectType> *)copyObjectsSatisfyingPredicate:(NSPredicate *)predicate;
 - (void)removeObjectsSatisfyingPredicate:(NSPredicate *)predicate;
 
-- (NSArray *)objectsSortedByInsertionOrder:(NSArray *)someObjects;
-- (NSUInteger)insertionOrderForObject:(id)object; // NSNotFound if not present
+- (NSArray<ObjectType> *)objectsSortedByInsertionOrder:(NSArray<ObjectType> *)someObjects;
+- (NSUInteger)insertionOrderForObject:(ObjectType)object; // NSNotFound if not present
 
 @end
+
+NS_ASSUME_NONNULL_END
