@@ -26,7 +26,7 @@
 
 + (OAColorProfile*)defaultProofProfile;
 + (OAColorProfile*)workingCMYKProfile;
-+ (NSArray *)proofingDeviceProfileNames;
++ (NSArray<NSString*> *)proofingDeviceProfileNames;
 + (instancetype)proofProfileForDeviceProfileName:(NSString *)deviceProfileName;
 + (instancetype)proofProfileForPrintInfo:(NSPrintInfo *)printInfo;
 
@@ -35,8 +35,8 @@
 + (NSArray<NSString*> *)grayProfileNames;
 + (instancetype)colorProfileWithRGBNamed:(NSString *)rgbName cmykNamed:(NSString *)cmykName grayNamed:(NSString *)grayName;
 
-+ (instancetype)colorProfileFromPropertyListRepresentation:(NSDictionary *)dict;
-- (NSMutableDictionary *)propertyListRepresentation;
++ (instancetype)colorProfileFromPropertyListRepresentation:(NSDictionary<NSString*,id> *)dict;
+- (NSMutableDictionary<NSString*,id> *)propertyListRepresentation;
 
 - (void)set;
 - (void)unset;

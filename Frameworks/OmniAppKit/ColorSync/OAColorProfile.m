@@ -39,15 +39,11 @@ NSString * const OAColorProofingDevicesDidChangeNotification = @"OAColorProofing
 
 @implementation OAColorProfile
 
-//#if OA_USE_COLOR_MANAGER
 static BOOL resetProfileLists = YES;
-//#endif
 static NSMutableDictionary *rgbProfileDictionary = nil;
 static NSMutableDictionary *cmykProfileDictionary = nil;
 static NSMutableDictionary *grayProfileDictionary = nil;
-//#if OA_USE_COLOR_MANAGER
 static BOOL resetDeviceList = YES;
-//#endif
 static NSMutableDictionary *deviceProfileDictionary = nil;
 static NSMutableDictionary *deviceNameDictionary = nil;
 static OAColorProfile *currentColorProfile = nil;
@@ -55,11 +51,9 @@ static NSView *focusedViewForCurrentColorProfile = nil;
 
 static OAColorProfile *lastInProfile = nil;
 static OAColorProfile *lastOutProfile = nil;
-//#if OA_USE_COLOR_MANAGER
 static ColorSyncTransformRef rgbColorWorld = NULL;
 static ColorSyncTransformRef cmykColorWorld = NULL;
 static ColorSyncTransformRef grayColorWorld = NULL;
-//#endif
 
 + (void)initialize;
 {
@@ -613,7 +607,7 @@ static BOOL loadProfileData(ColorSyncProfileRef *cmProfilePointer, NSData *data,
             return NULL;
         NSMutableArray *profiles = [NSMutableArray arrayWithCapacity:2];
         [profiles addObject:[NSDictionary dictionaryWithObjectsAndKeys:(id)rgbProfile, (id)kColorSyncProfile, (id)kColorSyncRenderingIntentPerceptual, (id)kColorSyncRenderingIntent, kColorSyncTransformDeviceToPCS, kColorSyncTransformTag, nil]];
-        [profiles addObject:[NSDictionary dictionaryWithObjectsAndKeys:(id)[aProfile _rgbProfile], (id)kColorSyncProfile, (id)kColorSyncRenderingIntentPerceptual, (id)kColorSyncRenderingIntent, kColorSyncTransformDeviceToPCS, kColorSyncTransformTag, nil]];
+        [profiles addObject:[NSDictionary dictionaryWithObjectsAndKeys:(id)[aProfile _rgbProfile], (id)kColorSyncProfile, (id)kColorSyncRenderingIntentPerceptual, (id)kColorSyncRenderingIntent, kColorSyncTransformPCSToDevice, kColorSyncTransformTag, nil]];
         
         cmykColorWorld = ColorSyncTransformCreate((CFArrayRef)profiles, NULL);
     }
@@ -632,7 +626,7 @@ static BOOL loadProfileData(ColorSyncProfileRef *cmProfilePointer, NSData *data,
             return NULL;
         NSMutableArray *profiles = [NSMutableArray arrayWithCapacity:2];
         [profiles addObject:[NSDictionary dictionaryWithObjectsAndKeys:(id)cmykProfile, (id)kColorSyncProfile, (id)kColorSyncRenderingIntentPerceptual, (id)kColorSyncRenderingIntent, kColorSyncTransformDeviceToPCS, kColorSyncTransformTag, nil]];
-        [profiles addObject:[NSDictionary dictionaryWithObjectsAndKeys:(id)[aProfile _cmykProfile], (id)kColorSyncProfile, (id)kColorSyncRenderingIntentPerceptual, (id)kColorSyncRenderingIntent, kColorSyncTransformDeviceToPCS, kColorSyncTransformTag, nil]];
+        [profiles addObject:[NSDictionary dictionaryWithObjectsAndKeys:(id)[aProfile _cmykProfile], (id)kColorSyncProfile, (id)kColorSyncRenderingIntentPerceptual, (id)kColorSyncRenderingIntent, kColorSyncTransformPCSToDevice, kColorSyncTransformTag, nil]];
         
         cmykColorWorld = ColorSyncTransformCreate((CFArrayRef)profiles, NULL);
     }
@@ -651,7 +645,7 @@ static BOOL loadProfileData(ColorSyncProfileRef *cmProfilePointer, NSData *data,
             return NULL;
         NSMutableArray *profiles = [NSMutableArray arrayWithCapacity:2];
         [profiles addObject:[NSDictionary dictionaryWithObjectsAndKeys:(id)grayProfile, (id)kColorSyncProfile, (id)kColorSyncRenderingIntentPerceptual, (id)kColorSyncRenderingIntent, kColorSyncTransformDeviceToPCS, kColorSyncTransformTag, nil]];
-        [profiles addObject:[NSDictionary dictionaryWithObjectsAndKeys:(id)[aProfile _grayProfile], (id)kColorSyncProfile, (id)kColorSyncRenderingIntentPerceptual, (id)kColorSyncRenderingIntent, kColorSyncTransformDeviceToPCS, kColorSyncTransformTag, nil]];
+        [profiles addObject:[NSDictionary dictionaryWithObjectsAndKeys:(id)[aProfile _grayProfile], (id)kColorSyncProfile, (id)kColorSyncRenderingIntentPerceptual, (id)kColorSyncRenderingIntent, kColorSyncTransformPCSToDevice, kColorSyncTransformTag, nil]];
 
         grayColorWorld = ColorSyncTransformCreate((CFArrayRef)profiles, NULL);
     }
