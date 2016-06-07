@@ -20,19 +20,19 @@
     ColorSyncProfileRef rgbProfile, cmykProfile, grayProfile;
 }
 
-+ (instancetype)defaultDocumentProfile;
-+ (instancetype)defaultDisplayProfile;
-+ (instancetype)currentProfile;
++ (OAColorProfile*)defaultDocumentProfile;
++ (OAColorProfile*)defaultDisplayProfile;
++ (OAColorProfile*)currentProfile;
 
-+ (instancetype)defaultProofProfile;
-+ (instancetype)workingCMYKProfile;
++ (OAColorProfile*)defaultProofProfile;
++ (OAColorProfile*)workingCMYKProfile;
 + (NSArray *)proofingDeviceProfileNames;
 + (instancetype)proofProfileForDeviceProfileName:(NSString *)deviceProfileName;
 + (instancetype)proofProfileForPrintInfo:(NSPrintInfo *)printInfo;
 
-+ (NSArray *)rgbProfileNames;
-+ (NSArray *)cmykProfileNames;
-+ (NSArray *)grayProfileNames;
++ (NSArray<NSString*> *)rgbProfileNames;
++ (NSArray<NSString*> *)cmykProfileNames;
++ (NSArray<NSString*> *)grayProfileNames;
 + (instancetype)colorProfileWithRGBNamed:(NSString *)rgbName cmykNamed:(NSString *)cmykName grayNamed:(NSString *)grayName;
 
 + (instancetype)colorProfileFromPropertyListRepresentation:(NSDictionary *)dict;

@@ -170,7 +170,7 @@ static void (*originalDeviceCMYKImp)(NSColor *color, SEL _cmd);
 #define MAXUINT16 ((1 << 16) - 1)
 
 #if OA_USE_COLOR_MANAGER
-- (NSColor *)_rgbConvertUsingColorWorld:(CMWorldRef)colorWorldRef;
+- (NSColor *)_rgbConvertUsingColorWorld:(ColorSyncTransformRef)colorWorldRef;
 {
     CMColor cmColor;
     
@@ -184,7 +184,7 @@ static void (*originalDeviceCMYKImp)(NSColor *color, SEL _cmd);
     return [NSColor colorWithDeviceRed:((float)cmColor.rgb.red / (float)MAXUINT16) green:((float)cmColor.rgb.green / (float)MAXUINT16) blue:((float)cmColor.rgb.blue / (float)MAXUINT16) alpha:[self alphaComponent]];
 }
 
-- (NSColor *)_cmykConvertUsingColorWorld:(CMWorldRef)colorWorldRef intoRGB:(BOOL)intoRGB;
+- (NSColor *)_cmykConvertUsingColorWorld:(ColorSyncTransformRef)colorWorldRef intoRGB:(BOOL)intoRGB;
 {
     CMColor cmColor;
     
@@ -203,7 +203,7 @@ static void (*originalDeviceCMYKImp)(NSColor *color, SEL _cmd);
         return [NSColor colorWithDeviceCyan:((float)cmColor.cmyk.cyan / (float)MAXUINT16) magenta:((float)cmColor.cmyk.magenta / (float)MAXUINT16) yellow:((float)cmColor.cmyk.yellow / (float)MAXUINT16) black:((float)cmColor.cmyk.black / (float)MAXUINT16) alpha:[self alphaComponent]];
 }
 
-- (NSColor *)_grayConvertUsingColorWorld:(CMWorldRef)colorWorldRef intoRGB:(BOOL)intoRGB;
+- (NSColor *)_grayConvertUsingColorWorld:(ColorSyncTransformRef)colorWorldRef intoRGB:(BOOL)intoRGB;
 {
     CMColor cmColor;
     
@@ -248,7 +248,7 @@ static void (*originalDeviceCMYKImp)(NSColor *color, SEL _cmd);
         
         if (!world)
             return self;
-        if (colorSpaceName == NSDeviceRGBColorSpace || NSCalibratedRGBColorSpace)
+        if (colorSpaceName == NSDeviceRGBColorSpace || colorSpaceName == NSCalibratedRGBColorSpace)
             return [self _rgbConvertUsingColorWorld:world];
         else
             return [[self colorUsingColorSpaceName:NSDeviceRGBColorSpace] _rgbConvertUsingColorWorld:world];
