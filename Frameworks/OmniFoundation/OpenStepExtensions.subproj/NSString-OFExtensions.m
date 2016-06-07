@@ -253,11 +253,14 @@ static NSCharacterSet *nonAtomCharsExceptLWSP = nil;
     
     if (!hasInitialized) {
         // Potential minor memory leak here due to multithreading
-        lowercaseOFCharacterSet = [[OFCharacterSet alloc] initWithCharacterSet:[NSCharacterSet lowercaseLetterCharacterSet]];
-        uppercaseOFCharacterSet = [[OFCharacterSet alloc] initWithCharacterSet:[NSCharacterSet uppercaseLetterCharacterSet]];
-        numberOFCharacterSet = [[OFCharacterSet alloc] initWithCharacterSet:[NSCharacterSet decimalDigitCharacterSet]];
+        static dispatch_once_t onceToken;
+        dispatch_once(&onceToken, ^{
+            lowercaseOFCharacterSet = [[OFCharacterSet alloc] initWithCharacterSet:[NSCharacterSet lowercaseLetterCharacterSet]];
+            uppercaseOFCharacterSet = [[OFCharacterSet alloc] initWithCharacterSet:[NSCharacterSet uppercaseLetterCharacterSet]];
+            numberOFCharacterSet = [[OFCharacterSet alloc] initWithCharacterSet:[NSCharacterSet decimalDigitCharacterSet]];
 
-        hasInitialized = YES;
+            hasInitialized = YES;
+        });
     }
 
     NSMutableArray *words = [NSMutableArray array];

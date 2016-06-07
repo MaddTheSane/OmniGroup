@@ -2132,6 +2132,7 @@
 			);
 			name = OmniFoundation;
 			sourceTree = "<group>";
+			usesTabs = 0;
 		};
 		00E51C86FE8AAEA611C9CC38 /* DataStructures */ = {
 			isa = PBXGroup;
