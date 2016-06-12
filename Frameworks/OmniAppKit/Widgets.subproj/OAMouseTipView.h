@@ -26,6 +26,7 @@
 
 // API
 
+@property (nonatomic) OAMouseTipStyle style;
 - (void)setStyle:(OAMouseTipStyle)aStyle;
 - (void)setAttributedTitle:(NSAttributedString *)aTitle;
 - (NSDictionary *)textAttributes;

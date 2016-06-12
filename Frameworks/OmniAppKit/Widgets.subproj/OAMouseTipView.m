@@ -23,6 +23,7 @@ RCS_ID("$Id$");
 @end
 
 @implementation OAMouseTipView
+@synthesize style;
 
 static NSParagraphStyle *mousetipParagrphStyle;
 

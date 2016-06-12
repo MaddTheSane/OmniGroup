@@ -10,7 +10,7 @@
 #import <OmniFoundation/OFObject.h>
 #import <AppKit/NSPasteboard.h>
 
-@interface OAPasteboardHelper : OFObject
+DEPRECATED_ATTRIBUTE @interface OAPasteboardHelper : OFObject
 {
     NSMutableDictionary *typeToOwner;
     unsigned int responsible;

@@ -7,6 +7,7 @@
 //
 // $Id$
 
+#import <Foundation/NSObjCRuntime.h>
 #import <Foundation/NSNumberFormatter.h>
 
 @class NSTableColumn;
@@ -16,6 +17,6 @@
     NSTableColumn *nonretainedTableColumn;
 }
 
-- initWithNonretainedTableColumn:(NSTableColumn *)tableColumn;
+- (instancetype)initWithNonretainedTableColumn:(NSTableColumn *)tableColumn;
 
 @end

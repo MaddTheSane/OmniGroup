@@ -15,11 +15,6 @@
 
 RCS_ID("$Id$");
 
-@interface NSColor (JaguarAPI)
-+ (NSColor *)alternateSelectedControlColor;
-+ (NSColor *)alternateSelectedControlTextColor;
-@end
-
 static NSMutableParagraphStyle *OATextWithIconCellParagraphStyle = nil;
 NSString * const OATextWithIconCellStringKey = @"string";
 NSString * const OATextWithIconCellImageKey = @"image";

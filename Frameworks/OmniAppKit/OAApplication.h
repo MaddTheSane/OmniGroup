@@ -43,8 +43,8 @@
 
 // Application Support directory
 - (NSString *)applicationSupportDirectoryName; // Calls the delegate, falls back to the process name. Does not cache.
-- (NSArray *)supportDirectoriesInDomain:(NSSearchPathDomainMask)domains;
-- (NSArray *)readableSupportDirectoriesInDomain:(NSSearchPathDomainMask)domains withComponents:(NSString *)subdir, ... NS_REQUIRES_NIL_TERMINATION;
+- (NSArray<NSString*> *)supportDirectoriesInDomain:(NSSearchPathDomainMask)domains;
+- (NSArray<NSString*> *)readableSupportDirectoriesInDomain:(NSSearchPathDomainMask)domains withComponents:(NSString *)subdir, ... NS_REQUIRES_NIL_TERMINATION;
 - (NSString *)writableSupportDirectoryInDomain:(NSSearchPathDomainMask)domains withComponents:(NSString *)subdir, ... NS_REQUIRES_NIL_TERMINATION;
 
 // Actions

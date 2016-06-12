@@ -16,6 +16,15 @@ RCS_ID("$Id$");
 // This puts views in rows and columns, and makes sure they all have the same size.  You can set the left, right, top and bottom margins, and the interrow and intercolumn spacing.
 
 @implementation OAGridView
+@synthesize rowCount;
+@synthesize columnCount;
+@synthesize interColumnSpace;
+@synthesize interRowSpace;
+@synthesize leftMargin;
+@synthesize rightMargin;
+@synthesize topMargin;
+@synthesize bottomMargin;
+@synthesize backgroundColor;
 
 static NSView *_emptyView = nil;
 
@@ -43,15 +52,10 @@ static NSView *_emptyView = nil;
 // Accessors
 //
 
-- (int)rowCount;
-{
-    return rowCount;
-}
-
-- (void)setRowCount:(int)newRowCount;
+- (void)setRowCount:(NSInteger)newRowCount;
 {
     NSMutableArray *rowViews;
-    int row, column;
+    NSInteger row, column;
 
     OBASSERT(newRowCount >= 0);
 
@@ -79,15 +83,10 @@ static NSView *_emptyView = nil;
     }
 }
 
-- (int)columnCount;
-{
-    return columnCount;
-}
-
-- (void)setColumnCount:(int)newColumnCount;
+- (void)setColumnCount:(NSInteger)newColumnCount;
 {
     NSMutableArray *rowViews;
-    int row, column;
+    NSInteger row, column;
 
     OBASSERT(newColumnCount >= 0);
 
@@ -118,12 +117,7 @@ static NSView *_emptyView = nil;
     }
 }
 
-- (float)interColumnSpace;
-{
-    return interColumnSpace;
-}
-
-- (void)setInterColumnSpace:(float)newInterColumnSpace;
+- (void)setInterColumnSpace:(CGFloat)newInterColumnSpace;
 {
     if (newInterColumnSpace == interColumnSpace)
         return;
@@ -132,12 +126,7 @@ static NSView *_emptyView = nil;
     [self tile];
 }
 
-- (float)interRowSpace;
-{
-    return interRowSpace;
-}
-
-- (void)setInterRowSpace:(float)newInterRowSpace;
+- (void)setInterRowSpace:(CGFloat)newInterRowSpace;
 {
     if (newInterRowSpace == interRowSpace)
         return;
@@ -146,12 +135,7 @@ static NSView *_emptyView = nil;
     [self tile];
 }
 
-- (float)leftMargin;
-{
-    return leftMargin;
-}
-
-- (void)setLeftMargin:(float)newLeftMargin;
+- (void)setLeftMargin:(CGFloat)newLeftMargin;
 {
     if (newLeftMargin == leftMargin)
         return;
@@ -160,12 +144,7 @@ static NSView *_emptyView = nil;
     [self tile];
 }
 
-- (float)rightMargin;
-{
-    return rightMargin;
-}
-
-- (void)setRightMargin:(float)newRightMargin;
+- (void)setRightMargin:(CGFloat)newRightMargin;
 {
     if (newRightMargin == rightMargin)
         return;
@@ -174,12 +153,7 @@ static NSView *_emptyView = nil;
     [self tile];
 }
 
-- (float)topMargin;
-{
-    return topMargin;
-}
-
-- (void)setTopMargin:(float)newTopMargin;
+- (void)setTopMargin:(CGFloat)newTopMargin;
 {
     if (newTopMargin == topMargin)
         return;
@@ -188,12 +162,7 @@ static NSView *_emptyView = nil;
     [self tile];
 }
 
-- (float)bottomMargin;
-{
-    return bottomMargin;
-}
-
-- (void)setBottomMargin:(float)newBottomMargin;
+- (void)setBottomMargin:(CGFloat)newBottomMargin;
 {
     if (newBottomMargin == bottomMargin)
         return;
@@ -202,7 +171,7 @@ static NSView *_emptyView = nil;
     [self tile];
 }
 
-- (NSView *)viewAtRow:(int)row column:(int)column;
+- (NSView *)viewAtRow:(NSInteger)row column:(NSInteger)column;
 {
     NSArray *rowViews;
     NSView *aView;
@@ -218,7 +187,7 @@ static NSView *_emptyView = nil;
     return aView;
 }
 
-- (void)setView:(NSView *)newView atRow:(int)row column:(int)column;
+- (void)setView:(NSView *)newView atRow:(NSInteger)row column:(NSInteger)column;
 {
     NSMutableArray *rowViews;
     NSView *oldView;
@@ -239,7 +208,7 @@ static NSView *_emptyView = nil;
     }
 }
 
-- (void)setView:(NSView *)aView relativeToView:(NSView *)referenceView atRow:(int)row column:(int)column;
+- (void)setView:(NSView *)aView relativeToView:(NSView *)referenceView atRow:(NSInteger)row column:(NSInteger)column;
 {
     OBASSERT(aView != nil && referenceView != nil && [aView superview] != nil);
     
@@ -276,11 +245,6 @@ static NSView *_emptyView = nil;
     }
 }
 
-- (NSColor *)backgroundColor;
-{
-    return backgroundColor;
-}
-
 - (void)setBackgroundColor:(NSColor *)newBackgroundColor;
 {
     if (newBackgroundColor == backgroundColor)
@@ -314,7 +278,7 @@ static NSView *_emptyView = nil;
 {
     NSRect boundsRect, otherRect;
     NSRect viewFrame;
-    int row, column;
+    NSInteger row, column;
     NSArray *rowViews;
     NSView *aView;
 

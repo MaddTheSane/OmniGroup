@@ -41,7 +41,7 @@ static void _addFormatter(NSMutableArray *results, NSString *formatString)
     formatters = [results copy];
 }
 
-- initWithNonretainedTableColumn:(NSTableColumn *)tableColumn;
+- (instancetype)initWithNonretainedTableColumn:(NSTableColumn *)tableColumn;
 {
     if (!(self = [super init]))
         return nil;

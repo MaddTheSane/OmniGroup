@@ -12,8 +12,8 @@
 @class OAThumbnailView;
 
 
-@protocol OAThumbnailProvider
-- (NSUInteger) thumbnailCount;
+@protocol OAThumbnailProvider <NSObject>
+@property (readonly) NSUInteger thumbnailCount;
 
 - (NSImage *)thumbnailImageAtIndex:(NSUInteger)thumbnailIndex;
 - (void)missedThumbnailImageInView:(OAThumbnailView *)view rect:(NSRect)rect atIndex:(NSUInteger)thumbnailIndex;

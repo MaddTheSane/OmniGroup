@@ -24,7 +24,7 @@ NS_ASSUME_NONNULL_BEGIN
 /* Result. Valid only once the operation is finished. */
 /* Note that on OSX we only return TrustDurationSession, not TrustDurationAlways: the "always" behavior is implemented by allowing the user to modify the certificate trust settings directly with SFCertificateView. On iOS, the equivalent class (OUICertificateTrustAlert) can return both Session and Always depending on the users response. */
 @property (readonly,nonatomic) OFCertificateTrustDuration result;
-- (SecTrustRef)serverTrust;    // The trust ref we've evaluated and possibly modified
+- (SecTrustRef)serverTrust CF_RETURNS_NOT_RETAINED;    // The trust ref we've evaluated and possibly modified
 
 @end
 

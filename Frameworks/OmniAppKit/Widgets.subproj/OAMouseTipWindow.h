@@ -13,12 +13,12 @@
 @class NSTimer;
 @class OAMouseTipView;
 
-typedef enum {
+typedef NS_ENUM(int, OAMouseTipStyle) {
     OAMouseTipUnsetStyle = -1,
     OAMouseTipTooltipStyle,
     OAMouseTipExposeStyle,
     OAMouseTipDockStyle,
-} OAMouseTipStyle;
+};
 
 #define OAMouseTipsEnabledPreferenceKey (@"OADisplayMouseTips")
 #define OAMouseTipsNotesEnabledPreferenceKey (@"OADisplayNoteMouseTips")

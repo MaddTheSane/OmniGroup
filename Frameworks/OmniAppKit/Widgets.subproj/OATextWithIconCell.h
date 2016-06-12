@@ -20,14 +20,9 @@
 }
 
 // API
-- (NSImage *)icon;
-- (void)setIcon:(NSImage *)anIcon;
-
-- (NSCellImagePosition)imagePosition;
-- (void)setImagePosition:(NSCellImagePosition)aPosition;
-
-- (BOOL)drawsHighlight;
-- (void)setDrawsHighlight:(BOOL)flag;
+@property (retain) NSImage *icon;
+@property NSCellImagePosition imagePosition;
+@property BOOL drawsHighlight;
 
 - (NSRect)textRectForFrame:(NSRect)cellFrame inView:(NSView *)controlView;
 

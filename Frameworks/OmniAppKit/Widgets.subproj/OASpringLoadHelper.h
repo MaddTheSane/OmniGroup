@@ -15,7 +15,7 @@
 #import <AppKit/NSNibDeclarations.h>
 #import <Foundation/NSGeometry.h> // For NSRect
 
-@protocol OASpringLoadHelper
+@protocol OASpringLoadHelper <NSObject>
 
 - (BOOL)springLoadHelperShouldFlash:(OASpringLoadHelper *)aHelper;
 // Return YES if the spring load should send -springLoadHelper:wantsFlash: a few times before triggering the spring load (via -springLoadHelperWantsSpringLoad:)

@@ -44,12 +44,14 @@ typedef enum { YES_SCROLL, NO_SCROLL, VERTICAL_SCROLL, AUTO_SCROLL, MANUAL_SCROL
 - (void)zoomFromSender:(NSMenuItem *)sender;
 - (CGFloat)zoomFactor;
 - (void)setDelegate:(id)newNonretainedDelegate;
+@property ScrollingBehavior scrollBehavior;
 - (ScrollingBehavior)scrollBehavior;
 - (void)setScrollBehavior:(ScrollingBehavior)behavior;
 - (void)showingPageNumber:(int)pageNumber of:(unsigned int)pagesCount;
 - (void)gotoPage:(id)sender;
 - (BOOL)processKeyDownCharacter:(unichar)character modifierFlags:(NSUInteger)modifierFlags;
 
+@property BOOL smoothScrollEnabled;
 - (void)setSmoothScrollEnabled:(BOOL)smoothScrollEnabled;
 - (BOOL)smoothScrollEnabled;
 

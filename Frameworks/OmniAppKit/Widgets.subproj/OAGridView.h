@@ -14,51 +14,35 @@
 
 @interface OAGridView : NSView
 {
-    float leftMargin;
-    float rightMargin;
-    float topMargin;
-    float bottomMargin;
-    float interColumnSpace;
-    float interRowSpace;
-    int rowCount;
-    int columnCount;
-    NSMutableArray *rows;
+    CGFloat leftMargin;
+    CGFloat rightMargin;
+    CGFloat topMargin;
+    CGFloat bottomMargin;
+    CGFloat interColumnSpace;
+    CGFloat interRowSpace;
+    NSInteger rowCount;
+    NSInteger columnCount;
+    NSMutableArray<NSMutableArray<__kindof NSView*>*> *rows;
     NSColor *backgroundColor;
 }
 
 // Accessors
-- (int)rowCount;
-- (void)setRowCount:(int)newRowCount;
+@property (nonatomic) NSInteger rowCount;
+@property (nonatomic) NSInteger columnCount;
+@property (nonatomic) CGFloat interColumnSpace;
+@property (nonatomic) CGFloat interRowSpace;
+@property (nonatomic) CGFloat leftMargin;
+@property (nonatomic) CGFloat rightMargin;
+@property (nonatomic) CGFloat topMargin;
+@property (nonatomic) CGFloat bottomMargin;
 
-- (int)columnCount;
-- (void)setColumnCount:(int)newColumnCount;
-
-- (float)interColumnSpace;
-- (void)setInterColumnSpace:(float)newInterColumnSpace;
-
-- (float)interRowSpace;
-- (void)setInterRowSpace:(float)newInterRowSpace;
-
-- (float)leftMargin;
-- (void)setLeftMargin:(float)newLeftMargin;
-
-- (float)rightMargin;
-- (void)setRightMargin:(float)newRightMargin;
-
-- (float)topMargin;
-- (void)setTopMargin:(float)newTopMargin;
-
-- (float)bottomMargin;
-- (void)setBottomMargin:(float)newBottomMargin;
-
-- (NSView *)viewAtRow:(int)row column:(int)column;
-- (void)setView:(NSView *)aView atRow:(int)row column:(int)column;
-- (void)setView:(NSView *)aView relativeToView:(NSView *)referenceView atRow:(int)row column:(int)column;
+- (NSView *)viewAtRow:(NSInteger)row column:(NSInteger)column;
+- (void)setView:(NSView *)aView atRow:(NSInteger)row column:(NSInteger)column;
+- (void)setView:(NSView *)aView relativeToView:(NSView *)referenceView atRow:(NSInteger)row column:(NSInteger)column;
 
 - (void)removeAllViews;
 
-- (NSColor *)backgroundColor;
-- (void)setBackgroundColor:(NSColor *)newBackgroundColor;
+@property (nonatomic, strong) NSColor *backgroundColor;
 
 // NSView methods
 - (void)resizeSubviewsWithOldSize:(NSSize)oldFrameSize;

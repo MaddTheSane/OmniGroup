@@ -28,8 +28,7 @@
 - (IBAction)vectorTextFieldAction:(id)sender;
 
 // API
-- (void)setIsMultiple:(BOOL)flag;
-- (BOOL)isMultiple;
+@property BOOL isMultiple;
 
 - (NSTextField *)xField;
 - (NSTextField *)yField;

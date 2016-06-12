@@ -20,6 +20,7 @@ static inline CGFloat _scaling(NSRect frame)
 }
 
 @implementation OAVectorCell
+@synthesize isMultiple = _isMultiple;
 
 #pragma mark NSCell subclass
 
@@ -132,18 +133,6 @@ static inline CGFloat _scaling(NSRect frame)
 
     // We don't abort the value change if we leave the frame.
     return YES;
-}
-
-#pragma mark API
-
-- (void)setIsMultiple:(BOOL)flag;
-{
-    _isMultiple = flag;
-}
-
-- (BOOL)isMultiple;
-{
-    return _isMultiple;
 }
 
 #pragma mark NSCopying

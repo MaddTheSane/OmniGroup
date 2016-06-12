@@ -15,7 +15,7 @@
 
 #define MAXIMUM_INDICATOR_COUNT 2 // easy to increase, but all I need for now
 
-@interface OAMultiColumnListView : NSView 
+DEPRECATED_ATTRIBUTE @interface OAMultiColumnListView : NSView 
 {
     IBOutlet id dataSource;
     IBOutlet id delegate;

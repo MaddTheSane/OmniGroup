@@ -26,7 +26,7 @@ RCS_ID("$Id$");
 {
     static NSImage *gearImage = nil;
     if (gearImage == nil) {
-        gearImage = [NSImage imageNamed:@"OAGearTemplate" inBundle:OMNI_BUNDLE];
+        gearImage = [NSImage imageNamed:NSImageNameActionTemplate];
         OBASSERT(gearImage != nil);
     }
 

@@ -17,7 +17,6 @@
     BOOL         _isMultiple;
 }
 
-- (void)setIsMultiple:(BOOL)flag;
-- (BOOL)isMultiple;
+@property BOOL isMultiple;
 
 @end

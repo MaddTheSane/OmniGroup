@@ -18,7 +18,8 @@
 
 @end
 
-#import <math.h> // for pow()
+#include <math.h> // for pow()
+#include <tgmath.h>
 #import <AppKit/NSColor.h> // for +colorWithCalibratedRed...
 
 OB_DEPRECATED_ATTRIBUTE static inline double

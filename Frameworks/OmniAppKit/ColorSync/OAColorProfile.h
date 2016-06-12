@@ -59,9 +59,6 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)_setRGBColor:(NSColor *)aColor;
 - (void)_setCMYKColor:(NSColor *)aColor;
 - (void)_setGrayColor:(NSColor *)aColor;
-- (ColorSyncTransformRef)_rgbConversionWorldForOutput:(OAColorProfile *)aProfile CF_RETURNS_NOT_RETAINED;
-- (ColorSyncTransformRef)_cmykConversionWorldForOutput:(OAColorProfile *)aProfile CF_RETURNS_NOT_RETAINED;
-- (ColorSyncTransformRef)_grayConversionWorldForOutput:(OAColorProfile *)aProfile CF_RETURNS_NOT_RETAINED;
 
 - (ColorSyncTransformRef)_rgbConversionWorldForOutput:(OAColorProfile *)aProfile CF_RETURNS_NOT_RETAINED;
 - (ColorSyncTransformRef)_cmykConversionWorldForOutput:(OAColorProfile *)aProfile CF_RETURNS_NOT_RETAINED;

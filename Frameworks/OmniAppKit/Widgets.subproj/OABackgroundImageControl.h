@@ -23,7 +23,8 @@
 // API
 - (void)rebuildBackgroundImage;
     // Call this method to invalidate the control's background image.  It will immediately recreate the background image, lock focus on it, and call -drawBackgroundImageForBounds: on itself (which is expected to be implemented by the subclass)
-    
+
+@property BOOL drawsFocusRing;
 - (BOOL)drawsFocusRing;
     // Returns YES if the control draws a focus ring around the background image.  Defaults to YES.
 - (void)setDrawsFocusRing:(BOOL)flag;

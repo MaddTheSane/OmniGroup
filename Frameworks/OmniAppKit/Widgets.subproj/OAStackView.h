@@ -14,7 +14,7 @@
 
 @interface OAStackView : NSView
 {
-    IBOutlet id dataSource;
+    //IBOutlet id dataSource;
     NSView *nonretained_stretchyView;
     struct {
         unsigned int needsReload:1;
@@ -23,8 +23,7 @@
     } flags;
 }
 
-- (id)dataSource;
-- (void)setDataSource:(id)dataSource;
+@property (unsafe_unretained) IBOutlet id dataSource;
 
 - (void)reloadSubviews;
 - (void)subviewSizeChanged;

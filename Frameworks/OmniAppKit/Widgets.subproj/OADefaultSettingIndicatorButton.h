@@ -11,6 +11,7 @@
 
 #import <AppKit/NSNibDeclarations.h> // For IBAction, IBOutlet
 
+@protocol OADefaultSettingIndicatorButtonDelegate;
 NS_ASSUME_NONNULL_BEGIN
 
 @interface OADefaultSettingIndicatorButton : NSButton
@@ -21,8 +22,7 @@ NS_ASSUME_NONNULL_BEGIN
 // API
 + (OADefaultSettingIndicatorButton *)defaultSettingIndicatorWithIdentifier:(id <NSCopying>)settingIdentifier forView:(NSView *)view delegate:(id)delegate;
 
-- (id)delegate;
-- (void)setDelegate:(id)newDelegate;
+@property (weak, nullable) id<OADefaultSettingIndicatorButtonDelegate> delegate;
 
 // Make sure no one calls this one, which is now object by NSUserInterfaceItemIdentification
 @property (nullable, copy) NSString *identifier NS_UNAVAILABLE;
@@ -41,7 +41,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 @end
 
-@interface NSObject (OADefaultSettingIndicatorButtonDelegate)
+@protocol OADefaultSettingIndicatorButtonDelegate <NSObject>
+@optional
 - (NSInteger)stateForSettingIndicatorButton:(OADefaultSettingIndicatorButton *)indicatorButton;
 - (nullable id)defaultObjectValueForSettingIndicatorButton:(OADefaultSettingIndicatorButton *)indicatorButton;
 - (nullable id)objectValueForSettingIndicatorButton:(OADefaultSettingIndicatorButton *)indicatorButton;

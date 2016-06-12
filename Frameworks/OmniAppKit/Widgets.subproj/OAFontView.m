@@ -18,6 +18,8 @@
 RCS_ID("$Id$")
 
 @implementation OAFontView
+@synthesize font;
+@synthesize delegate;
 
 // Init and dealloc
 
@@ -32,21 +34,6 @@ RCS_ID("$Id$")
 }
 
 //
-
-- (void) setDelegate: (id) aDelegate;
-{
-    delegate = aDelegate;
-}
-
-- (id) delegate;
-{
-    return delegate;
-}
-
-- (NSFont *)font;
-{
-    return font;
-}
 
 - (void)setFont:(NSFont *)newFont;
 {

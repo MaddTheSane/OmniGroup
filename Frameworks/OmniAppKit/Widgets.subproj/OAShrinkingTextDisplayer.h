@@ -11,7 +11,7 @@
 
 @class NSFont, NSString;
 
-@interface OAShrinkingTextDisplayer : NSView
+DEPRECATED_ATTRIBUTE @interface OAShrinkingTextDisplayer : NSView
 {
     NSFont *baseFont;
     NSString *string;

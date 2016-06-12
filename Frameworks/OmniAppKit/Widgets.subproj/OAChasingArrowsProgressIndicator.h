@@ -11,7 +11,7 @@
 
 // This class provides the standard Mac "chasing arrows" control, but with a few twists. You can optionally set a target and action, so that something will happen when the control is clicked. Since this is a non-standard behavior, the control will draw a static image when not animating if a target/action is set. If you don't like this, set OAStandardChasingArrowsBehavior to YES in NSUserDefaults. Also, this class is designed to allow for subclasses which provide diferent animations; users can leverage this to easily create "throbber" animations for an app (such as the logo animations in several web browsers). Subclasses wishing to take advantage of this ability should override +preferredSize and +staticImage in addition to -drawRect:. 
 
-@interface OAChasingArrowsProgressIndicator : NSProgressIndicator
+DEPRECATED_ATTRIBUTE @interface OAChasingArrowsProgressIndicator : NSProgressIndicator
 {
     BOOL animating;
     unsigned int counter;

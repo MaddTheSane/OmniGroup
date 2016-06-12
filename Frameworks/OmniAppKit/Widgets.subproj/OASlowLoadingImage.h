@@ -35,12 +35,13 @@
     CGImageSourceRef imageParser;
 }
 
-- initWithURL:(NSURL *)source;
-- initWithURLRequest:(NSURLRequest *)source startImmediately:(BOOL)startImmediately;  // D.I.
+- (instancetype)initWithURL:(NSURL *)source;
+- (instancetype)initWithURLRequest:(NSURLRequest *)source startImmediately:(BOOL)startImmediately;  // D.I.
 
 // The following properties are KVO-observable. Calling them will not block.
 - (CGImageRef)CGImage;           // The fully loaded image, or nil.
 - (CGImageRef)partialCGImage;    // The partially loaded image, or fully loaded image, or nil.
+@property (readonly) NSSize imageSize;
 - (NSSize)imageSize;          // The size of the image, or NSZeroSize. May become valid before -image does.
 - (NSError *)loadingError;    // If the image fails to load, this will become non-nil.
 

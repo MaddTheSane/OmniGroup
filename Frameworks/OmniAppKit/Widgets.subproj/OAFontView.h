@@ -14,27 +14,25 @@
 
 #import <AppKit/NSNibDeclarations.h> // For IBOutlet and IBAction
 
+@protocol OAFontViewDelegate;
+
 @interface OAFontView : NSView
 {
-    IBOutlet id delegate;
-
     NSFont *font;
     NSString *fontDescription;
     NSSize textSize;
 }
 
-- (void) setDelegate: (id) aDelegate;
-- (id) delegate;
-
-- (NSFont *)font;
-- (void)setFont:(NSFont *)newFont;
+@property (weak) IBOutlet id<OAFontViewDelegate> delegate;
+@property (strong, nonatomic) NSFont *font;
 
 - (IBAction)setFontUsingFontPanel:(id)sender;
 
 @end
 
 
-@interface NSObject (OAFontViewDelegate)
+@protocol OAFontViewDelegate <NSObject>
+@optional
 - (BOOL)fontView:(OAFontView *)aFontView shouldChangeToFont:(NSFont *)newFont;
 - (void)fontView:(OAFontView *)aFontView didChangeToFont:(NSFont *)newFont;
 

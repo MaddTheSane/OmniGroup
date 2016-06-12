@@ -29,7 +29,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)shouldShowLongOperationIndicatorForWindow:(NSWindow * _Nullable)window;
 @end
 
-@protocol OAMetadataTracking
+@protocol OAMetadataTracking <NSObject>
 - (BOOL)hasUnsavedMetadata;
 - (void)metadataChanged;
 - (void)clearMetadataChanges;

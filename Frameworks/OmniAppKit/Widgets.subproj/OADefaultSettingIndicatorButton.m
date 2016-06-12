@@ -20,7 +20,7 @@ NS_ASSUME_NONNULL_BEGIN
 @implementation OADefaultSettingIndicatorButton
 {
     IBOutlet NSView *snuggleUpToRightSideOfView;
-    IBOutlet id delegate;
+    IBOutlet __weak id delegate;
 
     struct {
         unsigned int displaysEvenInDefaultState:1;
@@ -84,15 +84,7 @@ const static CGFloat horizontalSpaceFromSnuggleView = 2.0f;
 
 // API
 
-- (id)delegate;
-{
-    return delegate;
-}
-
-- (void)setDelegate:(id)newDelegate;
-{
-    delegate = newDelegate;
-}
+@synthesize delegate;
 
 @dynamic identifier; // Needed to acknowledge that we won't get storage for _identifier since the superclass implements it.
 

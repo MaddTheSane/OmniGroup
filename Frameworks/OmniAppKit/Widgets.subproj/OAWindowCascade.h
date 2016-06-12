@@ -37,6 +37,6 @@
 @end
 
 
-@protocol OAWindowCascadeDataSource
+@protocol OAWindowCascadeDataSource <NSObject>
 - (NSArray *)windowsThatShouldBeAvoided;
 @end

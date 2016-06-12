@@ -34,6 +34,7 @@ static NSString * const OASVHiddenSubviewProperty = @"hidden";
 OAStackView assumes that all of its subviews line up in one direction (only vertical stacks are supported currently).  When a view is removed, the space is taken up by other views (currently the last view takes all the extra space) and the gap is removed by sliding adjacent views into that space.
 "*/
 @implementation OAStackView
+@synthesize dataSource;
 
 - (void)dealloc;
 {
