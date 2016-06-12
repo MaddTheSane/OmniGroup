@@ -59,9 +59,7 @@ RCS_ID("$Id$");
 {
     ColorSyncTransformRef result;
     NSUInteger profileIndex, profileCount = [profiles count];
-    NSMutableArray *profileSet = [NSMutableArray arrayWithCapacity:profileCount];
-    bzero(profileSet, sizeof(NCMConcatProfileSet) + sizeof(NCMConcatProfileSpec) * (profileCount + 1));
-    
+    NSMutableArray *profileSet = [NSMutableArray arrayWithCapacity:(profileCount + 1) * 2];
     
     for (profileIndex = 0; profileIndex <= profileCount; profileIndex++) {
         OAColorProfile *profile = ( profileIndex < profileCount ) ? [profiles objectAtIndex:profileIndex] : aProfile;

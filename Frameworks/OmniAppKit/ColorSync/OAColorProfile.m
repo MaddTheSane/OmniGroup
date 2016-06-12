@@ -46,11 +46,11 @@ static NSMutableDictionary *grayProfileDictionary = nil;
 static BOOL resetDeviceList = YES;
 static NSMutableDictionary *deviceProfileDictionary = nil;
 static NSMutableDictionary *deviceNameDictionary = nil;
-static OAColorProfile *currentColorProfile = nil;
+static __unsafe_unretained OAColorProfile *currentColorProfile = nil;
 static NSView *focusedViewForCurrentColorProfile = nil;
 
-static OAColorProfile *lastInProfile = nil;
-static OAColorProfile *lastOutProfile = nil;
+static __unsafe_unretained OAColorProfile *lastInProfile = nil;
+static __unsafe_unretained OAColorProfile *lastOutProfile = nil;
 static ColorSyncTransformRef rgbColorWorld = NULL;
 static ColorSyncTransformRef cmykColorWorld = NULL;
 static ColorSyncTransformRef grayColorWorld = NULL;
@@ -606,8 +606,8 @@ static BOOL loadProfileData(ColorSyncProfileRef *cmProfilePointer, NSData *data,
         if (rgbProfile == aProfile->rgbProfile || !rgbProfile)
             return NULL;
         NSMutableArray *profiles = [NSMutableArray arrayWithCapacity:2];
-        [profiles addObject:[NSDictionary dictionaryWithObjectsAndKeys:(id)rgbProfile, (id)kColorSyncProfile, (id)kColorSyncRenderingIntentPerceptual, (id)kColorSyncRenderingIntent, kColorSyncTransformDeviceToPCS, kColorSyncTransformTag, nil]];
-        [profiles addObject:[NSDictionary dictionaryWithObjectsAndKeys:(id)[aProfile _rgbProfile], (id)kColorSyncProfile, (id)kColorSyncRenderingIntentPerceptual, (id)kColorSyncRenderingIntent, kColorSyncTransformPCSToDevice, kColorSyncTransformTag, nil]];
+        [profiles addObject:[NSDictionary dictionaryWithObjectsAndKeys:(id)rgbProfile, (id)kColorSyncProfile, (id)kColorSyncRenderingIntentPerceptual, (id)kColorSyncRenderingIntent, (id)kColorSyncTransformDeviceToPCS, (id)kColorSyncTransformTag, nil]];
+        [profiles addObject:[NSDictionary dictionaryWithObjectsAndKeys:(id)[aProfile _rgbProfile], (id)kColorSyncProfile, (id)kColorSyncRenderingIntentPerceptual, (id)kColorSyncRenderingIntent, (id)kColorSyncTransformPCSToDevice, (id)kColorSyncTransformTag, nil]];
         
         cmykColorWorld = ColorSyncTransformCreate((CFArrayRef)profiles, NULL);
     }
@@ -645,7 +645,7 @@ static BOOL loadProfileData(ColorSyncProfileRef *cmProfilePointer, NSData *data,
             return NULL;
         NSMutableArray *profiles = [NSMutableArray arrayWithCapacity:2];
         [profiles addObject:[NSDictionary dictionaryWithObjectsAndKeys:(id)grayProfile, (id)kColorSyncProfile, (id)kColorSyncRenderingIntentPerceptual, (id)kColorSyncRenderingIntent, kColorSyncTransformDeviceToPCS, kColorSyncTransformTag, nil]];
-        [profiles addObject:[NSDictionary dictionaryWithObjectsAndKeys:(id)[aProfile _grayProfile], (id)kColorSyncProfile, (id)kColorSyncRenderingIntentPerceptual, (id)kColorSyncRenderingIntent, kColorSyncTransformPCSToDevice, kColorSyncTransformTag, nil]];
+        [profiles addObject:[NSDictionary dictionaryWithObjectsAndKeys:(id)[aProfile _grayProfile], (id)kColorSyncProfile, (id)kColorSyncRenderingIntentPerceptual, (id)kColorSyncRenderingIntent, (id)kColorSyncTransformPCSToDevice, (id)kColorSyncTransformTag, nil]];
 
         grayColorWorld = ColorSyncTransformCreate((CFArrayRef)profiles, NULL);
     }
@@ -692,26 +692,25 @@ static BOOL loadProfileData(ColorSyncProfileRef *cmProfilePointer, NSData *data,
     if (!(self = [super init]))
         return nil;
     
-    int errorCode = noErr;
     rgbProfile = ColorSyncProfileCreateWithName(kColorSyncGenericRGBProfile);
-    if (rgbProfile == NULL || errorCode != noErr) {
+    if (rgbProfile == NULL) {
         NSColorSpace *colorSpace = [NSColorSpace genericRGBColorSpace];
-        rgbProfile = [colorSpace colorSyncProfile];
-        [self _profileLoadError:errorCode defaultColorSpace:colorSpace];
+        rgbProfile = CFRetain([colorSpace colorSyncProfile]);
+        [self _profileLoadError:-1 defaultColorSpace:colorSpace];
     }
     
     cmykProfile = ColorSyncProfileCreateWithName(kColorSyncGenericCMYKProfile);
-    if (cmykProfile == NULL || errorCode != noErr) {
+    if (cmykProfile == NULL) {
         NSColorSpace *colorSpace = [NSColorSpace genericCMYKColorSpace];
-        cmykProfile = [colorSpace colorSyncProfile];
-        [self _profileLoadError:errorCode defaultColorSpace:colorSpace];
+        cmykProfile = CFRetain([colorSpace colorSyncProfile]);
+        [self _profileLoadError:-1 defaultColorSpace:colorSpace];
     }
     
     grayProfile = ColorSyncProfileCreateWithName(kColorSyncGenericGrayProfile);
-    if (grayProfile == NULL || errorCode != noErr) {
+    if (grayProfile == NULL) {
         NSColorSpace *colorSpace = [NSColorSpace genericGrayColorSpace];
-        grayProfile = [colorSpace colorSyncProfile];
-        [self _profileLoadError:errorCode defaultColorSpace:colorSpace];
+        grayProfile = CFRetain([colorSpace colorSyncProfile]);
+        [self _profileLoadError:-1 defaultColorSpace:colorSpace];
     }
 
 // The notification isn't available on 10.1
@@ -725,6 +724,7 @@ static BOOL loadProfileData(ColorSyncProfileRef *cmProfilePointer, NSData *data,
 
 - initDefaultProofProfile;
 {
+	//TODO: update for new ColorSync APIs!
 #if OA_USE_COLOR_MANAGER
     if (!(self = [super init]))
         return nil;
@@ -835,7 +835,7 @@ static BOOL loadProfileData(ColorSyncProfileRef *cmProfilePointer, NSData *data,
     return CFBridgingRelease(ColorSyncProfileCopyData(rawProfile, NULL));
 }
 
-//ColorSyncProfileGetMD5 returns an invalid hash if all the bytes are 0.
+//ColorSyncProfileGetMD5 returns an invalid hash when all the bytes are 0.
 static BOOL isValidHash(ColorSyncMD5 hash)
 {
     for (int i = 0; i < COLORSYNC_MD5_LENGTH; i++) {

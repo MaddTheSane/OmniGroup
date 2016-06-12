@@ -41,7 +41,9 @@ RCS_ID("$Id$");
             return;
 
         OBASSERT(![bitmap isPlanar]);
-        
+		
+		
+		//FIXME: this is an ugly hck to make it work similar to the old ColorSync APIs.
         ColorSyncDataDepth aDepth;
         ColorSyncDataLayout layout = kColorSyncAlphaLast | kColorSyncByteOrderDefault;
         if (![bitmap hasAlpha]) {
@@ -66,7 +68,6 @@ RCS_ID("$Id$");
             aDepth = kColorSync32BitInteger;
         }
 
-        //CWMatchBitmap(world, &cmBitmap, NULL, NULL, NULL);//&cmNewBitmap);
         ColorSyncTransformConvert(world, [bitmap pixelsWide], [bitmap pixelsHigh], [bitmap bitmapData], aDepth, layout, [bitmap bytesPerRow], [bitmap bitmapData], aDepth, layout, [bitmap bytesPerRow], nil);
         break;
     }

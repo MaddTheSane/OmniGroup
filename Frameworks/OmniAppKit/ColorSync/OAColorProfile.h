@@ -29,8 +29,8 @@ NS_ASSUME_NONNULL_BEGIN
 + (OAColorProfile*)defaultProofProfile;
 + (OAColorProfile*)workingCMYKProfile;
 + (NSArray<NSString*> *)proofingDeviceProfileNames;
-+ (nullable instancetype)proofProfileForDeviceProfileName:(NSString *)deviceProfileName;
-+ (nullable instancetype)proofProfileForPrintInfo:(NSPrintInfo *)printInfo;
++ (OAColorProfile*)proofProfileForDeviceProfileName:(NSString *)deviceProfileName;
++ (OAColorProfile*)proofProfileForPrintInfo:(NSPrintInfo *)printInfo;
 
 + (NSArray<NSString*> *)rgbProfileNames;
 + (NSArray<NSString*> *)cmykProfileNames;
@@ -59,6 +59,9 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)_setRGBColor:(NSColor *)aColor;
 - (void)_setCMYKColor:(NSColor *)aColor;
 - (void)_setGrayColor:(NSColor *)aColor;
+- (ColorSyncTransformRef)_rgbConversionWorldForOutput:(OAColorProfile *)aProfile CF_RETURNS_NOT_RETAINED;
+- (ColorSyncTransformRef)_cmykConversionWorldForOutput:(OAColorProfile *)aProfile CF_RETURNS_NOT_RETAINED;
+- (ColorSyncTransformRef)_grayConversionWorldForOutput:(OAColorProfile *)aProfile CF_RETURNS_NOT_RETAINED;
 
 - (ColorSyncTransformRef)_rgbConversionWorldForOutput:(OAColorProfile *)aProfile CF_RETURNS_NOT_RETAINED;
 - (ColorSyncTransformRef)_cmykConversionWorldForOutput:(OAColorProfile *)aProfile CF_RETURNS_NOT_RETAINED;
