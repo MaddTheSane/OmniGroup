@@ -116,6 +116,7 @@ static NSString * const OSULicenseTypeKey = @"targetLicenseType";
     [[bundleIdentifierField cell] setPlaceholderString:[[NSBundle mainBundle] bundleIdentifier]];
     [[marketingVersionField cell] setPlaceholderString:[infoDict objectForKey:@"CFBundleShortVersionString"]];
     [[buildVersionField cell] setPlaceholderString:[infoDict objectForKey:@"CFBundleVersion"]];
+	[super applicationDidFinishLaunching:aNotification];
 }
 
 - (void)urlSheetDidEnd:(NSWindow *)sheet returnCode:(NSInteger)returnCode contextInfo:(void *)contextInfo;

@@ -19,7 +19,7 @@
 + (ONServiceEntry *)httpService;
 + (ONServiceEntry *)smtpService;
 
-+ serviceEntryNamed:(NSString *)aServiceName protocolName:(NSString *)aProtocolName;
++ (instancetype)serviceEntryNamed:(NSString *)aServiceName protocolName:(NSString *)aProtocolName;
 
 + (void)hintPort:(int)portNumber forServiceNamed:(NSString *)aServiceName protocolName:(NSString *)aProtocolName;
 

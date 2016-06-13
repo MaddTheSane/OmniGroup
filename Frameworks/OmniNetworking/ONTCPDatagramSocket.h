@@ -25,7 +25,7 @@
     size_t readLength;   
 }
 
-- initWithTCPSocket:(ONSocket *)aSocket;
+- (instancetype)initWithTCPSocket:(ONSocket *)aSocket;
 
 @end
 

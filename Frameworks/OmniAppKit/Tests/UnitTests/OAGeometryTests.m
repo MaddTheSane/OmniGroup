@@ -617,6 +617,10 @@ static BOOL checkCurveCurve_(BOOL looseAspects, const NSPoint *left, const NSPoi
     va_list argl;
     int intersectionIndex;
     BOOL ok1, ok2, ok3, ok4;
+    memset(pts, 0, sizeof(pts));
+    memset(lens, 0, sizeof(lens));
+    memset(entryAspects, 0, sizeof(entryAspects));
+    memset(exitAspects, 0, sizeof(exitAspects));
     
     va_start(argl, intersectionCount);
     for(intersectionIndex = 0; intersectionIndex < intersectionCount; intersectionIndex ++) {

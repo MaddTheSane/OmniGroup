@@ -17,13 +17,13 @@ typedef int (*OSLDatabaseCallback)(void *, int, char **, char **);
 @interface OSLDatabaseController : OFObject
 {
     NSString *databasePath;
-    void *sqliteDatabase;
+    struct sqlite3 *sqliteDatabase;
     BOOL _autoRetry;
 }
 
 @property (assign, nonatomic) BOOL autoRetry;
 
-- initWithDatabasePath:(NSString *)aPath error:(NSError **)outError;
+- (instancetype)initWithDatabasePath:(NSString *)aPath error:(NSError **)outError;
 - (NSString *)databasePath;
 
 - (void)deleteDatabase;

@@ -10,6 +10,8 @@
 #import <Foundation/NSObject.h>
 #import <Foundation/NSNetServices.h>
 
+@protocol OFNetChangeNotifierDelegate;
+
 @interface OFNetChangeNotifier : NSObject <NSNetServiceDelegate, NSNetServiceBrowserDelegate>
 {
     id nonretainedDelegate;
@@ -20,14 +22,14 @@
     NSMutableDictionary *watchedServices;
 }
 
-- initWithUUIDString:(NSString *)aString lastUpdateDate:(NSDate *)anUpdateDate delegate:(id)aDelegate;
+- (instancetype)initWithUUIDString:(NSString *)aString lastUpdateDate:(NSDate *)anUpdateDate delegate:(id)aDelegate;
 
 - (void)setLastChangedDate:(NSDate *)aDate;
 - (void)setLastUpdateDate:(NSDate *)aDate;
 
 @end
 
-@protocol OFNetChangeNotifierDelegate
+@protocol OFNetChangeNotifierDelegate <NSObject>
 - (void)netChangeNotifierNewChange:(OFNetChangeNotifier *)notifier;
 @end
 

@@ -9,7 +9,7 @@
 
 #import <Foundation/Foundation.h>
 #import <OmniBase/OmniBase.h>
-#import <sqlite3.h>
+#include <sqlite3.h>
 
 RCS_ID("$Id$")
 

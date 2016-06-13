@@ -483,7 +483,7 @@
 				4AAC8E0F08A01C5900C4DE8E /* Configurations */,
 				00E51C1DFE8AAE2511C9CC38 /* Source */,
 				34778CDF11810C0600EC28C1 /* Tools */,
-				00E51C3DFE8AAE2511C9CC38 /* External Frameworks and Libraries */,
+				00E51C3DFE8AAE2511C9CC38 /* Frameworks */,
 				34EE20D214F0354300722491 /* Frameworks */,
 				019D0532FEB295A7C697A14E /* Products */,
 			);
@@ -541,13 +541,13 @@
 			name = Source;
 			sourceTree = "<group>";
 		};
-		00E51C3DFE8AAE2511C9CC38 /* External Frameworks and Libraries */ = {
+		00E51C3DFE8AAE2511C9CC38 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
 				34E16FBC1CEA2E160097828B /* FixStringsFile.xcodeproj */,
 				00E51C3EFE8AAE2511C9CC38 /* Foundation.framework */,
 			);
-			name = "External Frameworks and Libraries";
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 		019D0532FEB295A7C697A14E /* Products */ = {
@@ -912,6 +912,7 @@
 			attributes = {
 				LastTestingUpgradeCheck = 0600;
 				LastUpgradeCheck = 0730;
+				ORGANIZATIONNAME = "The Omni Group";
 				TargetAttributes = {
 					34637CCB194F448F009B51C5 = {
 						CreatedOnToolsVersion = 6.0;

@@ -39,8 +39,8 @@ typedef enum _ONInterfaceCategory {
     unsigned int index;
 }
 
-+ (NSArray *)getInterfaces:(BOOL)rescan;
-+ (NSArray *)interfaces;
++ (NSArray<ONInterface*> *)getInterfaces:(BOOL)rescan;
++ (NSArray<ONInterface*> *)interfaces;
 
 - (NSString *)name;
 - (ONHostAddress *)interfaceAddress;  // Returns one IPv4 address, for backwards compatibility

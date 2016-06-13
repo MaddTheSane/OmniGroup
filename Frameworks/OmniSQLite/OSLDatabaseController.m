@@ -97,7 +97,7 @@ RCS_ID("$Id$")
 
 @end
 
-#import "sqlite3.h"
+#include <sqlite3.h>
 
 @implementation OSLDatabaseController (Private)
 

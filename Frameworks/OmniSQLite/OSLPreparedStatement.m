@@ -12,7 +12,7 @@
 #import <OmniBase/OmniBase.h>
 
 #import <OmniSQLite/OSLDatabaseController.h>
-#import "sqlite3.h"
+#include <sqlite3.h>
 
 RCS_ID("$Id$")
 
@@ -22,7 +22,7 @@ RCS_ID("$Id$")
 
 @implementation OSLPreparedStatement
 
-- initWithSQL:(NSString *)someSQL statement:(void *)preparedStatement databaseController:(OSLDatabaseController *)aDatabaseController;
+- (instancetype)initWithSQL:(NSString *)someSQL statement:(struct sqlite3_stmt *)preparedStatement databaseController:(OSLDatabaseController *)aDatabaseController;
 {
     if (!(self = [super init]))
         return nil;

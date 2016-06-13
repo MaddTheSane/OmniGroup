@@ -30,8 +30,8 @@
     NSMutableArray *writeBuffer;        // array of NSDatas to write
 }
 
-+ streamWithSocket:(ONSocket *)aSocket;
-- initWithSocket:(ONSocket *)aSocket;
++ (instancetype)streamWithSocket:(ONSocket *)aSocket;
+- (instancetype)initWithSocket:(ONSocket *)aSocket;
 - (ONSocket *)socket;
 - (BOOL)isReadable;
 

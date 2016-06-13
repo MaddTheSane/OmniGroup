@@ -14,7 +14,7 @@
 RCS_ID("$Id$")
 
 @interface ONServiceEntry (Private)
-- _initWithServiceName:(NSString *)aServiceName protocolName:(NSString *)aProtocolName port:(int)portNumber;
+- (instancetype)_initWithServiceName:(NSString *)aServiceName protocolName:(NSString *)aProtocolName port:(int)portNumber;
 @end
 
 @implementation ONServiceEntry

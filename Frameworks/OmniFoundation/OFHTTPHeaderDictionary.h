@@ -14,7 +14,7 @@
 extern NSString * const OFHTTPContentDispositionHeaderKey;
 extern NSString * const OFHTTPContentTypeHeaderKey;
 
-@protocol OFHTTPHeaderDictionaryReadLineSource
+@protocol OFHTTPHeaderDictionaryReadLineSource <NSObject>
 - (NSString *)readLine;
 @end
 

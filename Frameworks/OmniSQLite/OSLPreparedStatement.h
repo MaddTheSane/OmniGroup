@@ -15,12 +15,12 @@
 @interface OSLPreparedStatement : OFObject
 {
     NSString *sql;
-    void *statement;
+    struct sqlite3_stmt *statement;
     unsigned int bindIndex;
     OSLDatabaseController *databaseController;
 }
 
-- initWithSQL:(NSString *)someSQL statement:(void *)preparedStatement databaseController:(OSLDatabaseController *)aDatabaseController;
+- (instancetype)initWithSQL:(NSString *)someSQL statement:(struct sqlite3_stmt *)preparedStatement databaseController:(OSLDatabaseController *)aDatabaseController;
 - (void)reset;
 - (NSDictionary *)step;
 

@@ -53,7 +53,7 @@
 - (NSString *)IDNEncodedHostname;
 - (NSString *)domainName;
 
-- (BOOL)isLocalHost;
+@property (readonly, getter=isLocalHost) BOOL localHost;
 
 - (void)flushFromHostCache;
 

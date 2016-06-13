@@ -11,7 +11,7 @@
 
 @class NSOperation, NSURLCredential;
 
-@protocol OFCredentialChallengeDisposition
+@protocol OFCredentialChallengeDisposition <NSObject>
 /* Note that if the challenge operation is canceled, the disposition must still be set (e.g., to NSURLSessionAuthChallengeCancelAuthenticationChallenge) */
 @property(readonly) NSURLSessionAuthChallengeDisposition disposition;
 @property(readonly,retain,atomic) NSURLCredential *credential;

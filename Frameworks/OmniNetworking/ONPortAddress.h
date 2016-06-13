@@ -27,9 +27,9 @@
     struct sockaddr *portAddress;
 }
 
-- initWithHost:(ONHost *)aHost portNumber:(unsigned short int)port;
-- initWithHostAddress:(ONHostAddress *)hostAddress portNumber:(unsigned short int)port;
-- initWithSocketAddress:(const struct sockaddr *)newPortAddress;
+- (instancetype)initWithHost:(ONHost *)aHost portNumber:(unsigned short int)port;
+- (instancetype)initWithHostAddress:(ONHostAddress *)hostAddress portNumber:(unsigned short int)port;
+- (instancetype)initWithSocketAddress:(const struct sockaddr *)newPortAddress;
 
 - (int)addressFamily;
 - (const struct sockaddr *)portAddress;

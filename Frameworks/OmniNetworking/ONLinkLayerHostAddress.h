@@ -14,7 +14,7 @@
     struct sockaddr_dl *linkAddress;
 }
 
-- initWithLinkLayerAddress:(const struct sockaddr_dl *)dlAddress;
+- (instancetype)initWithLinkLayerAddress:(const struct sockaddr_dl *)dlAddress;
 
 - (int)interfaceType;
     // Returns one of IFT_ETHER, IFT_LOOP, etc.
