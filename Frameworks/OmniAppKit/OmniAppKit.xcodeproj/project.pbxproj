@@ -206,8 +206,6 @@
 		4205721F0CA8767F005CB6A6 /* NSMutableAttributedString-OAExtensions.h in Headers */ = {isa = PBXBuildFile; fileRef = 4205721D0CA8767F005CB6A6 /* NSMutableAttributedString-OAExtensions.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		420572200CA8767F005CB6A6 /* NSMutableAttributedString-OAExtensions.m in Sources */ = {isa = PBXBuildFile; fileRef = 4205721E0CA8767F005CB6A6 /* NSMutableAttributedString-OAExtensions.m */; };
 		425CC9E31A37BDC000A6760B /* OACrayonNames.strings in Resources */ = {isa = PBXBuildFile; fileRef = 425CC9E11A37BDC000A6760B /* OACrayonNames.strings */; };
-		4268E9300DBD5319002F30B1 /* OAColorProfile-Deprecated.m in Sources */ = {isa = PBXBuildFile; fileRef = 4268E92E0DBD5319002F30B1 /* OAColorProfile-Deprecated.m */; settings = {COMPILER_FLAGS = "-Wno-deprecated-declarations"; }; };
-		4268E9CC0DBE6B03002F30B1 /* OAColorProfile-Deprecated.h in Headers */ = {isa = PBXBuildFile; fileRef = 4268E9990DBE52D2002F30B1 /* OAColorProfile-Deprecated.h */; };
 		42B9CE4D197871B700FDB1E6 /* OADocumentSubclass.h in Headers */ = {isa = PBXBuildFile; fileRef = 42B9CE4C197871B700FDB1E6 /* OADocumentSubclass.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		493FE0D51C224F9E00C029B5 /* NSStackView-OAExtensions.h in Headers */ = {isa = PBXBuildFile; fileRef = 493FE0D31C224F9E00C029B5 /* NSStackView-OAExtensions.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		493FE0D61C224F9E00C029B5 /* NSStackView-OAExtensions.m in Sources */ = {isa = PBXBuildFile; fileRef = 493FE0D41C224F9E00C029B5 /* NSStackView-OAExtensions.m */; };
@@ -930,8 +928,6 @@
 		4205721D0CA8767F005CB6A6 /* NSMutableAttributedString-OAExtensions.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "NSMutableAttributedString-OAExtensions.h"; sourceTree = "<group>"; };
 		4205721E0CA8767F005CB6A6 /* NSMutableAttributedString-OAExtensions.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "NSMutableAttributedString-OAExtensions.m"; sourceTree = "<group>"; };
 		425CC9E21A37BDC000A6760B /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/OACrayonNames.strings; sourceTree = "<group>"; };
-		4268E92E0DBD5319002F30B1 /* OAColorProfile-Deprecated.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "OAColorProfile-Deprecated.m"; sourceTree = "<group>"; };
-		4268E9990DBE52D2002F30B1 /* OAColorProfile-Deprecated.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "OAColorProfile-Deprecated.h"; sourceTree = "<group>"; };
 		426C40531A40A56E00DEC1F2 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = Base.lproj/OAPreferences.xib; sourceTree = "<group>"; };
 		426C40561A40AB9700DEC1F2 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = Base.lproj/OAPopupDatePicker.xib; sourceTree = "<group>"; };
 		42B9CE4C197871B700FDB1E6 /* OADocumentSubclass.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = OADocumentSubclass.h; sourceTree = "<group>"; };
@@ -2359,8 +2355,6 @@
 			children = (
 				F5AC9DBB032D12E201B4A65D /* OAColorProfile.h */,
 				F5AC9DBC032D12E201B4A65D /* OAColorProfile.m */,
-				4268E9990DBE52D2002F30B1 /* OAColorProfile-Deprecated.h */,
-				4268E92E0DBD5319002F30B1 /* OAColorProfile-Deprecated.m */,
 				6CBB57E10416D5B800E7FE1C /* OACompositeColorProfile.h */,
 				6CBB57E20416D5B800E7FE1C /* OACompositeColorProfile.m */,
 				6CBB57E50416D63300E7FE1C /* NSColor-ColorSyncExtensions.h */,
@@ -2546,7 +2540,6 @@
 				3EF5F1BF19104DEF0072ED90 /* OAWebPageViewerDelegate.h in Headers */,
 				4AA1E67F08AA764600E2FF6B /* NSImage-ColorSyncExtensions.h in Headers */,
 				4AA1E68008AA764600E2FF6B /* OAColorProfile.h in Headers */,
-				4268E9CC0DBE6B03002F30B1 /* OAColorProfile-Deprecated.h in Headers */,
 				4AA1E68108AA764600E2FF6B /* OACompositeColorProfile.h in Headers */,
 				4AA1E69008AA764600E2FF6B /* OAAppKitQueueProcessor.h in Headers */,
 				4AA1E69108AA764600E2FF6B /* OAApplication.h in Headers */,
@@ -3268,7 +3261,6 @@
 				420572200CA8767F005CB6A6 /* NSMutableAttributedString-OAExtensions.m in Sources */,
 				A27FE4610CAB033300EE72BA /* OASlowLoadingImage.m in Sources */,
 				34E46E9E0CDEB7330066E943 /* OAFlippedView.m in Sources */,
-				4268E9300DBD5319002F30B1 /* OAColorProfile-Deprecated.m in Sources */,
 				349F65E30EBBA2AB00AB6E36 /* NSResponder-OAExtensions.m in Sources */,
 				34A201240FF0454500B699DB /* NSAlert-OAExtensions.m in Sources */,
 				94E1CE0C10D803C5000A01F9 /* OACloseButtonOverlay.m in Sources */,

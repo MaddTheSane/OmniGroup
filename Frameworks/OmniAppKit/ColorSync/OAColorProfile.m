@@ -14,7 +14,6 @@
 #import <OmniFoundation/OmniFoundation.h>
 #import <OmniBase/assertions.h>
 #import <OmniAppKit/OAFeatures.h>
-#import "OAColorProfile-Deprecated.h"
 
 RCS_ID("$Id$");
 
@@ -32,6 +31,7 @@ RCS_ID("$Id$");
 - (BOOL)_addProfile:(ColorSyncProfileRef)cmProfile toPropertyList:(NSMutableDictionary *)dict keyStem:(NSString *)spaceName;
 - (void)_profileLoadError:(int)errorCode defaultColorSpace:(NSColorSpace *)colorSpace;
 
+- (BOOL)_rawProfileIsBuiltIn:(ColorSyncProfileRef)rawProfile;
 @end
 
 NSString * const OADefaultDocumentColorProfileDidChangeNotification = @"OADefaultDocumentColorProfileDidChangeNotification";
@@ -769,11 +769,10 @@ static BOOL loadProfileData(ColorSyncProfileRef *cmProfilePointer, NSData *data,
     ColorSyncProfileRef profile = ColorSyncProfileCreateWithDisplayID(0);
     CMAppleProfileHeader header;
     
-    int errorCode = -1;
-    if (profile == NULL || errorCode != noErr) {
+    if (profile == NULL) {
         NSColorSpace *colorSpace = [NSColorSpace genericRGBColorSpace];
         profile = (ColorSyncProfileRef)CFRetain([colorSpace colorSyncProfile]);
-        [self _profileLoadError:errorCode defaultColorSpace:colorSpace];
+        [self _profileLoadError:-1 defaultColorSpace:colorSpace];
     }
     
     {
@@ -887,6 +886,20 @@ static BOOL isValidHash(ColorSyncMD5 hash)
     NSError *error = [[NSError alloc] initWithDomain:NSCocoaErrorDomain code:0 userInfo:errorUserInfo];
     [[NSApplication sharedApplication] presentError:error];
     [error release];
+}
+
+- (BOOL)_rawProfileIsBuiltIn:(ColorSyncProfileRef)rawProfile;
+{
+    CFURLRef url = ColorSyncProfileGetURL(rawProfile, NULL);
+    if (url == NULL) {
+        return NO;
+    }
+    
+    CFStringRef string = CFURLCopyPath(url);
+    BOOL isBuiltIn = [(OB_BRIDGE NSString *)string hasPrefix:@"/System/Library/ColorSync/Profiles"];
+    CFRelease(string);
+    
+    return isBuiltIn;
 }
 
 @end
