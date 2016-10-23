@@ -25,16 +25,25 @@ NS_ASSUME_NONNULL_BEGIN
 + (OAColorProfile*)defaultDocumentProfile;
 + (OAColorProfile*)defaultDisplayProfile;
 + (nullable OAColorProfile*)currentProfile;
+@property (class, readonly) OAColorProfile *defaultDocumentProfile;
+@property (class, readonly) OAColorProfile *defaultDisplayProfile;
+@property (class, readonly, nullable) OAColorProfile *currentProfile;
 
 + (OAColorProfile*)defaultProofProfile;
 + (OAColorProfile*)workingCMYKProfile;
 + (NSArray<NSString*> *)proofingDeviceProfileNames;
 + (OAColorProfile*)proofProfileForDeviceProfileName:(NSString *)deviceProfileName;
 + (OAColorProfile*)proofProfileForPrintInfo:(NSPrintInfo *)printInfo;
+@property (class, readonly) OAColorProfile *defaultProofProfile;
+@property (class, readonly) OAColorProfile *workingCMYKProfile;
+@property (class, readonly, copy) NSArray<NSString*> *proofingDeviceProfileNames;
 
 + (NSArray<NSString*> *)rgbProfileNames;
 + (NSArray<NSString*> *)cmykProfileNames;
 + (NSArray<NSString*> *)grayProfileNames;
+@property (class, readonly, copy) NSArray<NSString*> *rgbProfileNames;
+@property (class, readonly, copy) NSArray<NSString*> *cmykProfileNames;
+@property (class, readonly, copy) NSArray<NSString*> *grayProfileNames;
 + (instancetype)colorProfileWithRGBNamed:(nullable NSString *)rgbName cmykNamed:(nullable NSString *)cmykName grayNamed:(nullable NSString *)grayName;
 
 + (instancetype)colorProfileFromPropertyListRepresentation:(NSDictionary<NSString*,id> *)dict;
