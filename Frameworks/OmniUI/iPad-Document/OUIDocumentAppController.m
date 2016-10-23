@@ -58,6 +58,7 @@
 #import <OmniUIDocument/OUIDocumentProviderPreferencesViewController.h>
 #import <OmniUIDocument/OUIDocumentViewController.h>
 #import <OmniUIDocument/OUIDocumentCreationTemplatePickerViewController.h>
+#import <OmniUIDocument/OUIServerAccountSetupViewController.h>
 #import <OmniUIDocument/OUIToolbarTitleButton.h>
 //#import <CrashReporter/CrashReporter.h>
 
@@ -71,7 +72,6 @@
 #import "OUIDocumentPickerViewController-Internal.h"
 #import "OUIDocumentPickerItemView-Internal.h"
 #import "OUIRestoreSampleDocumentListController.h"
-#import "OUIServerAccountSetupViewController.h"
 #import "OUIDocumentOpenAnimator.h"
 #import "OUIWebDAVSyncListController.h"
 #import "OUILaunchViewController.h"
@@ -538,11 +538,7 @@ static unsigned SyncAgentRunningAccountsContext;
                 _window.rootViewController = _documentPicker;
                 [_window makeKeyAndVisible];
                 
-                if (_specialURLToHandle) {
-                    [self handleSpecialURL:_specialURLToHandle];
-                    _specialURLToHandle = nil;
-                }
-                
+                [self handleCachedSpecialURLIfNeeded];
                 animateDocument = NO;
             }
             
@@ -1026,6 +1022,15 @@ static NSMutableArray *_arrayByRemovingBookmarksMatchingURL(NSArray <NSData *> *
     } else {
         self.newsURLStringToShowWhenReady = urlString;
         return nil;
+    }
+}
+
+- (void)handleCachedSpecialURLIfNeeded
+{
+    if (_specialURLToHandle != nil)
+    {
+        [self handleSpecialURL:_specialURLToHandle];
+        _specialURLToHandle = nil;
     }
 }
 
@@ -1898,10 +1903,7 @@ static NSMutableArray *_arrayByRemovingBookmarksMatchingURL(NSArray <NSData *> *
         _window.rootViewController = _documentPicker;
         [_window makeKeyAndVisible];
         
-        if (_specialURLToHandle) {
-            [self handleSpecialURL:_specialURLToHandle];
-            _specialURLToHandle = nil;
-        }
+        [self handleCachedSpecialURLIfNeeded];
     }
 
     UINavigationController *navigationController = [[UINavigationController alloc] initWithRootViewController:setup];
@@ -1924,11 +1926,9 @@ static NSMutableArray *_arrayByRemovingBookmarksMatchingURL(NSArray <NSData *> *
         DEBUG_LAUNCH(1, @"Did openURL:%@ sourceApplication:%@ annotation:%@", url, sourceApplication, annotation);
         
         if ([self isSpecialURL:url]) {
+            _specialURLToHandle = [url copy];
             if (self.window.rootViewController == _documentPicker) {
-                [self handleSpecialURL:url];
-            }
-            else {
-                _specialURLToHandle = [url copy];
+                [self handleCachedSpecialURLIfNeeded];
             }
             return;
         }
@@ -2632,10 +2632,7 @@ static NSString * const OUINextLaunchActionDefaultsKey = @"OUINextLaunchAction";
     _window.rootViewController = _documentPicker;
     [_window makeKeyAndVisible];
     
-    if (_specialURLToHandle) {
-        [self handleSpecialURL:_specialURLToHandle];
-        _specialURLToHandle = nil;
-    }
+    [self handleCachedSpecialURLIfNeeded];
     
     [OUIDocumentPreview populateCacheForFileItems:_documentStore.mergedFileItems completionHandler:^{
     }];

@@ -214,7 +214,8 @@ static NSString *describeMethod(Method m, BOOL *nonSystem)
             ([path rangeOfString:@"/Developer/Platforms/"].location == NSNotFound) && // iPhone simulator
             ![path hasSuffix:@"FBAccess"] && // Special case for FrontBase framework
             ![path hasSuffix:@"Growl"] && // Special case for Growl framework
-            ![path hasSuffix:@"libswiftCore.dylib"]) // Special case for embedded Swift runtime
+            ![path hasSuffix:@"libswiftCore.dylib"] &&
+            ![path hasSuffix:@"libswiftFoundation.dylib"]) // Special case for embedded Swift runtime
             *nonSystem = YES;
     }
     
@@ -301,7 +302,7 @@ static void _checkForCommonClassMethodNameTypos(Class metaClass, Class class, Me
                 // Verify that we only have keyPathsForValuesAffectingFoo if we also have Foo.
                 char *namebuf = malloc(selNameLength + 5);
                 strcpy(namebuf, selName + strlen(affectingPrefix));
-                namebuf[0] = tolower(namebuf[0]);
+                namebuf[0] = (char)tolower(namebuf[0]);
                 
                 /* This test can produce false positives on valid code. We can extend it as we run into the exceptions.
                    Some things it doesn't know about:
@@ -898,13 +899,13 @@ static void _OBPerformRuntimeChecks(void)
 
 
         // We should find zero conflicts!
-        OBASSERT(MethodSignatureConflictCount == 0);
+        // OBASSERT(MethodSignatureConflictCount == 0);
         OBASSERT(MethodMultipleImplementationCount == 0);
 
 //        if (SuppressedConflictCount && getenv("OB_SUPPRESS_SUPPRESSED_CONFLICT_COUNT") == NULL)
 //            NSLog(@"Warning: Suppressed %u messages about problems in system frameworks", SuppressedConflictCount);
 
-        OBASSERT(DeprecatedMethodImplementationCount == 0);
+        // OBASSERT(DeprecatedMethodImplementationCount == 0);
 
         free(classes);
 

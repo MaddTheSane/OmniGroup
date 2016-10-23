@@ -159,7 +159,7 @@ static NSString *_OUIAppearanceUserOverrideFolder = nil;
 
 #if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
 
-void OAAppearanceSetUserOverrideFolder(NSString *userOverrideFolder)
+void OAAppearanceSetUserOverrideFolder(NSString * _Nullable userOverrideFolder)
 {
     if (OFNOTEQUAL(_OUIAppearanceUserOverrideFolder, userOverrideFolder)) {
         _OUIAppearanceUserOverrideFolder = [userOverrideFolder copy];
@@ -682,6 +682,21 @@ static NSURL *urlIfExists(NSURL *url)
 - (NSDictionary *)dictionaryForKeyPath:(NSString *)keyPath;
 {
     return [self _objectOfClass:[NSDictionary class] forPlistKeyPath:keyPath];
+}
+
+- (BOOL)isLightLuma:(CGFloat)luma;
+{
+    static CGFloat lightColorLimit;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        OAAppearance *appearance = [OAAppearance appearance];
+        lightColorLimit = ([appearance CGFloatForKeyPath:@"OALightColorLumaLimit"]);
+    });
+
+    if (luma < lightColorLimit)
+        return NO;
+    else
+        return YES;
 }
 
 - (OA_SYSTEM_COLOR_CLASS *)colorForKeyPath:(NSString *)keyPath;
@@ -1344,7 +1359,7 @@ static Class GetPrivateReifyingClassForPublicClass(Class cls)
             Class reifyingClass = GetPrivateReifyingClassForPublicClass(cls);
             appearance = [[reifyingClass alloc] _initWithPlistName:nil inBundle:nil];
         } else {
-            appearance = [[cls alloc] _initWithPlistName:NSStringFromClass(cls) inBundle:[NSBundle bundleForClass:cls]];
+            appearance = [[cls alloc] _initWithPlistName:NSStringFromClass(cls) inBundle:[cls bundleForPlist]];
         }
         OBASSERT_NOTNULL(appearance);
         
@@ -1443,7 +1458,14 @@ static Class GetPrivateReifyingClassForPublicClass(Class cls)
     return appearance;
 }
 
-+ (NSURL *)directoryURLForSwitchablePlist;
+// If you always want to use a different bundle for this plist.
++ (NSBundle *)bundleForPlist
+{
+    return [NSBundle bundleForClass:self];
+}
+
+// If you want to hot-swap your directory at runtime.
++ (NSURL * _Nullable)directoryURLForSwitchablePlist;
 {
     return nil;
 }
@@ -1457,7 +1479,7 @@ static Class GetPrivateReifyingClassForPublicClass(Class cls)
     [InvalidatedClassesForSwitchedPlistURLDirectories addObject:cls];
 }
 
-+ (instancetype)appearanceForValidatingPropertyListInDirectory:(NSURL *)directoryURL forClass:(Class)cls;
++ (instancetype _Nullable)appearanceForValidatingPropertyListInDirectory:(NSURL *)directoryURL forClass:(Class)cls;
 {
     OAAppearance *appearance = [[cls alloc] _initForValidationWithDirectoryURL:directoryURL];
     NSURL *plistURL = [appearance _plistURL];
@@ -1538,20 +1560,10 @@ static void EnsureSystemColorsObserver(OAAppearance *self)
 
 - (BOOL)isLightColor;
 {
-    static CGFloat lightColorLimit;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        OAAppearance *appearance = [OAAppearance appearance];
-        lightColorLimit = ([appearance CGFloatForKeyPath:@"OALightColorLumaLimit"]);
-    });
-    
     OAColor *aColor = [OAColor colorWithPlatformColor:self];
     CGFloat luma = OAGetRGBAColorLuma([aColor toRGBA]);
-    
-    if (luma < lightColorLimit)
-        return NO;
-    else
-        return YES;
+
+    return [[OAAppearance appearance] isLightLuma:luma];
 }
 
 @end
@@ -1590,20 +1602,10 @@ static void EnsureSystemColorsObserver(OAAppearance *self)
 
 - (BOOL)isLightColor;
 {
-    static CGFloat lightColorLimit;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        OAAppearance *appearance = [OAAppearance appearance];
-        lightColorLimit = ([appearance CGFloatForKeyPath:@"OALightColorLumaLimit"]);
-    });
-
     OAColor *aColor = [OAColor colorWithPlatformColor:self];
     CGFloat luma = OAGetRGBAColorLuma([aColor toRGBA]);
 
-    if (luma < lightColorLimit)
-        return NO;
-    else
-        return YES;
+    return [[OAAppearance appearance] isLightLuma:luma];
 }
 
 @end

@@ -17,7 +17,8 @@ NS_ASSUME_NONNULL_BEGIN
  */
 @interface OFWeakReference OB_GENERIC1(ObjectType) : NSObject
 
-- initWithObject:(OB_GENERIC_ARG(ObjectType))object;
+- (instancetype)initWithObject:(OB_GENERIC_ARG(ObjectType))object;
+- (instancetype)initWithDeallocatingObject:(id)object;
 - (BOOL)referencesObject:(void *)objectPointer;
 
 #if OB_ARC
@@ -30,6 +31,8 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)add:(ObjectType)object toReferences:(NSMutableArray <OFWeakReference <ObjectType> *> *)references;
 + (void)remove:(ObjectType)object fromReferences:(NSMutableArray <OFWeakReference <ObjectType> *> *)references;
 + (void)forEachReference:(NSMutableArray <OFWeakReference <ObjectType> *> *)references perform:(void (^)(ObjectType))action;
++ (BOOL)referencesEmpty:(NSArray <OFWeakReference <ObjectType> *> *)references;
++ (NSUInteger)countReferences:(NSArray <OFWeakReference <ObjectType> *> *)references;
 
 @end
 

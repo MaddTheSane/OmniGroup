@@ -1,4 +1,4 @@
-// Copyright 2009-2015 Omni Development, Inc. All rights reserved.
+// Copyright 2009-2016 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -9,7 +9,10 @@
 
 #import <OmniBase/OmniBase.h>
 #import <OmniFoundation/OFFeatures.h>
+#import <OmniFoundation/OFErrors.h>
 #import <OmniFoundation/OFUtilities.h>
+#import <OmniFoundation/OFASN1Utilities.h>
+#import <OmniFoundation/OFASN1-Internal.h>
 #import <Foundation/NSData.h>
 #import <Foundation/NSDictionary.h>
 #import <Foundation/NSString.h>
@@ -751,6 +754,110 @@ static enum OFKeyAlgorithm OFSecKeyGetAlgorithm_CSSM(SecKeyRef aKey, SecItemClas
 }
 
 #endif
+
+BOOL OFSecCertificateGetIdentifiers(SecCertificateRef aCert, NSData **outIssuer, NSData **outSerial, NSData **outSKI)
+{
+    /* In theory we should be able to use SecCertificateCopyValues(), but it's not possible to do that without relying on lots of undocumented behavior. We already have OFASN1CertificateExtractFields() for other reasons, so use that. */
+    
+    if (!aCert)
+        return NO;
+    
+    CFDataRef certData = SecCertificateCopyData(aCert);
+    
+    if (!certData)
+        return NO;
+
+    NSData *ski __block = nil;
+    
+    /* RFC3280: id-ce-subjectKeyIdentifier OBJECT IDENTIFIER ::=  { joint-iso-ccitt(2) ds(5) ce(29) 14 } */
+    static const uint8_t oid_ext_subjectKeyIdentifier[] = { 0x55, 0x1D, 0x0E };
+    
+    int ret = OFASN1CertificateExtractFields((__bridge_transfer NSData *)certData, outSerial, outIssuer, NULL, NULL, NULL, ^(NSData *oid, BOOL critical, NSData *value){
+        if ([oid length] == sizeof(oid_ext_subjectKeyIdentifier) && !memcmp([oid bytes], oid_ext_subjectKeyIdentifier, sizeof(oid_ext_subjectKeyIdentifier))) {
+            /* The value is expected to be an OCTET STRING (which is then wrapped in another OCTET STRING, due to the format of certificate extensions, but our caller has already removed that layer of wrapping) */
+            ski = OFASN1UnwrapOctetString(value, (NSRange) {0, value.length});
+        }
+    });
+    
+    if (ret != 0) {
+        /* Unparsable. Possibly a bug in OFASN1CertificateExtractFields(). */
+        NSLog(@"OFASN1CertificateExtractFields() returned %d", ret);
+        return NO;
+    }
+    
+    *outSKI = ski;
+
+    return YES;
+}
+
+#if TARGET_OS_IPHONE
+
+/* Bizarrely, SecCertificateCopyPublicKey() doesn't exist on iOS. */
+SecKeyRef OFSecCertificateCopyPublicKey(SecCertificateRef aCert, NSError **outError)
+{
+    CFDataRef certData = SecCertificateCopyData(aCert);
+    if (!certData) {
+        if (outError)
+            *outError = [NSError errorWithDomain:NSOSStatusErrorDomain code:errSecBadReq userInfo:@{ NSLocalizedDescriptionKey: @"SecCertificateCopyData failed"}];
+        return NULL;
+    }
+    
+    NSData * __autoreleasing keyData;
+    int ret = OFASN1CertificateExtractFields((__bridge_transfer NSData *)certData, NULL, NULL, NULL, NULL, &keyData, NULL);
+    
+    if (ret) {
+        if (outError)
+            *outError = OFNSErrorFromASN1Error(ret, @"OFASN1CertificateExtractFields");
+        return NULL;
+    }
+    
+    unsigned int keySize = 0;
+    enum OFKeyAlgorithm alg = OFASN1KeyInfoGetAlgorithm(keyData, &keySize, NULL);
+    CFDictionaryRef parameters;
+    const void * keyParameterKeys[3] = { kSecAttrKeyType, kSecAttrKeyClass, kSecAttrKeySizeInBits };
+    const void * keyParameterValues[3] = { NULL, NULL, NULL };
+    switch (alg) {
+        case ka_RSA:
+            keyParameterValues[0] = kSecAttrKeyTypeRSA;
+            break;
+            
+        case ka_EC:
+            keyParameterValues[0] = kSecAttrKeyTypeEC;
+            break;
+            
+        default:
+            if (outError)
+                *outError = [NSError errorWithDomain:OFErrorDomain code:OFUnsupportedCMSFeature userInfo:@{ NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Unsupported key type (code %d)", (int)alg]}];
+            return NULL;
+    }
+    
+    keyParameterValues[1] = kSecAttrKeyClassPublic;
+    keyParameterValues[2] = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &keySize);
+    parameters = CFDictionaryCreate(kCFAllocatorDefault, keyParameterKeys, keyParameterValues, 3, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFRelease(keyParameterValues[2]);
+    
+    CFErrorRef secError = NULL;
+    SecKeyRef result = SecKeyCreateWithData((__bridge CFDataRef)keyData, parameters, &secError);
+    CFRelease(parameters);
+    if (!result) {
+        OB_CFERROR_TO_NS(outError, secError);
+        return NULL;
+    }
+    
+    return result;
+}
+
+SecKeyRef OFSecCopyPrivateKeyFromPKCS1Data(NSData *keyBytes)
+{
+    return SecKeyCreateWithData((__bridge CFDataRef)keyBytes, (__bridge CFDictionaryRef)@{
+                                                                                          (__bridge NSString *)kSecAttrKeyType : (__bridge NSString *)kSecAttrKeyTypeRSA,
+                                                                                          (__bridge NSString *)kSecAttrKeyClass : (__bridge NSString *)kSecAttrKeyClassPrivate,
+                                                                                          // (__bridge NSString *)kSecAttrKeySizeInBits : @(...)
+                                                                                          }, NULL);
+}
+
+#endif
+
 
 #define secp192r1OidByteCount 10
 static const uint8_t secp192r1OidBytes[secp192r1OidByteCount] = {

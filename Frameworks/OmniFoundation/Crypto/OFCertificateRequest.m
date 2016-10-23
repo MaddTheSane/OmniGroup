@@ -1,4 +1,4 @@
-// Copyright 2014-2015 Omni Development, Inc. All rights reserved.
+// Copyright 2014-2016 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -102,32 +102,6 @@ static const uint8_t digestInfoPrefix_sha512[] = {
 
 #endif
 
-/* Ordering function for members of a DER-encoded SET. */
-static NSInteger lexicographicCompareData(id a, id b, void *dummy)
-{
-    const void *aBytes = [(NSData *)a bytes];
-    const void *bBytes = [(NSData *)b bytes];
-    NSUInteger aLength = [(NSData *)a length];
-    NSUInteger bLength = [(NSData *)b length];
-    
-    int cmp = memcmp(aBytes, bBytes, MIN(aLength, bLength));
-    if (cmp < 0) {
-        return NSOrderedAscending;
-    } else if (cmp > 0) {
-        return NSOrderedDescending;
-    } else {
-        /* This branch should never be taken: DER-encoded objects are self-delimiting, i.e., one cannot be a prefix of another unless they are identical. */
-        OBASSERT_NOT_REACHED("Equal or prefix-equal items in a SET?");
-        if (aLength < bLength) {
-            return NSOrderedAscending;
-        } else if (aLength > bLength) {
-            return NSOrderedDescending;
-        } else {
-            return NSOrderedSame;
-        }
-    }
-}
-
 NSData *OFGenerateCertificateRequest(NSData *derName, NSData *publicKeyInfo, SecKeyRef privateKey, NSArray *derAttributes, NSMutableString *log, NSError **outError)
 {
 /*
@@ -145,22 +119,7 @@ NSData *OFGenerateCertificateRequest(NSData *derName, NSData *publicKeyInfo, Sec
     
     /* Attributes, a DER-encoded SET with implicit tag 0 */
     NSMutableData *attrSet = [NSMutableData data];
-    {
-        NSUInteger attributeCount = derAttributes? [derAttributes count] : 0;
-        
-        /* For DER encoding, the SET items must be sorted according to their DER representation. */
-        NSArray *sortedAttributes = [derAttributes sortedArrayUsingFunction:lexicographicCompareData context:NULL];
-        
-        /* Compute length */
-        NSUInteger totalLength = 0;
-        for (NSUInteger attIndex = 0; attIndex < attributeCount; attIndex ++)
-            totalLength += [[sortedAttributes objectAtIndex:attIndex] length];
-        
-        /* And write the SET */
-        OFASN1AppendTagLength(attrSet, 0 | FLAG_CONSTRUCTED | CLASS_CONTEXT_SPECIFIC, totalLength);
-        for (NSUInteger attIndex = 0; attIndex < attributeCount; attIndex ++)
-            [attrSet appendData:[sortedAttributes objectAtIndex:attIndex]];
-    }
+    OFASN1AppendSet(attrSet, 0 | FLAG_CONSTRUCTED | CLASS_CONTEXT_SPECIFIC, derAttributes);
     
     NSData *toBeSigned = OFASN1AppendStructure(nil, "(*ddd)",
                                                /* Version, INTEGER, 0 because we're not using any features not defined in the original specification. */

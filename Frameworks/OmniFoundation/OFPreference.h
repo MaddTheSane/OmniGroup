@@ -35,9 +35,14 @@ extern NSString * const OFPreferenceObjectValueBinding;
 + (void)recacheRegisteredKeys;
 
 + (void)addObserver:(id)anObserver selector:(SEL)aSelector forPreference:(OFPreference * _Nullable)aPreference;
+/** Registers the block to be invoked when the given preference changes.
+ 
+ The returned object is an opaque reference that can be passed to removeObserver:forPreference: to stop observing. The block passed in is copied.
+*/
++ (id)addObserverForPreference:(nullable OFPreference *)preference usingBlock:(void (^)(OFPreference *preference))block;
 + (void)removeObserver:(id)anObserver forPreference:(OFPreference * _Nullable)aPreference;
 
-+ (id)coerceStringValue:(NSString *)stringValue toTypeOfPropertyListValue:(id)propertyListValue;
++ (nullable id)coerceStringValue:(nullable NSString *)stringValue toTypeOfPropertyListValue:(id)propertyListValue;
 
 @property(nonatomic,readonly) NSString *key;
 @property(nonatomic,readonly,nullable) OFEnumNameTable *enumeration;
@@ -59,6 +64,7 @@ extern NSString * const OFPreferenceObjectValueBinding;
 @property(nonatomic,copy,nullable) NSArray *arrayValue;
 @property(nonatomic,copy,nullable) NSDictionary *dictionaryValue;
 @property(nonatomic,copy,nullable) NSData *dataValue;
+@property(nonatomic,copy,nullable) NSURL *bookmarkURLValue;
 @property(nonatomic,copy,readonly,nullable) NSArray <NSString *> *stringArrayValue;
 
 @property(nonatomic,assign) int intValue;
@@ -85,6 +91,7 @@ extern NSString * const OFPreferenceObjectValueBinding;
 - (NSArray * _Nullable)arrayForKey:(NSString *)defaultName;
 - (NSDictionary * _Nullable)dictionaryForKey:(NSString *)defaultName;
 - (NSData * _Nullable)dataForKey:(NSString *)defaultName;
+- (NSURL * _Nullable)bookmarkURLForKey:(NSString *)defaultName;
 - (NSArray * _Nullable)stringArrayForKey:(NSString *)defaultName;
 - (int)intForKey:(NSString *)defaultName;
 - (NSInteger)integerForKey:(NSString *)defaultName;

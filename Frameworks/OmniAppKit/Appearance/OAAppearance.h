@@ -29,9 +29,11 @@
 #define OA_SYSTEM_COLOR_CLASS NSColor
 #define OA_SYSTEM_EDGE_INSETS_STRUCT NSEdgeInsets
 
-void OAAppearanceSetUserOverrideFolder(NSString *userOverrideFolder);
+void OAAppearanceSetUserOverrideFolder(NSString * _Nullable userOverrideFolder);
 
 #endif
+
+NS_ASSUME_NONNULL_BEGIN
 
 /// Subclasses can post this notification (with self as the object) when something happens that is about to cause the appearance instances values to change.
 extern NSString *const OAAppearanceValuesWillChangeNotification;
@@ -85,6 +87,8 @@ typedef NS_ENUM(NSUInteger, OAAppearanceValueEncoding) {
 
 - (NSString *)stringForKeyPath:(NSString * )keyPath;
 - (NSDictionary *)dictionaryForKeyPath:(NSString *)keyPath;
+
+- (BOOL)isLightLuma:(CGFloat)luma;
 
 - (OA_SYSTEM_COLOR_CLASS *)colorForKeyPath:(NSString *)keyPath;
     // value must be a dictionary suitable for +[NSColor(OAExtensions colorFromPropertyListRepresentation:]
@@ -143,6 +147,9 @@ typedef NS_ENUM(NSUInteger, OAAppearanceValueEncoding) {
 /// Returns the singleton instance of the given appearance subclass. Any overrides must call super and should vend the returned result. The default implementation dynamically creates classes that are necessary for correct subclassing behavior of dynamic accessors.
 + (instancetype)appearanceForClass:(Class)cls NS_REQUIRES_SUPER;
 
+/// Subclasses may override this method to return a different bundle in which vended subclass appearance singletons will look for their backing plists. This is an up-front thing. To dynamically switch plists on the fly, see switchablePlist methods below.
++ (NSBundle *)bundleForPlist;
+
 /// Subclasses may override this method to return a URL in which vended subclass appearance singletons will look for their backing plists. 
 /// 
 /// The default implementation returns nil, signifying that the backing plist should be found in the app bundle's resources. It's expected that any vended URL points to a folder to which the app already has sandbox access, typically a folder within the app bundle or container.
@@ -150,7 +157,7 @@ typedef NS_ENUM(NSUInteger, OAAppearanceValueEncoding) {
 /// This specialization point is generally useful for cases where the full set of plists to be used is not known at compile time, e.g., when users can customize appearance by providing different plists. If you need a fixed collection of specialized instances, it may be better to override `+appearance` to call `+appearanceForClass:` passing the class of the specific specialized instance.
 ///
 /// N.B., if the value that a subclass will return changes, you *MUST* arrange to call `+invalidateDirectoryURLForSwitchablePlist` on the subclass.
-+ (NSURL *)directoryURLForSwitchablePlist;
++ (NSURL * _Nullable)directoryURLForSwitchablePlist;
 
 /// Signals that the receiver will return a new value for `directoryURLForSwitchablePlist`.
 + (void)invalidateDirectoryURLForSwitchablePlist;
@@ -160,7 +167,7 @@ typedef NS_ENUM(NSUInteger, OAAppearanceValueEncoding) {
 /// N.B., the returned instance is *unsuitable* for dynamic property lookup. Attempting to do so will throw. Instead, the instance can be used for calling `-validateValueAtKeyPath: error:` or *type*`forKeyPath:`.
 ///
 /// Return `Nil` if there is no appropriate plist file in the given directory
-+ (instancetype)appearanceForValidatingPropertyListInDirectory:(NSURL *)directoryURL forClass:(Class)cls;
++ (instancetype _Nullable)appearanceForValidatingPropertyListInDirectory:(NSURL *)directoryURL forClass:(Class)cls;
 @end
 
 #if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
@@ -193,3 +200,5 @@ typedef NS_ENUM(NSUInteger, OAAppearanceValueEncoding) {
 @end
 
 #endif
+
+NS_ASSUME_NONNULL_END
