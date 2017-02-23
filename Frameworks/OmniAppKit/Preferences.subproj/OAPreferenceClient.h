@@ -26,6 +26,7 @@
     
     OAPreferenceController *_nonretained_controller;
     NSString *_title;
+	@protected
     NSMutableArray *_preferences;
 }
 
