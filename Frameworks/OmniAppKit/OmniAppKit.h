@@ -1,4 +1,4 @@
-// Copyright 1997-2016 Omni Development, Inc. All rights reserved.
+// Copyright 1997-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -10,27 +10,33 @@
 #import <OmniAppKit/OAFeatures.h>
 
 #import <OmniAppKit/NSAttributedString-OAExtensions.h>
+#import <OmniAppKit/OAColor-Archiving.h>
+#import <OmniAppKit/OAColor.h>
+#import <OmniAppKit/OAFontDescriptor.h>
+#import <OmniAppKit/OAParagraphStyle.h>
+#import <OmniAppKit/OATextAttachment.h>
+#import <OmniAppKit/OATextAttributes.h>
+#import <OmniAppKit/OATextStorage.h>
+
+#if OMNI_BUILDING_FOR_MAC || OMNI_BUILDING_FOR_IOS
 #import <OmniAppKit/NSFileWrapper-OAExtensions.h>
 #import <OmniAppKit/NSLayoutManager-OAExtensions.h>
 #import <OmniAppKit/OAAppearance.h>
 #import <OmniAppKit/OAAppearancePropertyListCoder.h>
-#import <OmniAppKit/OAColor.h>
-#import <OmniAppKit/OAColor-Archiving.h>
+#import <OmniAppKit/OAColorPalette.h>
 #import <OmniAppKit/OAFindPattern.h>
-#import <OmniAppKit/OAFontDescriptor.h>
-#import <OmniAppKit/OAParagraphStyle.h>
-#import <OmniAppKit/OATextAttachment.h>
+#import <OmniAppKit/OAStrings.h>
 #import <OmniAppKit/OATextAttachmentCell.h>
-#import <OmniAppKit/OATextAttributes.h>
-#import <OmniAppKit/OATextStorage.h>
+#endif
 
-#if defined(TARGET_OS_IPHONE)  && TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_IOS
 #import <OmniAppKit/OAAppearanceColors.h>
 #endif
 
-#if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_MAC
 #import <OmniAppKit/NSAlert-OAExtensions.h>
 #import <OmniAppKit/NSAnimationContext-OAExtensions.h>
+#import <OmniAppKit/NSAppearance-OAExtensions.h>
 #import <OmniAppKit/NSAppleEventDescriptor-OAExtensions.h>
 #import <OmniAppKit/NSAppleScript-OAExtensions.h>
 #import <OmniAppKit/NSApplication-OAExtensions.h>
@@ -84,11 +90,11 @@
 #import <OmniAppKit/OAChangeConfigurationValue.h>
 #import <OmniAppKit/OAChasingArrowsProgressIndicator.h>
 #import <OmniAppKit/OACloseButtonOverlay.h>
-#import <OmniAppKit/OAColorPalette.h>
 #import <OmniAppKit/OAColorProfile.h>
 #import <OmniAppKit/OAColorSpaceManager.h>
 #import <OmniAppKit/OAColorWell.h>
 #import <OmniAppKit/OACompositeColorProfile.h>
+#import <OmniAppKit/OAViewStackConstraints.h>
 #import <OmniAppKit/OAConstraintBasedStackView.h>
 #import <OmniAppKit/OAConfigurableColumnTableView.h>
 #import <OmniAppKit/OAContextButton.h>
@@ -127,6 +133,7 @@
 #import <OmniAppKit/OAScriptToolbarHelper.h>
 #import <OmniAppKit/OAScrollView.h>
 #import <OmniAppKit/OASearchField.h>
+#import <OmniAppKit/OASecCertificateProxy.h>
 #import <OmniAppKit/OASendFeedbackErrorRecovery.h>
 #import <OmniAppKit/OAShrinkingTextDisplayer.h>
 #import <OmniAppKit/OAShrinkyTextField.h>

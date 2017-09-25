@@ -1,4 +1,4 @@
-// Copyright 2016 Omni Development, Inc. All rights reserved.
+// Copyright 2016-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -12,7 +12,7 @@ import Security
 
 public extension SecCertificate {
     
-    @nonobjc
+    @nonobjc final
     func publicKey() throws -> SecKey {
         #if os(OSX)
             var publicKey : SecKey? = nil;
@@ -24,12 +24,10 @@ public extension SecCertificate {
             }
         #else
             var errbuf : NSError? = nil;
-            let publicKey = OFSecCertificateCopyPublicKey(self, &errbuf);
-            if let pkey = publicKey {
-                return pkey;
-            } else {
+            guard let publicKey = OFSecCertificateCopyPublicKey(self, &errbuf) else {
                 throw errbuf!;
             }
+            return publicKey;
         #endif
     }
     
@@ -48,12 +46,12 @@ public extension SecIdentity {
         }
     }
     
-    @nonobjc
+    @nonobjc final
     func publicKey() throws -> SecKey {
         return try self.certificate().publicKey();
     }
     
-    @nonobjc
+    @nonobjc final
     func privateKey() throws -> SecKey {
         var privateKey : SecKey? = nil;
         let oserr = SecIdentityCopyPrivateKey(self, &privateKey);

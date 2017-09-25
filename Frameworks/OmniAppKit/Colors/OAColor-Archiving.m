@@ -1,4 +1,4 @@
-// Copyright 2010-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -14,10 +14,15 @@ RCS_ID("$Id$");
 #import <OmniFoundation/OFXMLDocument.h>
 #import <OmniFoundation/NSNumber-OFExtensions-CGTypes.h>
 #import <OmniFoundation/NSData-OFEncoding.h>
+#import <OmniFoundation/NSString-OFSimpleMatching.h>
 
-#if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_MAC
 #import <AppKit/NSColor.h>
 #endif
+
+@import Foundation;
+
+NSString * const OAColorExternalRepresentationTransformerUserKey = @"OAColorExternalRepresentationTransformer";
 
 @implementation OAColor (XML)
 
@@ -113,7 +118,7 @@ static NSData *_dictionaryDataGetter(void *container, NSString *key)
 
 + (OAColor *)_colorFromContainer:(void *)container getters:(OAColorGetters)getters;
 {
-#if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_MAC
     NSData *data = getters.data(container, @"archive");
     if (data) {
         if ([data isKindOfClass:[NSData class]] && [data length] > 0) {
@@ -135,7 +140,7 @@ static NSData *_dictionaryDataGetter(void *container, NSString *key)
     if (getters.component(container, @"w", &v0))
         return [OAColor colorWithWhite:v0 alpha:alpha];
     
-#if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_MAC
     NSString *catalog = getters.string(container, @"catalog");
     if (catalog) {
         NSString *name = getters.string(container, @"name");
@@ -159,7 +164,7 @@ static NSData *_dictionaryDataGetter(void *container, NSString *key)
     }
     
     if (getters.component(container, @"c", &v0)) {
-        // No global name for the calibrated CMYK color space
+        // No global name for the generic CMYK color space
         
         CGFloat components[5];
         components[0] = v0;
@@ -187,18 +192,13 @@ static NSData *_dictionaryDataGetter(void *container, NSString *key)
     if (!patternData)
         patternData = getters.data(container, @"tiff");
     if ([patternData isKindOfClass:[NSData class]]) {
-        // <bug://bugs/60462> (Deal with pattern color archive/unarchive in OAColor on iPad)
-        OBFinishPortingLater("Warning: unable to unarchive pattern colors on iOS, falling back to white");
-#if 0
-        NSBitmapImageRep *bitmapImageRep = (id)[NSBitmapImageRep imageRepWithData:patternData];
-        NSSize imageSize = [bitmapImageRep size];
-        if (bitmapImageRep == nil || NSEqualSizes(imageSize, NSZeroSize)) {
-            NSLog(@"Warning, could not rebuild pattern color from image rep %@, data %@", bitmapImageRep, patternData);
-        } else {
-            NSImage *patternImage = [[NSImage alloc] initWithSize:imageSize];
-            [patternImage addRepresentation:bitmapImageRep];
-            return [NSColor colorWithPatternImage:[patternImage autorelease]];
+#if OA_SUPPORT_PATTERN_COLOR
+        OAColor *color = [OAColor colorWithPatternImageData:patternData];
+        if (color) {
+            return color;
         }
+#else
+        OBFinishPortingLater("bug:///85174 (iOS-OmniGraffle Discussion: Feature: Pattern color fills in the Color Picker)");
 #endif
         
         // fall through
@@ -263,13 +263,73 @@ static void _dictionaryDataAdder(id container, NSString *key, NSData *data)
     [dict setObject:data forKey:key];
 }
 
+static NSString *_colorSpaceNameForColor(OAColor *color)
+{
+    if (color.colorSpace == OAColorSpaceWhite) {
+        return @"gg22";
+    } else if (color.colorSpace == OAColorSpaceRGB) {
+        return @"srgb";
+    }
+
+#ifdef OMNI_BUILDING_FOR_MAC
+    NSColorSpace *colorSpace = [color makePlatformColor].colorSpace;
+
+    if ([colorSpace isEqual:[NSColorSpace deviceGrayColorSpace]])
+        return @"dg";
+    if ([colorSpace isEqual:[NSColorSpace genericGamma22GrayColorSpace]])
+        return @"gg22";
+    if ([colorSpace isEqual:[NSColorSpace deviceRGBColorSpace]])
+        return @"drgb";
+    if ([colorSpace isEqual:[NSColorSpace adobeRGB1998ColorSpace]])
+        return @"argb";
+    if ([colorSpace isEqual:[NSColorSpace sRGBColorSpace]])
+        return @"srgb";
+    if ([colorSpace isEqual:[NSColorSpace deviceCMYKColorSpace]])
+        return @"dcmyk";
+
+    // Don't really need these as generic colors are written without the colorspace name
+    if ([colorSpace isEqual:[NSColorSpace genericGrayColorSpace]])
+        return @"gg";
+    if ([colorSpace isEqual:[NSColorSpace genericCMYKColorSpace]])
+        return @"gcmyk";
+    if ([colorSpace isEqual:[NSColorSpace genericRGBColorSpace]])
+        return @"grgb";
+#endif
+#ifdef OMNI_BUILDING_FOR_IOS
+    CGColorRef colorRef = [color makePlatformColor].CGColor;
+    CGColorSpaceRef colorSpace = CGColorGetColorSpace(colorRef);
+    CFStringRef colorSpaceName = CGColorSpaceCopyName(colorSpace);
+    CFAutorelease(colorSpaceName);
+
+    if (CFStringCompare(colorSpaceName, kCGColorSpaceExtendedGray, 0) || CFStringCompare(colorSpaceName, kCGColorSpaceGenericGrayGamma2_2, 0)) {
+        return @"gg22";
+    }
+    if (CFStringCompare(colorSpaceName, kCGColorSpaceExtendedSRGB, 0) || CFStringCompare(colorSpaceName, kCGColorSpaceSRGB, 0)) {
+        return @"srgb";
+    }
+    if (CFStringCompare(colorSpaceName, kCGColorSpaceAdobeRGB1998, 0)) {
+        return @"argb";
+    }
+
+    // ignoring others for now.
+#endif
+    
+    return nil;
+}
+
+
 // Allow for including default values, particular for scripting so that users don't have to check for missing values
 - (void)_addComponentsToContainer:(id)container adders:(OAColorAdders)adders omittingDefaultValues:(BOOL)omittingDefaultValues;
 {
     BOOL hasAlpha = NO;
     
     OAColorSpace colorSpace = [self colorSpace];
-    
+    NSString *colorSpaceName = _colorSpaceNameForColor(self);
+
+    if (colorSpaceName && !OFIsEmptyString(colorSpaceName)) {
+        adders.string(container, @"space", colorSpaceName);
+    }
+
     if (colorSpace == OAColorSpaceWhite) {
         adders.component(container, @"w", [self whiteComponent]);
         hasAlpha = YES;
@@ -403,15 +463,20 @@ static void _xmlDataAdder(id container, NSString *key, NSData *data)
             .string = _xmlStringAdder,
             .data = _xmlDataAdder
         };
-        [self _addComponentsToContainer:doc adders:adders omittingDefaultValues:YES];
-        
-        // OBFinishPorting: support the 'extra color space'?
-#if 0 && (!defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE)
-        // This is used in cases where you want to export both the real colorspace AND something that might be understandable to other XML readers (who won't be able to understand catalog colors).
-        NSString *additionalColorSpace = [doc userObjectForKey:OAColorXMLAdditionalColorSpace];
-        if (additionalColorSpace && OFNOTEQUAL(additionalColorSpace, [self colorSpaceName]))
-            [[self colorUsingColorSpaceName:additionalColorSpace] _addComponentsToContainer:doc adders:adders omittingDefaultValues:YES];
-#endif
+
+        // Allow convertion to a color space for the external file format. In particular, some consumers might not be able to handle catalog/named colors and might want a sRGB tuple instead.
+        OAColor *externalColor;
+        NSValueTransformer *colorTransformer = [doc userObjectForKey:OAColorExternalRepresentationTransformerUserKey];
+        if (colorTransformer) {
+            externalColor = [colorTransformer transformedValue:self];
+            if (externalColor == nil) {
+                externalColor = self;
+            }
+        } else {
+            externalColor = self;
+        }
+
+        [externalColor _addComponentsToContainer:doc adders:adders omittingDefaultValues:YES];
     }
     [doc popElement];
 }

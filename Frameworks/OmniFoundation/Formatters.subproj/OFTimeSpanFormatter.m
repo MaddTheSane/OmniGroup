@@ -1,4 +1,4 @@
-// Copyright 2000-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2000-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -30,10 +30,12 @@ typedef void (*SETFLOAT_IMP)(id, SEL, float);
 @property(nonatomic,copy) NSString *localizedSingularString;
 @property(nonatomic,copy) NSString *localizedPluralString;
 @property(nonatomic,copy) NSString *localizedAbbreviatedString;
+@property(nonatomic,copy) NSString *localizedElapsedString;
 
 @property(nonatomic,copy) NSString *singularString;
 @property(nonatomic,copy) NSString *pluralString;
 @property(nonatomic,copy) NSString *abbreviatedString;
+@property(nonatomic,copy) NSString *elapsedString;
 
 @property(nonatomic) FLOAT_IMP spanGetImplementation;
 @property(nonatomic) SETFLOAT_IMP spanSetImplementation;
@@ -56,11 +58,14 @@ static NSArray *TimeSpanUnits = nil;
     NSString *localizedPluralString = nil;
     NSString *localizedSingularString = nil;
     NSString *localizedAbbreviatedString = nil;
-    
+    NSString *localizedElapsedString = nil;
+
+
     localizedPluralString = NSLocalizedStringFromTableInBundle(@"years", @"OmniFoundation", bundle, @"time span formatter span - DO NOT add leading or trailing whitespace");
     localizedSingularString = NSLocalizedStringFromTableInBundle(@"year", @"OmniFoundation", bundle, @"time span formatter span - DO NOT add leading or trailing whitespace");
     localizedAbbreviatedString = NSLocalizedStringFromTableInBundle(@"y", @"OmniFoundation", bundle, @"time span formatter span - DO NOT add leading or trailing whitespace");
-
+    localizedElapsedString = NSLocalizedStringFromTableInBundle(@"ey", @"OmniFoundation", bundle, @"time span formatter span - DO NOT add leading or trailing whitespace");
+    
     NSMutableArray *timeSpanUnits = [NSMutableArray new];
     OFTimeSpanUnit *unit;
     
@@ -69,9 +74,11 @@ static NSArray *TimeSpanUnits = nil;
     unit.localizedPluralString = [localizedPluralString copy];
     unit.localizedSingularString = [localizedSingularString copy];
     unit.localizedAbbreviatedString = [localizedAbbreviatedString copy];
+    unit.localizedElapsedString = [localizedElapsedString copy];
     unit.pluralString = @"years";
     unit.singularString = @"year";
     unit.abbreviatedString = @"y";
+    unit.elapsedString = @"ey";
     unit.spanGetImplementation = (FLOAT_IMP)[OFTimeSpan instanceMethodForSelector:@selector(years)];
     unit.spanSetImplementation = (SETFLOAT_IMP)[OFTimeSpan instanceMethodForSelector:@selector(setYears:)];
     unit.formatterMultiplierImplementation = (FLOAT_IMP)[self instanceMethodForSelector:@selector(hoursPerYear)];
@@ -80,14 +87,17 @@ static NSArray *TimeSpanUnits = nil;
     localizedPluralString = NSLocalizedStringFromTableInBundle(@"months", @"OmniFoundation", bundle, @"time span formatter span - DO NOT add leading or trailing whitespace");
     localizedSingularString = NSLocalizedStringFromTableInBundle(@"month", @"OmniFoundation", bundle, @"time span formatter span - DO NOT add leading or trailing whitespace");
     localizedAbbreviatedString = NSLocalizedStringFromTableInBundle(@"mo", @"OmniFoundation", bundle, @"time span formatter span - DO NOT add leading or trailing whitespace (month)");
+    localizedElapsedString = NSLocalizedStringFromTableInBundle(@"emo", @"OmniFoundation", bundle, @"time span formatter span - DO NOT add leading or trailing whitespace");
 
     [timeSpanUnits addObject:(unit = [OFTimeSpanUnit new])];
     unit.localizedPluralString = [localizedPluralString copy];
     unit.localizedSingularString = [localizedSingularString copy];
     unit.localizedAbbreviatedString = [localizedAbbreviatedString copy];
+    unit.localizedElapsedString = [localizedElapsedString copy];
     unit.pluralString = @"months";
     unit.singularString = @"month";
     unit.abbreviatedString = @"mo";
+    unit.elapsedString = @"emo";
     unit.spanGetImplementation = (FLOAT_IMP)[OFTimeSpan instanceMethodForSelector:@selector(months)];
     unit.spanSetImplementation = (SETFLOAT_IMP)[OFTimeSpan instanceMethodForSelector:@selector(setMonths:)];
     unit.formatterMultiplierImplementation = (FLOAT_IMP)[self instanceMethodForSelector:@selector(hoursPerMonth)];
@@ -96,14 +106,17 @@ static NSArray *TimeSpanUnits = nil;
     localizedPluralString = NSLocalizedStringFromTableInBundle(@"weeks", @"OmniFoundation", bundle, @"time span formatter span - DO NOT add leading or trailing whitespace");
     localizedSingularString = NSLocalizedStringFromTableInBundle(@"week", @"OmniFoundation", bundle, @"time span formatter span - DO NOT add leading or trailing whitespace");
     localizedAbbreviatedString = NSLocalizedStringFromTableInBundle(@"w", @"OmniFoundation", bundle, @"time span formatter span - DO NOT add leading or trailing whitespace");
+    localizedElapsedString = NSLocalizedStringFromTableInBundle(@"ew", @"OmniFoundation", bundle, @"time span formatter span - DO NOT add leading or trailing whitespace");
 
     [timeSpanUnits addObject:(unit = [OFTimeSpanUnit new])];
     unit.localizedPluralString = [localizedPluralString copy];
     unit.localizedSingularString = [localizedSingularString copy];
     unit.localizedAbbreviatedString = [localizedAbbreviatedString copy];
+    unit.localizedElapsedString = [localizedElapsedString copy];
     unit.pluralString = @"weeks";
     unit.singularString = @"week";
     unit.abbreviatedString = @"w";
+    unit.elapsedString = @"ew";
     unit.spanGetImplementation = (FLOAT_IMP)[OFTimeSpan instanceMethodForSelector:@selector(weeks)];
     unit.spanSetImplementation = (SETFLOAT_IMP)[OFTimeSpan instanceMethodForSelector:@selector(setWeeks:)];
     unit.formatterMultiplierImplementation = (FLOAT_IMP)[self instanceMethodForSelector:@selector(hoursPerWeek)];
@@ -112,14 +125,17 @@ static NSArray *TimeSpanUnits = nil;
     localizedPluralString = NSLocalizedStringFromTableInBundle(@"days", @"OmniFoundation", bundle, @"time span formatter span - DO NOT add leading or trailing whitespace");
     localizedSingularString = NSLocalizedStringFromTableInBundle(@"day", @"OmniFoundation", bundle, @"time span formatter span - DO NOT add leading or trailing whitespace");
     localizedAbbreviatedString = NSLocalizedStringFromTableInBundle(@"d", @"OmniFoundation", bundle, @"time span formatter span - DO NOT add leading or trailing whitespace");
+    localizedElapsedString = NSLocalizedStringFromTableInBundle(@"ed", @"OmniFoundation", bundle, @"time span formatter span - DO NOT add leading or trailing whitespace");
 
     [timeSpanUnits addObject:(unit = [OFTimeSpanUnit new])];
     unit.localizedPluralString = [localizedPluralString copy];
     unit.localizedSingularString = [localizedSingularString copy];
     unit.localizedAbbreviatedString = [localizedAbbreviatedString copy];
+    unit.localizedElapsedString = [localizedElapsedString copy];
     unit.pluralString = @"days";
     unit.singularString = @"day";
     unit.abbreviatedString = @"d";
+    unit.elapsedString = @"ed";
     unit.spanGetImplementation = (FLOAT_IMP)[OFTimeSpan instanceMethodForSelector:@selector(days)];
     unit.spanSetImplementation = (SETFLOAT_IMP)[OFTimeSpan instanceMethodForSelector:@selector(setDays:)];
     unit.formatterMultiplierImplementation = (FLOAT_IMP)[self instanceMethodForSelector:@selector(hoursPerDay)];
@@ -128,14 +144,17 @@ static NSArray *TimeSpanUnits = nil;
     localizedPluralString = NSLocalizedStringFromTableInBundle(@"hours", @"OmniFoundation", bundle, @"time span formatter span - DO NOT add leading or trailing whitespace");
     localizedSingularString = NSLocalizedStringFromTableInBundle(@"hour", @"OmniFoundation", bundle, @"time span formatter span - DO NOT add leading or trailing whitespace");
     localizedAbbreviatedString = NSLocalizedStringFromTableInBundle(@"h", @"OmniFoundation", bundle, @"time span formatter span - DO NOT add leading or trailing whitespace");
+    localizedElapsedString = NSLocalizedStringFromTableInBundle(@"eh", @"OmniFoundation", bundle, @"time span formatter span - DO NOT add leading or trailing whitespace");
 
     [timeSpanUnits addObject:(unit = [OFTimeSpanUnit new])];
     unit.localizedPluralString = [localizedPluralString copy];
     unit.localizedSingularString = [localizedSingularString copy];
     unit.localizedAbbreviatedString = [localizedAbbreviatedString copy];
+    unit.localizedElapsedString = [localizedElapsedString copy];
     unit.pluralString = @"hours";
     unit.singularString = @"hour";
     unit.abbreviatedString = @"h";
+    unit.elapsedString = @"eh";
     unit.spanGetImplementation = (FLOAT_IMP)[OFTimeSpan instanceMethodForSelector:@selector(hours)];
     unit.spanSetImplementation = (SETFLOAT_IMP)[OFTimeSpan instanceMethodForSelector:@selector(setHours:)];
     unit.formatterMultiplierImplementation = NULL;
@@ -144,14 +163,17 @@ static NSArray *TimeSpanUnits = nil;
     localizedPluralString = NSLocalizedStringFromTableInBundle(@"minutes", @"OmniFoundation", bundle, @"time span formatter span - DO NOT add leading or trailing whitespace");
     localizedSingularString = NSLocalizedStringFromTableInBundle(@"minute", @"OmniFoundation", bundle, @"time span formatter span - DO NOT add leading or trailing whitespace");
     localizedAbbreviatedString = NSLocalizedStringFromTableInBundle(@"m", @"OmniFoundation", bundle, @"time span formatter span - DO NOT add leading or trailing whitespace (minute)");
+    localizedElapsedString = NSLocalizedStringFromTableInBundle(@"em", @"OmniFoundation", bundle, @"time span formatter span - DO NOT add leading or trailing whitespace");
 
     [timeSpanUnits addObject:(unit = [OFTimeSpanUnit new])];
     unit.localizedPluralString = [localizedPluralString copy];
     unit.localizedSingularString = [localizedSingularString copy];
     unit.localizedAbbreviatedString = [localizedAbbreviatedString copy];
+    unit.localizedElapsedString = [localizedElapsedString copy];
     unit.pluralString = @"minutes";
     unit.singularString = @"minute";
     unit.abbreviatedString = @"m";
+    unit.elapsedString = @"em";
     unit.spanGetImplementation = (FLOAT_IMP)[OFTimeSpan instanceMethodForSelector:@selector(minutes)];
     unit.spanSetImplementation = (SETFLOAT_IMP)[OFTimeSpan instanceMethodForSelector:@selector(setMinutes:)];
     unit.formatterMultiplierImplementation = NULL;
@@ -160,14 +182,17 @@ static NSArray *TimeSpanUnits = nil;
     localizedPluralString = NSLocalizedStringFromTableInBundle(@"seconds", @"OmniFoundation", bundle, @"time span formatter span - DO NOT add leading or trailing whitespace");
     localizedSingularString = NSLocalizedStringFromTableInBundle(@"second", @"OmniFoundation", bundle, @"time span formatter span - DO NOT add leading or trailing whitespace");
     localizedAbbreviatedString = NSLocalizedStringFromTableInBundle(@"s", @"OmniFoundation", bundle, @"time span formatter span - DO NOT add leading or trailing whitespace");
+    localizedElapsedString = NSLocalizedStringFromTableInBundle(@"es", @"OmniFoundation", bundle, @"time span formatter span - DO NOT add leading or trailing whitespace");
 
     [timeSpanUnits addObject:(unit = [OFTimeSpanUnit new])];
     unit.localizedPluralString = [localizedPluralString copy];
     unit.localizedSingularString = [localizedSingularString copy];
     unit.localizedAbbreviatedString = [localizedAbbreviatedString copy];
+    unit.localizedElapsedString = [localizedElapsedString copy];
     unit.pluralString = @"seconds";
     unit.singularString = @"second";
     unit.abbreviatedString = @"s";
+    unit.elapsedString = @"es";
     unit.spanGetImplementation = (FLOAT_IMP)[OFTimeSpan instanceMethodForSelector:@selector(seconds)];
     unit.spanSetImplementation = (SETFLOAT_IMP)[OFTimeSpan instanceMethodForSelector:@selector(setSeconds:)];
     unit.formatterMultiplierImplementation = NULL;
@@ -193,6 +218,12 @@ static NSArray *TimeSpanUnits = nil;
 {
     OFTimeSpanUnit *timeSpan = TimeSpanUnits[unit];
     return timeSpan.localizedAbbreviatedString;
+}
+
++ (NSString *)localizedElapsedStringForUnits:(OFTimeSpanFormatterUnit)unit;
+{
+    OFTimeSpanUnit *timeSpan = TimeSpanUnits[unit];
+    return timeSpan.localizedElapsedString;
 }
 
 - init;
@@ -471,6 +502,16 @@ static void _setDisplayUnitBit(OFTimeSpanFormatter *self, unsigned bitIndex, BOO
     _setDisplayUnitBit(self, UNITS_YEARS, aBool);
 }
 
+- (BOOL)allowsElapsedUnits;
+{
+    return _flags.allowsElapsedUnits;
+}
+
+- (void)setAllowsElapsedUnits:(BOOL)allowsElapsedUnits;
+{
+    _flags.allowsElapsedUnits = allowsElapsedUnits;
+}
+
 - (void)setStandardWorkTime; // 8h = 1d, 40h = 1w, 160h = 1m
 {
     hoursPerDay = STANDARD_WORK_HOURS_PER_DAY;
@@ -505,8 +546,6 @@ static void _setDisplayUnitBit(OFTimeSpanFormatter *self, unsigned bitIndex, BOO
     return value;
 }
 
-#define FLAGS_DISPLAY_ALL_UNITS ((1 << UNITS_COUNT) - 1)
-
 - (NSString *)_displayStringForUnmodifiedTimeSpan:(OFTimeSpan *)timeSpan;
 {
     NSMutableString *displayString = [NSMutableString string];
@@ -538,11 +577,26 @@ static void _setDisplayUnitBit(OFTimeSpanFormatter *self, unsigned bitIndex, BOO
                 [displayString appendString:@"-"];
 
             OFTimeSpanUnit *unit = TimeSpanUnits[unitIndex];
-            if (shouldUseVerboseFormat) {
-                NSString *unitString = value > 1.0 ? unit.localizedPluralString : unit.localizedSingularString;
+            NSString *unitString;
+            if (_flags.usesArchiveUnitStrings) {
+                if (timeSpan.elapsed && self.allowsElapsedUnits)
+                    unitString = unit.elapsedString;
+                else
+                    unitString = unit.abbreviatedString;
+                [displayString appendFormat:@"%@%@", valueString, unitString];
+            } else if (shouldUseVerboseFormat) {
+                if (timeSpan.elapsed && self.allowsElapsedUnits)
+                    unitString = unit.localizedElapsedString;
+                else
+                    unitString = value > 1.0 ? unit.localizedPluralString : unit.localizedSingularString;
                 [displayString appendFormat:@"%@ %@", valueString, unitString];
-            } else
-                [displayString appendFormat:@"%@%@", valueString, unit.localizedAbbreviatedString];
+            } else {
+                if (timeSpan.elapsed && self.allowsElapsedUnits)
+                    unitString = unit.localizedElapsedString;
+                else
+                    unitString = unit.localizedAbbreviatedString;
+                [displayString appendFormat:@"%@%@", valueString, unitString];
+            }
         }
     }
     return displayString;
@@ -552,8 +606,11 @@ static void _setDisplayUnitBit(OFTimeSpanFormatter *self, unsigned bitIndex, BOO
 {
     OFTimeSpan *result = [[OFTimeSpan alloc] initWithTimeSpanFormatter:self];
     float secondsLeft = [aNumber floatValue];
+    BOOL negative = secondsLeft < 0;
     if (!_flags.floatValuesInSeconds)
         secondsLeft *= 3600.0f;
+    if (negative)
+        secondsLeft *= -1.0f;
     
     unsigned int unitIndex;
     for (unitIndex = 0; unitIndex < UNITS_COUNT; unitIndex++) {
@@ -572,6 +629,8 @@ static void _setDisplayUnitBit(OFTimeSpanFormatter *self, unsigned bitIndex, BOO
             } else {
                 secondsLeft = 0.0f;
             }
+            if (negative)
+                value = -value;
             
             switch (unitIndex) {
                 case UNITS_YEARS: result.years = value; break;
@@ -698,6 +757,11 @@ static void _setDisplayUnitBit(OFTimeSpanFormatter *self, unsigned bitIndex, BOO
     return [self _stringForObjectValue:object withRounding:YES];
 }
 
+- (NSString *)placeholderString
+{
+    return [self _stringForObjectValue:@0 withRounding:NO];
+}
+
 - (NSNumber *)_scanNumberFromScanner:(NSScanner *)scanner;
 {
     __autoreleasing NSNumber *number = nil;
@@ -797,23 +861,47 @@ static void _setDisplayUnitBit(OFTimeSpanFormatter *self, unsigned bitIndex, BOO
         
         // Eat more whitespace
         [scanner scanCharactersFromSet:whitespaceCharacterSet intoString:NULL];
-
-        unsigned int unitIndex;
+        
+        unsigned int unitIndex = UNITS_COUNT;
         if (_flags.usesArchiveUnitStrings) {
-            // Only look for archive unit strings, not long forms or abbreviations
-            for (unitIndex = 0; unitIndex < UNITS_COUNT; unitIndex++) {
-                OFTimeSpanUnit *unit = TimeSpanUnits[unitIndex];
-                if ([scanner scanString:unit.abbreviatedString intoString:NULL]) {
-                    lastMatchedUnit = unitIndex;
-                    break;
+            if (_flags.allowsElapsedUnits) {
+                for (unitIndex = 0; unitIndex < UNITS_COUNT; unitIndex++) {
+                    OFTimeSpanUnit *unit = TimeSpanUnits[(lastMatchedUnit+unitIndex) % UNITS_COUNT];
+                    if ([scanner scanString:unit.elapsedString intoString:NULL]) {
+                        lastMatchedUnit = (lastMatchedUnit+unitIndex) % UNITS_COUNT;
+                        [timeSpan setElapsed:YES];
+                        break;
+                    }
+                }
+            }
+            if (!_flags.allowsElapsedUnits || unitIndex == UNITS_COUNT) {
+                // Only look for archive unit strings, not long forms or abbreviations
+                for (unitIndex = 0; unitIndex < UNITS_COUNT; unitIndex++) {
+                    OFTimeSpanUnit *unit = TimeSpanUnits[unitIndex];
+                    if ([scanner scanString:unit.abbreviatedString intoString:NULL]) {
+                        lastMatchedUnit = unitIndex;
+                        break;
+                    }
                 }
             }
         } else {
-            for (unitIndex = 0; unitIndex < UNITS_COUNT; unitIndex++) {
-                OFTimeSpanUnit *unit = TimeSpanUnits[(lastMatchedUnit+unitIndex) % UNITS_COUNT];
-                if ([scanner scanString:unit.localizedPluralString intoString:NULL] || [scanner scanString:unit.localizedSingularString intoString:NULL]) {
-                    lastMatchedUnit = (lastMatchedUnit+unitIndex) % UNITS_COUNT;
-                    break;
+            if (_flags.allowsElapsedUnits) {
+                for (unitIndex = 0; unitIndex < UNITS_COUNT; unitIndex++) {
+                    OFTimeSpanUnit *unit = TimeSpanUnits[(lastMatchedUnit+unitIndex) % UNITS_COUNT];
+                    if ([scanner scanString:unit.localizedElapsedString intoString:NULL]) {
+                        lastMatchedUnit = (lastMatchedUnit+unitIndex) % UNITS_COUNT;
+                        [timeSpan setElapsed:YES];
+                        break;
+                    }
+                }
+            }
+            if (unitIndex == UNITS_COUNT) {
+                for (unitIndex = 0; unitIndex < UNITS_COUNT; unitIndex++) {
+                    OFTimeSpanUnit *unit = TimeSpanUnits[(lastMatchedUnit+unitIndex) % UNITS_COUNT];
+                    if ([scanner scanString:unit.localizedPluralString intoString:NULL] || [scanner scanString:unit.localizedSingularString intoString:NULL]) {
+                        lastMatchedUnit = (lastMatchedUnit+unitIndex) % UNITS_COUNT;
+                        break;
+                    }
                 }
             }
             if (unitIndex == UNITS_COUNT) {
@@ -833,7 +921,8 @@ static void _setDisplayUnitBit(OFTimeSpanFormatter *self, unsigned bitIndex, BOO
                     if ([scanner scanString:unit.pluralString intoString:NULL] || [scanner scanString:unit.singularString intoString:NULL]) {
                         lastMatchedUnit = (lastMatchedUnit+unitIndex) % UNITS_COUNT;
                         break;
-                    }                }
+                    }
+                }
             if (unitIndex == UNITS_COUNT) {
                 // unlocalized abbreviations?
                 for (unitIndex = 0; unitIndex < UNITS_COUNT; unitIndex++) {
@@ -841,7 +930,8 @@ static void _setDisplayUnitBit(OFTimeSpanFormatter *self, unsigned bitIndex, BOO
                     if ([scanner scanString:unit.abbreviatedString intoString:NULL]) {
                         lastMatchedUnit = (lastMatchedUnit+unitIndex) % UNITS_COUNT;
                         break;
-                    }                }
+                    }
+                }
             }
         }
         if (unitIndex != UNITS_COUNT) {
@@ -870,6 +960,14 @@ static void _setDisplayUnitBit(OFTimeSpanFormatter *self, unsigned bitIndex, BOO
         *obj = timeSpan;
     DLOG(@">> %@", [*obj shortDescription]);
     return YES;
+}
+
+- (OFTimeSpan *)timeSpanValueForString:(NSString *)string errorDescription:(out NSString **)error;
+{
+    OFTimeSpan *result;
+    if ([self getObjectValue:&result forString:string errorDescription:error])
+        return result;
+    return nil;
 }
 
 @end

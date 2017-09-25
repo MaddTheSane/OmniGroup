@@ -7,6 +7,7 @@
 
 #import <OmniUI/NSTextStorage-OUIExtensions.h>
 
+#import <OmniUI/NSURL-OUIExtensions.h>
 #import <OmniUI/OUITextSelectionSpan.h>
 #import <OmniUI/OUITextView.h>
 
@@ -75,8 +76,9 @@ static NSDataDetector *_linkDataDectector;
     [self endEditing];
 }
 
-- (void)detectAppSchemeLinks;
+- (BOOL)detectAppSchemeLinks;
 {
+    __block BOOL didMakeChanges = NO;
     [self beginEditing];
     {
         // We iterate over the raw string so we aren't mutating the thing over which we're iterating. We ensure that mutation never changes the length of the string so that detected ranges correspond to attributed ranges.
@@ -93,130 +95,29 @@ static NSDataDetector *_linkDataDectector;
                 NSURL *linkURL = nil;
                 switch (result.resultType) {
                     case NSTextCheckingTypeLink:
-                        linkURL = _probablyAppScheme(result.URL) ? result.URL : nil;
+                        linkURL = result.URL;
                         break;
                         
                     default:
                         OBASSERT_NOT_REACHED(@"Received unexpected data detection result: %@", @(result.resultType));
                 }
+                
                 if (linkURL != nil) {
-                    [self addAttribute:NSLinkAttributeName value:linkURL range:matchRange];
+                    BOOL hasExistingLink = [self attribute:NSLinkAttributeName atIndex:matchRange.location effectiveRange:NULL] != nil;
+                    BOOL isProbablyAppScheme = [linkURL isProbablyAppScheme];
+                    BOOL shouldAddLink = (isProbablyAppScheme && !hasExistingLink);
+                    if (shouldAddLink) {
+                        didMakeChanges = YES;
+                        [self addAttribute:NSLinkAttributeName value:linkURL range:matchRange];
+                    }
                 }
+
             }];
             location = NSMaxRange(remainingRange);
         }
     }
     [self endEditing];
-}
-
-static BOOL _probablyAppScheme(NSURL *url) {
-    static NSSet *schemesThatUIDataDetectorsShouldHandle = nil;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        // All permanent schemes from http://www.iana.org/assignments/uri-schemes/uri-schemes.xhtml as of 9/30/2016.
-        NSArray *schemes = @[
-                             @"aaa",
-                             @"aaas",
-                             @"about",
-                             @"acap",
-                             @"acct",
-                             @"cap",
-                             @"cid",
-                             @"coap",
-                             @"coaps",
-                             @"crid",
-                             @"data",
-                             @"dav",
-                             @"dict",
-                             @"dns",
-                             @"example",
-                             @"file",
-                             @"ftp",
-                             @"geo",
-                             @"go",
-                             @"gopher",
-                             @"h323",
-                             @"http",
-                             @"https",
-                             @"iax",
-                             @"icap",
-                             @"im",
-                             @"imap",
-                             @"info",
-                             @"ipp",
-                             @"ipps",
-                             @"iris",
-                             @"iris.beep",
-                             @"iris.lwz",
-                             @"iris.xpc",
-                             @"iris.xpcs",
-                             @"jabber",
-                             @"ldap",
-                             @"mailto",
-                             @"mid",
-                             @"msrp",
-                             @"msrps",
-                             @"mtqp",
-                             @"mupdate",
-                             @"news",
-                             @"nfs",
-                             @"ni",
-                             @"nih",
-                             @"nntp",
-                             @"opaquelocktoken",
-                             @"pkcs11",
-                             @"pop",
-                             @"pres",
-                             @"reload",
-                             @"rtsp",
-                             @"rtsps",
-                             @"rtspu",
-                             @"service",
-                             @"session",
-                             @"shttp",
-                             @"sieve",
-                             @"sip",
-                             @"sips",
-                             @"sms",
-                             @"snmp",
-                             @"soap.beep",
-                             @"soap.beeps",
-                             @"stun",
-                             @"stuns",
-                             @"tag",
-                             @"tel",
-                             @"telnet",
-                             @"tftp",
-                             @"thismessage",
-                             @"tip",
-                             @"tn3270",
-                             @"turn",
-                             @"turns",
-                             @"tv",
-                             @"urn",
-                             @"vemmi",
-                             @"vnc",
-                             @"ws",
-                             @"wss",
-                             @"xcon",
-                             @"xcon-userid",
-                             @"xmlrpc.beep",
-                             @"xmlrpc.beeps",
-                             @"xmpp",
-                             @"z39.50r",
-                             @"z39.50s",
-                             ];
-        schemesThatUIDataDetectorsShouldHandle = [NSSet setWithArray:schemes];
-    });
-    NSString *scheme = url.scheme;
-    if ([NSString isEmptyString:scheme]) {
-        return NO;
-    }
-    
-    BOOL handledScheme = [schemesThatUIDataDetectorsShouldHandle containsObject:scheme];
-    
-    // Assume everything else is an app-scheme that we'll link ourselves.
-    return !handledScheme;
+    return didMakeChanges;
 }
 
 @end

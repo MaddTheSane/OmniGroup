@@ -1,13 +1,10 @@
 module OmniDataObjects
   class SourceFilePair
-    attr_reader :h, :m
-    def initialize(h,m)
+    attr_reader :h, :m, :swift
+    def initialize(h, m, swift = nil)
       @h = h
       @m = m
-    end
-    def br
-      h.br
-      m.br
+      @swift = swift
     end
   end
 end

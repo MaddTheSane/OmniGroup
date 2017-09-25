@@ -1,4 +1,4 @@
-// Copyright 2013-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2013-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -100,31 +100,52 @@ static NSURL *URLWithBookmarkData(NSData *data, BOOL *outStale, NSError **outErr
 
 
 #if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
+static BOOL _testURLPathForHomeDirectoryFolder(NSString *urlPath, NSString *homeDirectory, NSString *folder)
+{
+    NSString *prefixPath = [homeDirectory stringByAppendingPathComponent:folder];
+    return [urlPath hasPrefix:prefixPath] && (urlPath.length == prefixPath.length || [urlPath characterAtIndex:prefixPath.length] == '/');
+}
+
 static BOOL _validateNotDropbox(NSURL *url, NSError **outError)
 {
-    NSArray *components = [url pathComponents];
-    if ([components containsObject:@"Dropbox"]) { // Dropbox allows you to move your folder, but not to rename it.
-        if (outError) {
-            NSString *description = NSLocalizedStringFromTableInBundle(@"Local documents folder cannot be used.", @"OmniFileExchange", OMNI_BUNDLE, @"error description");
-            NSString *reason = NSLocalizedStringFromTableInBundle(@"The proposed local documents folder appears to be inside a Dropbox folder. Using two file synchronization systems on the same folder can result in data loss.", @"OmniFileExchange", OMNI_BUNDLE, @"error description");
-            OFXError(outError, OFXLocalAccountDirectoryNotUsable, description, reason);
-        }
-        return NO;
-    }
-    
     NSString *homeDirectory = OFUnsandboxedHomeDirectory();
-    NSString *desktopFolder = [homeDirectory stringByAppendingPathComponent:@"Desktop"];
-    NSString *documentsFolder = [homeDirectory stringByAppendingPathComponent:@"Documents"];
     NSString *urlPath = url.path;
-    if ([urlPath hasPrefix:desktopFolder] || [urlPath hasPrefix:documentsFolder]) { // 10.12 Sierra prompts people to store their desktop and documents in iCloud
-        if (outError) {
-            NSString *description = NSLocalizedStringFromTableInBundle(@"Local documents folder cannot be used.", @"OmniFileExchange", OMNI_BUNDLE, @"error description");
-            NSString *reason = NSLocalizedStringFromTableInBundle(@"The proposed local documents folder is in a location which can be synchronized by iCloud. Using two file synchronization systems on the same folder can result in data loss.", @"OmniFileExchange", OMNI_BUNDLE, @"error description");
-            OFXError(outError, OFXLocalAccountDirectoryNotUsable, description, reason);
+    // 10.12 Sierra prompts people to store their Desktop and Documents in iCloud
+    for (NSString *dangerousFolder in [[OFPreference preferenceForKey:@"OFXDangerousSierraFolders"] arrayValue]) {
+        if (_testURLPathForHomeDirectoryFolder(urlPath, homeDirectory, dangerousFolder)) {
+            if (outError) {
+                NSString *description = NSLocalizedStringFromTableInBundle(@"Please choose another location for your synced documents.", @"OmniFileExchange", OMNI_BUNDLE, @"error description");
+                BOOL isOnDesktop = OFISEQUAL(dangerousFolder, @"Desktop");
+                NSString *reason = isOnDesktop ? NSLocalizedStringFromTableInBundle(@"The selected local folder is on your Desktop, which can be synchronized by iCloud Drive on Sierra. Using two file synchronization systems on the same folder can result in data loss.", @"OmniFileExchange", OMNI_BUNDLE, @"error description") : [NSString stringWithFormat:NSLocalizedStringFromTableInBundle(@"The selected local folder is in your %@ folder, which can be synchronized by iCloud Drive on Sierra. Using two file synchronization systems on the same folder can result in data loss.", @"OmniFileExchange", OMNI_BUNDLE, @"error description"), dangerousFolder];
+                OFXError(outError, OFXLocalAccountDirectoryNotUsable, description, reason);
+            }
+            return NO;
         }
-        return NO;
     }
-    
+
+    for (NSString *dangerousFolder in [[OFPreference preferenceForKey:@"OFXDangerousHomeFolders"] arrayValue]) {
+        if (_testURLPathForHomeDirectoryFolder(urlPath, homeDirectory, dangerousFolder)) {
+            if (outError) {
+                NSString *description = NSLocalizedStringFromTableInBundle(@"Please choose another location for your synced documents.", @"OmniFileExchange", OMNI_BUNDLE, @"error description");
+                NSString *reason = [NSString stringWithFormat:NSLocalizedStringFromTableInBundle(@"The selected local folder is in your %@ folder. Using two file synchronization systems on the same folder can result in data loss.", @"OmniFileExchange", OMNI_BUNDLE, @"error description"), dangerousFolder];
+                OFXError(outError, OFXLocalAccountDirectoryNotUsable, description, reason);
+            }
+            return NO;
+        }
+    }
+
+    NSArray *components = [url pathComponents];
+    for (NSString *dangerousFolder in [[OFPreference preferenceForKey:@"OFXDangerousSyncedFolders"] arrayValue]) {
+        if ([components containsObject:dangerousFolder]) {
+            if (outError) {
+                NSString *description = NSLocalizedStringFromTableInBundle(@"Please choose another location for your synced documents.", @"OmniFileExchange", OMNI_BUNDLE, @"error description");
+                NSString *reason = [NSString stringWithFormat:NSLocalizedStringFromTableInBundle(@"The selected local folder appears to be inside a %@ folder. Using two file synchronization systems on the same folder can result in data loss.", @"OmniFileExchange", OMNI_BUNDLE, @"error description"), dangerousFolder];
+                OFXError(outError, OFXLocalAccountDirectoryNotUsable, description, reason);
+            }
+            return NO;
+        }
+    }
+
     return YES;
 }
 
@@ -256,7 +277,7 @@ static BOOL _validateLocalFileSystem(NSURL *url, NSError **outError)
 + (NSString *)suggestedDisplayNameForAccountType:(OFXServerAccountType *)accountType url:(NSURL *)url username:(NSString *)username excludingAccount:(OFXServerAccount *)excludeAccount;
 {
     OFXServerAccountRegistry *registry = [OFXServerAccountRegistry defaultAccountRegistry];
-    NSMutableArray *similarAccounts = [NSMutableArray array];
+    NSMutableArray <OFXServerAccount *> *similarAccounts = [NSMutableArray array];
     for (OFXServerAccount *account in [registry allAccounts]) {
         if (account.type != accountType || account == excludeAccount)
             continue;

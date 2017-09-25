@@ -1,4 +1,4 @@
-// Copyright 1997-2016 Omni Development, Inc. All rights reserved.
+// Copyright 1997-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -69,22 +69,17 @@ static inline void OBRetainAutorelease(id object)
     OBAutorelease(object);
 }
 
-// NSAllocateObject and object_getIndexedIvars are not availabe in ARC. Uses of these should be rare...
-extern id OBAllocateObjectWithIndexedIvars(Class cls, size_t indexedIvarsSize) NS_RETURNS_RETAINED;
-extern void *OBObjectGetIndexedIvars(id object);
-
 // ARC doesn't allow object_getInstanceVariable().
 extern void OBObjectGetUnsafeObjectIvar(id object, const char *ivarName, __unsafe_unretained id *outValue);
     
 // ARC doesn't allow casting between 'void **' and '__unsafe_unretained id *' for some reason.
 extern __unsafe_unretained id *OBCastMemoryBufferToUnsafeObjectArray(void *buffer);
 
-#import <OmniBase/OBBundle.h>
     
 extern void _OBRequestConcreteImplementation(id self, SEL _cmd, const char *file, unsigned int line) NORETURN;
 extern void _OBRejectUnusedImplementation(id self, SEL _cmd, const char *file, unsigned int line) NORETURN;
 extern void _OBRejectInvalidCall(id self, SEL _cmd, const char *file, unsigned int line, NSString *format, ...)
-                    NORETURN __attribute__((format(__NSString__, 5, 6)));
+                    NORETURN __attribute__((cold)) __attribute__((format(__NSString__, 5, 6)));
 
 #define OBRequestConcreteImplementation(self, sel) _OBRequestConcreteImplementation((self), (sel), __FILE__, __LINE__)
 #define OBRejectUnusedImplementation(self, sel) _OBRejectUnusedImplementation((self), (sel), __FILE__, __LINE__)
@@ -92,30 +87,51 @@ extern void _OBRejectInvalidCall(id self, SEL _cmd, const char *file, unsigned i
 
 // A common pattern when refactoring or updating code is to #if 0 out portions that haven't been updated and leave a marker there.  This function serves as the 'to do' marker and allows you to demand-port the remaining code after working out the general structure.
 // NOTE: The formatting of the "header" argument is formulated so you can run 'strings' on your binary and find a list of all the file:line locations of these.
-extern void _OBFinishPorting(const char *header, const char *function) NORETURN;
-#define _OBFinishPorting_(file, line, function) _OBFinishPorting("OBFinishPorting at " file ":" #line, function)
-#define _OBFinishPorting__(file, line, function) _OBFinishPorting_(file, line, function)
-#define OBFinishPorting _OBFinishPorting__(__FILE__, __LINE__, __PRETTY_FUNCTION__)
+
+extern void _OBFinishPorting(const char *text) NORETURN;
+#define _OBFinishPorting_(file, line, message) do { \
+    static const char *text = "OBFinishPorting at " file ":" #line " -- " message; \
+    _OBFinishPorting(text); \
+} while(0)
+
+#ifdef DEBUG
+#define _OBFinishPorting__(file, line, message) _OBFinishPorting_(file, line, message)
+#else
+#define _OBFinishPorting__(file, line, message) _OBFinishPorting_(file, line, "")
+#endif
+
+#define OBFinishPortingWithNote(msg) _OBFinishPorting__(__FILE__, __LINE__, msg)
+
+#define OBFinishPorting OBFinishPortingWithNote("")
+
 
 // Something that needs porting, but not immediately
-extern void _OBFinishPortingLater(const char *header, const char *function, const char *message);
-#define _OBFinishPortingLater_(file, line, function, message) _OBFinishPortingLater("OBFinishPortingLater at " file ":" #line, function, (message))
-#define _OBFinishPortingLater__(file, line, function, message) _OBFinishPortingLater_(file, line, function, (message))
+extern void _OBFinishPortingLater(const char *text);
+#define _OBFinishPortingLater_(file, line, message)  do { \
+    static const char *text = "OBFinishPortingLater at " file ":" #line " -- " message; \
+    _OBFinishPortingLater(text); \
+} while(0)
+
+#ifdef DEBUG
+#define _OBFinishPortingLater__(file, line, message) _OBFinishPortingLater_(file, line, message)
+#else
+#define _OBFinishPortingLater__(file, line, message) _OBFinishPortingLater_(file, line, "")
+#endif
+
 #define OBFinishPortingLater(msg) do { \
     static BOOL warned = NO; \
     if (!warned) { \
         warned = YES; \
-        _OBFinishPortingLater__(__FILE__, __LINE__, __PRETTY_FUNCTION__, (msg)); \
+        _OBFinishPortingLater__(__FILE__, __LINE__, msg); \
     } \
 } while(0)
 
 extern BOOL OBIsBeingDebugged(void);
-    
-#if !defined(TARGET_OS_WATCH) || !TARGET_OS_WATCH
+extern void OBTrap(void) NORETURN;
+
 extern void _OBStopInDebugger(const char *file, unsigned int line, const char *function, const char *message);
 #define OBStopInDebugger(message) _OBStopInDebugger(__FILE__, __LINE__, __PRETTY_FUNCTION__, (message))
 #define OBStepThroughAndVerify() _OBStopInDebugger(__FILE__, __LINE__, __PRETTY_FUNCTION__, "Step through and verify.")
-#endif
     
 extern NSString * const OBAbstractImplementation;
 extern NSString * const OBUnusedImplementation;
@@ -302,18 +318,6 @@ OB_UNUSED_VALUE_FOR_TYPE(CGRect)
 //     OB_FOR_IN(i, nums)
 //       printf("%d", i);
 #define OB_FOR_IN(var, array) for (typeof(array[0]) OB_FOR_exprs(var, array))
-
-// Emits a warning indicating that an obsolete method has been called.
-
-#define OB_WARN_OBSOLETE_METHOD \
-    do { \
-        static BOOL warned = NO; \
-            if (!warned) { \
-                warned = YES; \
-                    NSLog(@"Warning: obsolete method %c[%@ %@] invoked", OBObjectIsClass(self)?'+':'-', OBClassForObject(self), NSStringFromSelector(_cmd)); \
-            } \
-            OBASSERT_NOT_REACHED("obsolete method called"); \
-    } while(0)
 
 // Apple doesn't have an NSNotFound equivalent for NSUInteger values (NSNotFound is an NSInteger).
 // Note that for APIs which should match Foundation APIs, you'll need to use NSNotFound even for NSUInteger values.

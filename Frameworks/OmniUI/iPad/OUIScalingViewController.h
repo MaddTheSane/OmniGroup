@@ -1,4 +1,4 @@
-// Copyright 2010-2015 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2016 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -34,6 +34,9 @@
 - (CGSize)fullScreenSize;
 - (void)adjustContentInset;
 - (void)sizeInitialViewSizeFromUnscaledContentSize;
+
+// OUIScalingScrollViewDelegate
+- (CGFloat)scrollBufferAsPercentOfViewportSize;
 
 // Added so that OUIScalingScrollView can tell if it is in the middle of a zoom (Used by Graffle to get rid of stutter when zooming way out on a canvas)
 - (BOOL)isZooming;

@@ -1,4 +1,4 @@
-// Copyright 2010-2015 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -27,14 +27,15 @@
 
 @property (nonatomic) BOOL usesVerticalLayout;
 @property (nonatomic) BOOL showsTabImage;
+@property (nonatomic) BOOL showsTabTitle;
 @property (nonatomic, copy) UIFont *tabTitleFont;
 @property (nonatomic, copy) UIFont *selectedTabTitleFont;
 
 @property (nonatomic, copy) UIFont *verticalTabTitleFont;
 @property (nonatomic, copy) UIFont *selectedVerticalTabTitleFont;
 
-@property (nonatomic) NSUInteger selectedTabIndex;
-@property (nonatomic, readonly) NSUInteger tabCount;
+@property (nonatomic) NSInteger selectedTabIndex;
+@property (nonatomic, readonly) NSInteger tabCount;
 @property (nonatomic, copy) NSArray *tabTitles;
 
 - (void)setImage:(UIImage *)image forTabWithTitle:(NSString *)tabTitle;

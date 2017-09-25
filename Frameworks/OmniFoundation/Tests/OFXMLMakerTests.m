@@ -1,4 +1,4 @@
-// Copyright 2009-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2009-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -47,8 +47,10 @@ static NSString *xmlnsSillyExample = @"tel:+1-206-523-4152";
 // Customized test suite
 + (XCTestSuite *)defaultTestSuite;
 {
-    if (self == [OFXMLMakerTests class])
-        return nil;  // We're an abstract class
+    if (self == [OFXMLMakerTests class]) {
+        return [[XCTestSuite alloc] initWithName:@"OFXMLMakerTests"];
+    }
+
     return [super defaultTestSuite];
 }
 

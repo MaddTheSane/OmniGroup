@@ -1,4 +1,4 @@
-// Copyright 2013-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2013-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -59,7 +59,7 @@ static OFPreference *OFXFileItemRecentErrorExpirationTimeInterval;
     NSUInteger _newestRemoteVersion;
     
     // Used to record recurring errors (which we might not otherwise log) so that we can throttle/pause operations if there are too many.
-    NSMutableArray *_recentErrors;
+    NSMutableArray <OFXRecentError *> *_recentErrors;
 }
 
 static NSURL *_makeLocalSnapshotURL(OFXContainerAgent *containerAgent, NSString *identifier)
@@ -124,8 +124,7 @@ NSString *OFXFileItemIdentifierFromRemoteSnapshotURL(NSURL *remoteSnapshotURL, N
     return fileIdentifier;
 }
 
-
-NSArray *OFXFetchDocumentFileInfos(ODAVConnection *connection, NSURL *containerURL, NSString *identifier, NSError **outError)
+NSArray <ODAVFileInfo *> *OFXFetchDocumentFileInfos(ODAVConnection *connection, NSURL *containerURL, NSString *identifier, NSError **outError)
 {
     __autoreleasing NSError *error;
     ODAVMultipleFileInfoResult *result = OFXFetchFileInfosEnsuringDirectoryExists(connection, containerURL, &error);
@@ -143,7 +142,7 @@ NSArray *OFXFetchDocumentFileInfos(ODAVConnection *connection, NSURL *containerU
     }
     
     // Winnow down our list to what we expect to find
-    NSArray *fileInfos = [result.fileInfos select:^BOOL(ODAVFileInfo *fileInfo) {
+    NSArray <ODAVFileInfo *> *fileInfos = [result.fileInfos select:^BOOL(ODAVFileInfo *fileInfo) {
         if (!fileInfo.isDirectory)
             return NO;
         
@@ -277,8 +276,8 @@ static NSURL *_makeRemoteSnapshotURL(OFXContainerAgent *containerAgent, ODAVConn
     _newestRemoteVersion = OFXFileItemUnknownVersion;
     
     NSString *localRelativePath = [container _localRelativePathForFileURL:localDocumentURL];
-    OBASSERT(![localRelativePath isEqualToString:intendedLocalRelativePath], @"Should be nil or a different path");
-    OBASSERT(!intendedLocalRelativePath || [[localRelativePath pathExtension] isEqualToString:[intendedLocalRelativePath pathExtension]]);
+    OBASSERT(intendedLocalRelativePath == nil || ![localRelativePath isEqualToString:intendedLocalRelativePath], @"Should be nil or a different path");
+    OBASSERT(intendedLocalRelativePath == nil || [[localRelativePath pathExtension] isEqualToString:[intendedLocalRelativePath pathExtension]]);
 
     _localRelativePath = [localRelativePath copy];
     OBASSERT([_localRelativePath isEqual:snapshot.localRelativePath]);
@@ -446,7 +445,7 @@ static NSURL *_makeRemoteSnapshotURL(OFXContainerAgent *containerAgent, ODAVConn
     return [_recentErrors lastObject];
 }
 
-- (void)addRecentTransferErrorsByLocalRelativePath:(NSMutableDictionary *)recentErrorsByLocalRelativePath;
+- (void)addRecentTransferErrorsByLocalRelativePath:(NSMutableDictionary <NSString *, NSArray <OFXRecentError *> *> *)recentErrorsByLocalRelativePath;
 {
     if ([_recentErrors count] == 0)
         return;
@@ -812,7 +811,7 @@ static NSURL *_makeRemoteSnapshotURL(OFXContainerAgent *containerAgent, ODAVConn
                     *outCommitError = replaceError;
                 OBChainError(outCommitError);
                 cleanup();
-                OBFinishPorting; // Not sure how to provoke this case to test it or what could be happening.
+                OBFinishPortingWithNote("<bug:///147843> (iOS-OmniOutliner Engineering: Figure out how to test file replacement error in -[OXFileItem prepareUploadTransferWithConnection:error:])"); // Not sure how to provoke this case to test it or what could be happening.
                 return NO;
             }
         }
@@ -970,7 +969,7 @@ static NSURL *_makeRemoteSnapshotURL(OFXContainerAgent *containerAgent, ODAVConn
 
         // A write with NSFileCoordinatorWritingForMerging implies a read. If we explicitly pass an array of reading URLs that contains an item from writingURLs, filecoordinationd will crash (at least in 10.8.2). I don't have a standalone test case of this, but it is logged as Radar 12993597.
         //NSMutableArray *readingURLs = [NSMutableArray arrayWithObjects:_localDocumentURL, nil];
-        NSMutableArray *writingURLs = [NSMutableArray arrayWithObjects:_localDocumentURL, nil];
+        NSMutableArray <NSURL *> *writingURLs = [NSMutableArray arrayWithObjects:_localDocumentURL, nil];
 
 #ifdef OMNI_ASSERTIONS_ON
         BOOL hadLocalMove = NO;
@@ -1003,17 +1002,26 @@ static NSURL *_makeRemoteSnapshotURL(OFXContainerAgent *containerAgent, ODAVConn
 
         NSFileCoordinator *coordinator = [[NSFileCoordinator alloc] initWithFilePresenter:filePresenter];
         __block BOOL success = NO;
+        __block NSError *strongError = nil;
+
         [coordinator prepareForReadingItemsAtURLs:@[] options:0 /* provoke save since we are maybe about to write to the file */
                                writingItemsAtURLs:writingURLs options:NSFileCoordinatorWritingForMerging /* there is no "I might not write option" so other presenters are going to get a relinquish no matter what */
                                             error:outError byAccessor:
          ^(void (^completionHandler)(void)){
-             success = [self _performDownloadCommitToURL:updatedLocalDocumentURL localTemporaryDocumentContentsURL:localTemporaryDocumentContentsURL targetLocalSnapshotURL:targetLocalSnapshotURL container:container downloadedSnapshot:downloadedSnapshot coordinator:coordinator downloadContents:downloadContents isMove:moved error:outError];
+             __autoreleasing NSError *error = nil;
+             success = [self _performDownloadCommitToURL:updatedLocalDocumentURL localTemporaryDocumentContentsURL:localTemporaryDocumentContentsURL targetLocalSnapshotURL:targetLocalSnapshotURL container:container downloadedSnapshot:downloadedSnapshot coordinator:coordinator downloadContents:downloadContents isMove:moved error:&error];
+             if (!success) {
+                 strongError = error;
+             }
 
              if (completionHandler)
                  completionHandler();
          }];
 
         if (!success) {
+            if (outError) {
+                *outError = strongError;
+            }
             cleanup();
             return NO;
         }

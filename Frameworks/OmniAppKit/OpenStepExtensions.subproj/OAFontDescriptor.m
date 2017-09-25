@@ -1,4 +1,4 @@
-// Copyright 2003-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2003-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -14,12 +14,14 @@
 #import <OmniFoundation/NSSet-OFExtensions.h>
 #import <OmniFoundation/NSString-OFSimpleMatching.h>
 #import <OmniBase/OmniBase.h>
+#import <OmniFoundation/OFGeometry.h>
 
 #import <Foundation/Foundation.h>
-#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
+
+#if OMNI_BUILDING_FOR_IOS
 #import <UIKit/UIFont.h>
 #import <CoreText/CoreText.h>
-#else
+#elif OMNI_BUILDING_FOR_MAC
 #import <AppKit/NSFontManager.h>
 #endif
 
@@ -31,8 +33,25 @@ RCS_ID("$Id$");
 #define DEBUG_FONT_LOOKUP(format, ...)
 #endif
 
+NSInteger OAFontDescriptorRegularFontWeight(void) // NSFontManager-style weight
+{
+    return 5;
+}
+
+NSInteger OAFontDescriptorBoldFontWeight(void) // NSFontManager-style weight
+{
+    return 9;
+}
+
+OFExtent OAFontDescriptorValidFontWeightExtent(void)
+{
+    return OFExtentMake(1.0f, 13.0f); // range is inclusive and given as (location,length), so this includes 14
+}
+
+#ifdef OAPlatformFontClass
+
 // UIFont and CTFontRef are toll-free bridged on iOS
-#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_IOS
 static inline CTFontRef UIFontToCTFont(UIFont *font)
 {
     return (OB_BRIDGE CTFontRef)font;
@@ -62,6 +81,13 @@ typedef void(^OAAttributeMutator)(NSMutableDictionary *attributes, NSMutableDict
     NSDictionary *_attributes;
     OAFontDescriptorPlatformFont _font;
     BOOL _isUniquedInstance;
+
+    // These are cached when making a uniqued instance (and are only valid once _isUniquedInstance is set).
+    CTFontSymbolicTraits _symbolicTraits;
+    CGFloat _size;
+    BOOL _hasExplicitWeight;
+    NSInteger _weight;
+    NSString *_family;
 }
 
 + (void)initialize;
@@ -106,25 +132,10 @@ typedef void(^OAAttributeMutator)(NSMutableDictionary *attributes, NSMutableDict
     [allFontDescriptors makeObjectsPerformSelector:@selector(_invalidateCachedFont)];
 }
 
-NSInteger OAFontDescriptorRegularFontWeight(void) // NSFontManager-style weight
-{
-    return 5;
-}
-
-NSInteger OAFontDescriptorBoldFontWeight(void) // NSFontManager-style weight
-{
-    return 9;
-}
-
-OFExtent OAFontDescriptorValidFontWeightExtent(void)
-{
-    return OFExtentMake(1.0f, 13.0f); // range is inclusive and given as (location,length), so this includes 14
-}
-
 // Returns the _minimal_ set of attributes (on iOS at least). Primarily useful for testing and debugging.
 NSDictionary *attributesFromFont(OAFontDescriptorPlatformFont font)
 {
-#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_IOS
     OBPRECONDITION(font != NULL);
     CTFontRef coreTextFont = UIFontToCTFont(font);
     CTFontDescriptorRef fontDescriptor = CTFontCopyFontDescriptor(coreTextFont);
@@ -133,7 +144,7 @@ NSDictionary *attributesFromFont(OAFontDescriptorPlatformFont font)
     CFRelease(fontAttributes);
     CFRelease(fontDescriptor);
     return [result autorelease];
-#else
+#elif OMNI_BUILDING_FOR_MAC
     OBPRECONDITION(font != nil);
     NSFont *macFont = font;
     return macFont.fontDescriptor.fontAttributes;
@@ -233,6 +244,13 @@ static void _setWeightInTraitsDictionary(NSMutableDictionary *traits, CTFontSymb
         [self release];
         return uniquedInstance;
     } else {
+        // This looks at the cache we are trying to fill if _isUniquedInstance is set, so do this first.
+        _symbolicTraits = _lookupSymbolicTraits(self);
+        _hasExplicitWeight = self.hasExplicitWeight;
+        _weight = self.weight;
+        _family = [self.family copy];
+        _size = self.size;
+
         _isUniquedInstance = YES; // Track that we need to remove ourselves from the table in -dealloc
         return self;
     }
@@ -318,9 +336,9 @@ static void _setWeightInTraitsDictionary(NSMutableDictionary *traits, CTFontSymb
     OBPRECONDITION(font);
 
     // Note that this leaves _font as nil so that we get the same results as forward mapping via our caching.
-#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_IOS
     CTFontDescriptorRef fontDescriptorRef = CTFontCopyFontDescriptor(UIFontToCTFont(font));
-#else
+#elif OMNI_BUILDING_FOR_MAC
     CTFontDescriptorRef fontDescriptorRef = CTFontDescriptorCreateWithNameAndSize((CFStringRef)font.fontName, font.pointSize);
 #endif
 
@@ -362,7 +380,7 @@ static void _setWeightInTraitsDictionary(NSMutableDictionary *traits, CTFontSymb
         self = [self initWithFontAttributes:attributes];
 
 #ifdef OMNI_ASSERTIONS_ON
-#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_IOS
 
         if (!OFISEQUAL(self.font, font)) {
             
@@ -370,16 +388,14 @@ static void _setWeightInTraitsDictionary(NSMutableDictionary *traits, CTFontSymb
                 OBASSERT_NOT_REACHED("The incoming font is not equal to self.font.");
             }
             
-            if (self.font.xHeight != font.xHeight) {
-                OBASSERT_NOT_REACHED("The incoming font does not have the same xHeight as self.font.");
-            }
+            OBASSERT(OFFloatEqualToFloatWithAccuracy(self.font.xHeight, font.xHeight, .01), "The incoming font does not have the same xHeight as self.font.");
             
             if (self.font.capHeight != font.capHeight) {
                 OBASSERT_NOT_REACHED("The incoming font does not have the same capHeight as self.font.");
             }
 
         }
-#else
+#elif OMNI_BUILDING_FOR_MAC
         if (!OFISEQUAL(self.font, font)) {
 
             // <bug:///118944> (Bug: Frequent assertion failures 'OFISEQUAL(self.font, font)' in OAFontDescriptor.m:363)
@@ -399,6 +415,8 @@ static void _setWeightInTraitsDictionary(NSMutableDictionary *traits, CTFontSymb
             }
             [layoutManager release];
         }
+#else
+#error Unknown platform
 #endif
 #endif
     }
@@ -422,13 +440,17 @@ static void _setWeightInTraitsDictionary(NSMutableDictionary *traits, CTFontSymb
 #endif
         [_OAFontDescriptorUniqueTableLock unlock];
     }
-#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_IOS
     if (_font)
         CFRelease(_font);
-#else
+#elif OMNI_BUILDING_FOR_MAC
     [_font release];
+#else
+#error Unknown platform
 #endif
     [_attributes release];
+    [_family release];
+
     [super dealloc];
 }
 
@@ -442,15 +464,19 @@ static void _setWeightInTraitsDictionary(NSMutableDictionary *traits, CTFontSymb
 //
 
 - (NSString *)family;
-{    
+{
+    if (_isUniquedInstance) {
+        return _family;
+    }
+
     NSString *family = [_attributes objectForKey:(id)kCTFontFamilyNameAttribute];
     if (family)
         return family;
     
     OAFontDescriptorPlatformFont font = self.font;
-#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_IOS
     return [(id)CTFontCopyFamilyName(UIFontToCTFont(font)) autorelease];
-#else
+#elif OMNI_BUILDING_FOR_MAC
     return [font familyName];
 #endif
 }
@@ -472,14 +498,14 @@ static void _setWeightInTraitsDictionary(NSMutableDictionary *traits, CTFontSymb
 - (NSString *)postscriptName
 {
     OAFontDescriptorPlatformFont font = self.font;
-#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_IOS
     return [(id)NSMakeCollectable(CTFontCopyPostScriptName(UIFontToCTFont(font))) autorelease];
-#else
+#elif OMNI_BUILDING_FOR_MAC
     return [font fontName];
 #endif    
 }
 
-#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_IOS
 - (NSString *)localizedStyleName;
 {
     CFStringRef styleName = CTFontCopyLocalizedName(UIFontToCTFont(self.font), kCTFontStyleNameKey, NULL);
@@ -492,6 +518,10 @@ static void _setWeightInTraitsDictionary(NSMutableDictionary *traits, CTFontSymb
 
 - (CGFloat)size;
 {
+    if (_isUniquedInstance) {
+        return _size;
+    }
+
     NSNumber *fontSize = [_attributes objectForKey:(id)kCTFontSizeAttribute];
     if (fontSize)
         return [fontSize cgFloatValue];
@@ -510,6 +540,10 @@ static void _setWeightInTraitsDictionary(NSMutableDictionary *traits, CTFontSymb
 
 - (BOOL)hasExplicitWeight;
 {
+    if (_isUniquedInstance) {
+        return _hasExplicitWeight;
+    }
+
     // Implementation here should match that of -weight in that we return YES if and only if we would take one of the explicit early-outs from that method.
     return [self _coreTextFontWeight] != nil || self.bold;
 }
@@ -517,6 +551,10 @@ static void _setWeightInTraitsDictionary(NSMutableDictionary *traits, CTFontSymb
 // We return the NSFontManager-style weight here.
 - (NSInteger)weight;
 {
+    if (_isUniquedInstance) {
+        return _weight;
+    }
+
     NSNumber *weightNumber = [self _coreTextFontWeight];
         
     if (weightNumber) {
@@ -538,8 +576,12 @@ static CTFontSymbolicTraits _clearClassMask(CTFontSymbolicTraits traits)
     return traits & ~kCTFontTraitClassMask;
 }
 
-static CTFontSymbolicTraits _symbolicTraits(OAFontDescriptor *self)
+static CTFontSymbolicTraits _lookupSymbolicTraits(OAFontDescriptor *self)
 {
+    if (self->_isUniquedInstance) {
+        return self->_symbolicTraits;
+    }
+
     NSDictionary *traits = [self->_attributes objectForKey:(id)kCTFontTraitsAttribute];
     NSNumber *symbolicTraitsNumber = [traits objectForKey:(id)kCTFontSymbolicTrait];
     if (symbolicTraitsNumber) {
@@ -549,10 +591,10 @@ static CTFontSymbolicTraits _symbolicTraits(OAFontDescriptor *self)
     }
     
     OAFontDescriptorPlatformFont font = self.font;
-#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_IOS
     CTFontSymbolicTraits result = CTFontGetSymbolicTraits(UIFontToCTFont(font));
     return _clearClassMask(result);
-#else
+#elif OMNI_BUILDING_FOR_MAC
     // NSFontTraitMask is NSUInteger; avoid a warning and assert that we aren't dropping anything by the cast.
     NSFontTraitMask result = [[NSFontManager sharedFontManager] traitsOfFont:font];
     OBASSERT(sizeof(CTFontSymbolicTraits) == sizeof(uint32_t));
@@ -567,7 +609,7 @@ static CTFontSymbolicTraits _symbolicTraits(OAFontDescriptor *self)
 // NSFontTraitMask and CTFontSymbolicTraits are the same for italic, bold, narrow and fixed-pitch.  Check others before using this for them.
 static BOOL _hasSymbolicTrait(OAFontDescriptor *self, unsigned trait)
 {
-    CTFontSymbolicTraits traits = _symbolicTraits(self);
+    CTFontSymbolicTraits traits = _lookupSymbolicTraits(self);
     return (traits & trait) != 0;
 }
 
@@ -598,9 +640,9 @@ static BOOL _hasSymbolicTrait(OAFontDescriptor *self, unsigned trait)
 
 static OAFontDescriptorPlatformFont _copyFont(CTFontDescriptorRef fontDesc, CGFloat size)
 {
-#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE    
+#if OMNI_BUILDING_FOR_IOS
     return UIFontFromCTFont(CTFontCreateWithFontDescriptor(fontDesc, size/*size*/, NULL/*matrix*/));
-#else
+#elif OMNI_BUILDING_FOR_MAC
     return [[NSFont fontWithDescriptor:(NSFontDescriptor *)fontDesc size:size] retain];
 #endif
 }
@@ -862,7 +904,7 @@ static NSArray *_matchingDescriptorsForFontFamily(NSString *familyName)
         CFRelease(fallbackDescriptor);
     }
 
-#if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_MAC
     if (!_font) {
         DEBUG_FONT_LOOKUP(@"Last-ditch attempt — system font of size")
         _font = [NSFont systemFontOfSize:integralSize];
@@ -886,7 +928,7 @@ done:
 static OAFontDescriptor *_newWithFontDescriptorHavingTrait(OAFontDescriptor *self, uint32_t trait, BOOL value)
 {
     OBPRECONDITION(trait != kCTFontBoldTrait, @"Don't set/clear the bold trait without also updating kCTFontWeightTrait. See -[OAFontDescriptor newFontDescriptorWithWeight:].");
-    CTFontSymbolicTraits oldTraits = _symbolicTraits(self);
+    CTFontSymbolicTraits oldTraits = _lookupSymbolicTraits(self);
     CTFontSymbolicTraits newTraits;
     if (value)
         newTraits = oldTraits | trait;
@@ -1032,7 +1074,7 @@ static OAFontDescriptor *_newWithFontDescriptorHavingTrait(OAFontDescriptor *sel
     NSMutableDictionary *newAttributes = [fontDescriptor.attributes mutableCopy];
     [newAttributes setObject:newTraitsDict forKey:(id)kCTFontTraitsAttribute];
     [newTraitsDict release];
-    CTFontSymbolicTraits newSymbolicTraits = _symbolicTraits(fontDescriptor);
+    CTFontSymbolicTraits newSymbolicTraits = _lookupSymbolicTraits(fontDescriptor);
     
     // We insert the family name of the existing font into the attributes of the new font descriptor. This deals with situations like going from Helvetica-Bold to regular Helvetica. We need the family name, Helvetica, or we will fail to find a regular weight version of the font named Helvetica-Bold.
     [newAttributes setObject:[fontDescriptor family] forKey:(id)kCTFontFamilyNameAttribute];
@@ -1057,15 +1099,68 @@ static OAFontDescriptor *_newWithFontDescriptorHavingTrait(OAFontDescriptor *sel
 {
     OBPRECONDITION(_isUniquedInstance);
     
-#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_IOS
     if (_font) {
         CFRelease(_font);
         _font = NULL;
     }
-#else
+#elif OMNI_BUILDING_FOR_MAC
     [_font release];
     _font = nil;
+#else
+#error Unknown platform
 #endif
 }
 
 @end
+
+#else // OAPlatformFontClass
+
+@implementation OAFontDescriptor
+
+- initWithFamily:(NSString *)family size:(CGFloat)size weight:(NSInteger)weight italic:(BOOL)italic condensed:(BOOL)condensed fixedPitch:(BOOL)fixedPitch;
+{
+    if (!(self = [super init])) {
+        return nil;
+    }
+    
+    _family = [family copy];
+    _size = size;
+    _weight = weight;
+    _italic = italic;
+    _condensed = condensed;
+    _fixedPitch = fixedPitch;
+    
+    return self;
+}
+
+- (void)dealloc;
+{
+    [_family release];
+    [super dealloc];
+}
+
+- (NSString *)desiredFontName;
+{
+    // Maybe we need a completely opaque class for font descriptors and have all the callers know they can't do anything special.
+    OBFinishPortingLater("<bug:///147883> (iOS-OmniOutliner Unassigned: -[OAFontDescriptor desiredFontName] - We should maybe have another initializer/setter/something for archiving cases where an explicit font was requested. But then we don't have a way to get the other components)");
+    return nil;
+}
+
+- (BOOL)hasExplicitWeight;
+{
+    OBFinishPortingLater("<bug:///147882> (iOS-OmniOutliner Bug: -[OAFontDescriptor hasExplicitWeight] - can we determine this and return other than NO?)");
+    return NO;
+}
+
+#pragma mark - NSCopying protocol
+
+- (id)copyWithZone:(NSZone *)zone;
+{
+    return [self retain];
+}
+
+@end
+
+
+#endif // OAPlatformFontClass

@@ -8,7 +8,7 @@ module OmniDataObjects
       @name = name
       @instance_class = options[:instance_class] || "#{model.name}#{name}"
       @properties = []
-      @abstract = options[:abstract]
+      @abstract = options[:abstract] || false
     end
 
     def property_named(name)
@@ -38,12 +38,15 @@ module OmniDataObjects
     def objcTypeName
       "Entity"
     end
+    
     def keyName
       "#{model.name}#{name}#{objcTypeName}Name"
     end
+    
     def varName
       "#{name}"
     end
+    
     def statementKey(k)
       "@\"#{k.to_s}:#{name}\""
     end
@@ -57,6 +60,14 @@ module OmniDataObjects
       fs.make_if(header_file_name)
     end
     
+    def swift_extension_file_name
+      "#{instance_class}-Properties.swift"
+    end
+
+    def swift_extension_file(fs)
+      fs.make_if(swift_extension_file_name)
+    end
+    
     def emitDeclaration(fp)
       # All our properties are dynamic, which is the default.  Emit declarations for them.
       class_names = Array.new
@@ -65,18 +76,17 @@ module OmniDataObjects
         fp.h << "@class #{c};\n"
       }
       
-      fp.h << "@interface #{instance_class} ()\n"
+      fp.h << "\n@interface #{instance_class} ()\n\n"
       begin
         properties.each {|p|
           p.emitInterface(fp.h)
         }
       end
-      fp.h << "@end\n"
+      fp.h << "\n@end\n"
       fp.h.br
       
       if properties.length > 0
-        fp.h << "#define #{instance_class}_DynamicProperties @dynamic #{(properties.map {|p| p.name}).join(", ")}"
-        fp.h.br
+        fp.h << "#define #{instance_class}_DynamicProperties @dynamic #{(properties.map {|p| p.name}).join(", ")}\n\n"
       end
       
       return if abstract # Don't want the global for the entity name
@@ -86,6 +96,19 @@ module OmniDataObjects
     def emitDefinition(fp)
       return if abstract # Don't want the global for the entity name
       super
+    end
+
+    def emitSwiftDefinition(fp)
+      swift_properties = Array.new
+      properties.each {|p| swift_properties << p if p.needsSwiftInterface? }
+      return if swift_properties.count == 0
+      fp.swift << "import OmniDataObjects\n\n"
+      fp.swift << "public extension #{instance_class} {\n"
+      swift_properties.each_with_index {|p, index|
+        p.emitSwiftInterface(fp.swift)
+        fp.swift << "\n" unless index == swift_properties.count - 1
+      }
+      fp.swift << "}\n"
     end
 
     def emitCreation(f)
@@ -98,6 +121,7 @@ module OmniDataObjects
       f << "nil]);\n"
 
     end
+    
     def emitBinding(f)
       f << "    ODOEntityBind(#{varName}, model);\n"
     end

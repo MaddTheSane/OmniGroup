@@ -1,4 +1,4 @@
-// Copyright 1997-2016 Omni Development, Inc. All rights reserved.
+// Copyright 1997-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -9,20 +9,13 @@
 
 #import <Availability.h>
 
-// Availability macros don't work reliably when module headers are implicitly built, so use ours as a backup.
-#if (defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE) || OMNI_BUILDING_FOR_IOS
-    #import <UIKit/NSAttributedString.h>
-    #import <CoreGraphics/CGGeometry.h>
-#else
-    #import <AppKit/NSAttributedString.h>
-    #import <Foundation/NSGeometry.h>
-#endif
-
+#import <Foundation/NSAttributedString.h>
+#import <OmniFoundation/OFGeometry.h>
 #import <OmniAppKit/OATextAttachment.h>
 
 @interface NSAttributedString (OAExtensions)
 
-+ (NSString *)attachmentString;
+@property(class,readonly) NSString *attachmentString;
 
 - (BOOL)containsAttribute:(NSString *)attributeName;
 - (BOOL)containsAttribute:(NSString *)attributeName inRange:(NSRange)range;
@@ -30,9 +23,10 @@
 - (BOOL)containsAttachments;
 - (id)attachmentAtCharacterIndex:(NSUInteger)characterIndex;
 
-- (void)eachAttachment:(void (^)(OATextAttachment *, BOOL *stop))applier;
+- (void)eachAttachmentInRange:(NSRange)range action:(void (^ NS_NOESCAPE)(NSRange attachmentRange, __kindof OATextAttachment *attachment, BOOL *stop))applier;
+- (void)eachAttachment:(void (^ NS_NOESCAPE)(NSRange attachmentRange, __kindof OATextAttachment *attachment, BOOL *stop))applier;
 
-#if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_MAC
 + (NSAttributedString *)attributedStringWithImage:(NSImage *)anImage;
 
 - (NSData *)rtf;

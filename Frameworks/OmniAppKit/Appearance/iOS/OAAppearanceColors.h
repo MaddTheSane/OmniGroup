@@ -1,4 +1,4 @@
-// Copyright 2014-2015 Omni Development, Inc. All rights reserved.
+// Copyright 2014-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -28,9 +28,14 @@
 @property (nonatomic, readonly) UIColor *omniNeutralPlaceholderColor;
 @property (nonatomic, readonly) UIColor *omniNeutralLightweightColor;
 
+@property (nonatomic, readonly) UIColor *textColorForDarkBackgroundColor;
+
 @property (nonatomic, readonly) UIColor *omniDeleteColor;
 
 @property (nonatomic, readonly) UIColor *omniExplanotextColor;
+
+// Note: this color is identical in dark and default mode, as mail does not have dark mode 
+@property (nonatomic, readonly) UIColor *mailBlueColor;
 
 @end
 

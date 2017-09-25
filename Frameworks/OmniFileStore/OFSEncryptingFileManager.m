@@ -1,4 +1,4 @@
-// Copyright 2014-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2014-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -10,10 +10,12 @@
 #import <Security/Security.h>
 #import <CommonCrypto/CommonCrypto.h>
 #import <CoreFoundation/CoreFoundation.h>
+#import <Foundation/Foundation.h>
 #import <OmniBase/OmniBase.h>
 #import <OmniFoundation/NSArray-OFExtensions.h>
 #import <OmniFoundation/NSDictionary-OFExtensions.h>
 #import <OmniFoundation/NSIndexSet-OFExtensions.h>
+#import <OmniFoundation/NSMutableArray-OFExtensions.h>
 #import <OmniFoundation/NSMutableDictionary-OFExtensions.h>
 #import <OmniFoundation/OFErrors.h>
 #import <OmniFileStore/OFSFileManagerDelegate.h>
@@ -131,7 +133,7 @@ static BOOL errorIndicatesPlaintext(NSError *err);
     if (!encrypted)
         return nil;
     
-    unsigned dispositionFlags = [keyManager flagsForFilename:[url lastPathComponent] fromSlot:NULL];
+    unsigned dispositionFlags = [keyManager flagsForFilename:[url lastPathComponent]];
     if (dispositionFlags & OFSDocKeyFlagAlwaysUnencryptedRead) {
         OBLog(OFSFileManagerLogger, 1, @"    --> always unencrypted read");
         return encrypted;
@@ -146,14 +148,15 @@ static BOOL errorIndicatesPlaintext(NSError *err);
             return encrypted;
         }
         
-        if (outError)
-            *outError = headerError;
+        NSString *description = NSLocalizedStringFromTableInBundle(@"Cannot read file", @"OmniFileStore", OMNI_BUNDLE, @"error description");
+        NSString *suggestion = [NSString stringWithFormat:NSLocalizedStringFromTableInBundle(@"Unable to decrypt contents of file “%@”.", @"OmniFileStore", OMNI_BUNDLE, @"error reason - token is filename"), [url lastPathComponent]];
+        OFSErrorWithInfo(outError, OFSCannotRead, description, suggestion, NSUnderlyingErrorKey, headerError, nil);
         return nil;
     }
     
     /* Get a decryption worker. We don't currently cache these, although we could cache them per keyInfo blob value (since that blob both indicates the keyslot, and contains any data needed to derive the file subkey). That cache should live in the DocumentKey class though. */
     NSData *keyInfo = [encrypted subdataWithRange:keyInfoLocation];
-    OFSSegmentDecryptWorker *decryptionWorker = [OFSSegmentDecryptWorker decryptorForWrappedKey:keyInfo documentKey:keyManager error:outError];
+    OFSSegmentDecryptWorker *decryptionWorker = [OFSSegmentDecryptWorker decryptorForWrappedKey:keyInfo documentKey:keyManager.keySlots error:outError];
     if (!decryptionWorker)
         return nil;
     
@@ -177,13 +180,15 @@ static BOOL errorIndicatesPlaintext(NSError *err);
         return nil;
     }
     
-    unsigned dispositionFlags = [keyManager flagsForFilename:[url lastPathComponent] fromSlot:NULL];
+    unsigned dispositionFlags = [keyManager flagsForFilename:[url lastPathComponent]];
     if (dispositionFlags & OFSDocKeyFlagAlwaysUnencryptedWrite) {
         OBLog(OFSFileManagerLogger, 1, @"    --> always unencrypted write");
         return [underlying writeData:data toURL:url atomically:atomically error:outError];
     }
     
-    OFSSegmentEncryptWorker *worker = keyManager.encryptionWorker;
+    OFSSegmentEncryptWorker *worker = [keyManager encryptionWorker:outError];
+    if (!worker)
+        return nil;
     
     NSData *encrypted = [worker encryptData:data error:outError];
     if (!encrypted)
@@ -267,7 +272,7 @@ static BOOL errorIndicatesPlaintext(NSError *err);
         return nil;
     
     int maskSlot = -1;
-    unsigned flags = [keyManager flagsForFilename:file.name fromSlot:&maskSlot];
+    unsigned flags = [keyManager.keySlots flagsForFilename:file.name fromSlot:&maskSlot];
     
     if (flags & OFSDocKeyFlagAlwaysUnencryptedRead) {
         return [[OFSEncryptingFileManagerTasteOperation alloc] initWithResult:maskSlot];
@@ -294,6 +299,11 @@ static BOOL errorIndicatesPlaintext(NSError *err);
 - (NSIndexSet *)unusedKeySlotsOfSet:(NSIndexSet *)slots amongFiles:(NSArray <ODAVFileInfo *> *)files error:(NSError **)outError;
 {
     NSMutableArray <ODAVFileInfo *> *byAge = [files mutableCopy];
+    
+    // Make sure we're not considering directories when tasting later
+    [byAge removeObjectsSatisfyingPredicate:^BOOL(ODAVFileInfo *fileInfo) {
+        return [fileInfo isDirectory];
+    }];
 
     [byAge sortUsingComparator:^(id a, id b){
         NSDate *aDate = ((ODAVFileInfo *)a).lastModifiedDate;
@@ -315,6 +325,7 @@ static BOOL errorIndicatesPlaintext(NSError *err);
     tasteq.name = NSStringFromSelector(_cmd);
     
     /* Taste the files, oldest-first */
+    OFSKeySlots *keys = keyManager.keySlots;
     while (unusedSlots.count && byAge.count) {
         /* TODO: Arrange to have multiple tastes in flight; they're very small so the delay is probably mostly roundtrip delay not transfer delay. However, don't start piling them on until the first one has come back: in the common case, there'll be one slot, the oldest file will be using it, we'll go to 0 immediately, and we should avoid tasting other files. In any case, we should cancel any enqueued requests once we hit 0. */
         
@@ -322,7 +333,7 @@ static BOOL errorIndicatesPlaintext(NSError *err);
         [byAge removeObjectAtIndex:0];
         
         int maskSlot = -1;
-        unsigned flags = [keyManager flagsForFilename:finfo.name fromSlot:&maskSlot];
+        unsigned flags = [keys flagsForFilename:finfo.name fromSlot:&maskSlot];
         if (flags & OFSDocKeyFlagAlwaysUnencryptedRead) {
             if (maskSlot >= 0)
                 [unusedSlots removeIndex:maskSlot];

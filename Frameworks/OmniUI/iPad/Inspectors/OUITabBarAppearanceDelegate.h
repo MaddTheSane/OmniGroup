@@ -1,4 +1,4 @@
-// Copyright 2015 The Omni Group.  All rights reserved.
+// Copyright 2015-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -11,14 +11,15 @@
 
 @protocol OUITabBarAppearanceDelegate <NSObject>
 
-- (UIColor *)verticalTabSeparatorColor;
-- (UIColor *)verticalTabRightEdgeColor;
-- (UIColor *)verticalTabRightEdgeFadeToColor;
+@optional
+@property (nonatomic, readonly) UIColor *verticalTabSeparatorColor;
+@property (nonatomic, readonly) UIColor *verticalTabRightEdgeColor;
+@property (nonatomic, readonly) UIColor *verticalTabRightEdgeFadeToColor;
 
-- (UIColor *)horizontalTabBottomStrokeColor;
-- (UIColor *)horizontalTabSeparatorTopColor;
+@property (nonatomic, readonly) UIColor *horizontalTabBottomStrokeColor;
+@property (nonatomic, readonly) UIColor *horizontalTabSeparatorTopColor;
 
-- (UIColor *)selectedTabTintColor;
-- (UIColor *)disabledTabTintColor;
+@property (nonatomic, readonly) UIColor *selectedTabTintColor;
+@property (nonatomic, readonly) UIColor *disabledTabTintColor;
 
 @end

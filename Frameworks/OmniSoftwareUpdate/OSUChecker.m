@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2001-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -22,6 +22,7 @@
 #import <OmniFoundation/NSString-OFSimpleMatching.h>
 #import <OmniFoundation/NSUserDefaults-OFExtensions.h>
 #import <OmniFoundation/OFPreference.h>
+#import <OmniFoundation/OmniFoundation-Swift.h> // for NSProcessInfo-OFExtensions
 #import <OmniBase/OmniBase.h>
 
 #import "OSUFeatures.h"
@@ -215,7 +216,10 @@ static void OSUAtExitHandler(void)
 {
     @autoreleasepool {
         // All we do is check that there is no error in the termination handling logic.  It might not be safe to use NSUserDefaults/CFPreferences at this point and it isn't the end of the world if this doesn't record perfect stats.
-        OBASSERT(OSURunTimeHasHandledApplicationTermination() == YES);
+        // Ignore if we are in a test environment
+        if (![[NSProcessInfo processInfo] isRunningUnitTests]) {
+            OBASSERT(OSURunTimeHasHandledApplicationTermination() == YES);
+        }
     }
 }
 #endif
@@ -234,12 +238,11 @@ static void OSUAtExitHandler(void)
 #endif
 }
 
-// On the Mac, we'll automatically start when OFController gets running. On iOS we don't have OBPostLoader or OFController and apps must call +startWithTarget: and +shutdown
+// On the Mac, we'll automatically start when OFController gets running. On iOS we don't have OFController and apps must call +startWithTarget: and +shutdown
 #if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
-+ (void)didLoad;
-{
-    [[OFController sharedController] addStatusObserver:(id)self];
-}
+OBDidLoad(^{
+    [[OFController sharedController] addStatusObserver:(id)[OSUChecker class]];
+});
 #endif
 
 static OSUChecker *sharedChecker = nil;
@@ -590,7 +593,7 @@ static NSString *OSUBundleVersionForBundle(NSBundle *bundle)
 #pragma mark -
 #pragma mark NSObject (OFControllerStatusObserver)
 
-// On the Mac, we'll automatically start when OFController gets running. On iOS we don't have OBPostLoader or OFController and apps must call +startWithTarget: and +shutdown
+// On the Mac, we'll automatically start when OFController gets running. On iOS we don't have OFController and apps must call +startWithTarget: and +shutdown
 #if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
 + (void)controllerStartedRunning:(OFController *)controller;
 {
@@ -1226,6 +1229,10 @@ static NSString *OSUBundleVersionForBundle(NSBundle *bundle)
 
 - (NSDate *)_convertRFC822DateString:(NSString *)dateString
 {
+    if ([NSString isEmptyString:dateString]) {
+        return nil;
+    }
+
     // Guard against some possible bad date formats in the OSU publish date string.
     
     if ([dateString rangeOfCharacterFromSet:[NSCharacterSet characterSetWithCharactersInString:@"-"]].location != NSNotFound) {
@@ -1239,9 +1246,9 @@ static NSString *OSUBundleVersionForBundle(NSBundle *bundle)
     }
     
     NSDate *date = [self.dateFormatter dateFromString:dateString];
-    OBASSERT(date);
-    if (! date) {
+    if (date == nil) {
         OSU_DEBUG(1, @"failed to convert: %@ into a RFC822 date", dateString);
+        OBASSERT_NOT_REACHED("failed to convert: %@ into a RFC822 date", dateString);
     }
     return date;
 }

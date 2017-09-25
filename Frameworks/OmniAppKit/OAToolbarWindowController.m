@@ -21,6 +21,9 @@ OB_REQUIRE_ARC
 
 RCS_ID("$Id$")
 
+NSString * const OAToolbarDidChangeNotification = @"OAToolbarDidChangeNotification";
+NSString * const OAToolbarDidChangeKindKey = @"OAToolbarDidChangeKindKey";
+
 @implementation OAToolbarWindowController
 {
     OAToolbar *_toolbar;
@@ -73,8 +76,8 @@ static NSMutableDictionary *helpersByExtension = nil;
 - (void)dealloc;
 {
     [_toolbar setDelegate:nil];
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
-
 
 #pragma mark - NSWindowController subclass
 
@@ -82,6 +85,9 @@ static NSMutableDictionary *helpersByExtension = nil;
 {
     [super windowDidLoad]; // DOX: These are called immediately before and after the controller loads its nib file.  You can subclass these but should not call them directly.  Always call super from your override.
     [self createToolbar];
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(_OAToolbarWindowController_windowWillClose:) name:NSWindowWillCloseNotification object:self.window];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(_OAToolbarWindowController_windowWillBeginSheet:) name:NSWindowWillBeginSheetNotification object:self.window];
 }
 
 - (OAToolbar *)toolbar;
@@ -167,6 +173,35 @@ static NSMutableDictionary *helpersByExtension = nil;
     }];
 
     return [NSDictionary dictionaryWithDictionary:localizedToolbarItemInfo];
+}
+
+#pragma mark NSToolbarDelegate
+
+- (void)toolbarWillAddItem:(NSNotification *)notification;
+{
+    [self _postToolbarChangeNotificationForKind:OAToolbarDidChangeKindAddItem];
+}
+
+- (void)toolbarDidRemoveItem:(NSNotification *)notification;
+{
+    [self _postToolbarChangeNotificationForKind:OAToolbarDidChangeKindRemoveItem];
+}
+
+#pragma mark OAToolbarDelegate
+
+- (void)toolbar:(OAToolbar *)aToolbar didSetVisible:(BOOL)visible;
+{
+    [self _postToolbarChangeNotificationForKind:OAToolbarDidChangeKindSetVisible];
+}
+
+- (void)toolbar:(OAToolbar *)aToolbar didSetDisplayMode:(NSToolbarDisplayMode)displayMode;
+{
+    [self _postToolbarChangeNotificationForKind:OAToolbarDidChangeKindSetDisplayMode];
+}
+
+- (void)toolbar:(OAToolbar *)aToolbar didSetSizeMode:(NSToolbarSizeMode)sizeMode;
+{
+    [self _postToolbarChangeNotificationForKind:OAToolbarDidChangeKindSetSizeMode];
 }
 
 #pragma mark - Implement in subclasses
@@ -430,6 +465,45 @@ static void copyProperty(NSToolbarItem *anItem,
     [defaultToolbarItems setObject:[toolbarPropertyList objectForKey:@"defaultItemIdentifiers"] forKey:toolbarName];
     if ([toolbarPropertyList objectForKey:@"stringTable"])
         [toolbarStringsTables setObject:[toolbarPropertyList objectForKey:@"stringTable"] forKey:toolbarName];
+}
+
+- (void)_postToolbarChangeNotificationForKind:(OAToolbarDidChangeKind)kind;
+{
+    [[NSNotificationCenter defaultCenter] postNotificationName:OAToolbarDidChangeNotification object:self.window.toolbar userInfo:@{OAToolbarDidChangeKindKey: @(kind)}];
+}
+
+- (void)_OAToolbarWindowController_windowWillClose:(NSNotification *)notification;
+{
+    // This is a workaround for rdar://problem/28832571
+    //
+    // After the sequence in that bug, the NSWindow is leaked, but still has dangling references to the window controller as potentially
+    //  - window delegate
+    //  - toolbar delegate
+    //  - toolbar item delegate
+    //  - toolbar item target
+    //
+    // We can't prevent the window leak, but we can mitigate the crash by
+    //  - clearing the window delegate if it is us
+    //  - removing the toolbar
+    
+    OBPRECONDITION([self isWindowLoaded]);
+    OBPRECONDITION(notification.object == self.window);
+    
+    [_toolbar setDelegate:nil];
+    _toolbar = nil;
+    
+    self.window.toolbar = nil;
+    if (self.window.delegate == (id <NSWindowDelegate>)self) {
+        self.window.delegate = nil;
+    }
+}
+
+- (void)_OAToolbarWindowController_windowWillBeginSheet:(NSNotification *)notification;
+{
+    // TODO: This is a first approximation. The notification doesn't tell us which sheet is being presented and the sheet is not yet added to the window. Really should observe windowDidEndSheet also to avoid sending this notification again if a sheet is presented over the customization sheet.
+    if (self.toolbar.customizationPaletteIsRunning) {
+        [self _postToolbarChangeNotificationForKind:OAToolbarDidChangeKindPresentCustomizationSheet];
+    }
 }
 
 @end

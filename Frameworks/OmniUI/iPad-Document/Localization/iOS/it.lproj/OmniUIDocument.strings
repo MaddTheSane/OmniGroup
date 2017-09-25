@@ -100,8 +100,11 @@
 /* title view clear button accessibility label. */
 "Clear Title" = "Cancella titolo";
 
-/* Cloud Storage Providers preference nvigation bar title */
-"Cloud Storage Providers" = "Provider di archiviazione cloud";
+/* Close Document toolbar item accessibility label. */
+"Close Document" = "Chiudi documento";
+
+/* demo mode disabled message */
+"Cloud storage is disabled in this demo version." = "L'archiviazione cloud è disattivata in questa versione demo.";
 
 /* Success label when connecting to an OmniPresence or WebDAV server account */
 "Connected" = "Connesso";
@@ -154,7 +157,9 @@
 /* Toolbar button title for returning to list of documents. */
 "Documents <back button>" = "Documenti";
 
-/* Duplicate toolbar item accessibility label. */
+/* Duplicate document preview action title.
+   Duplicate toolbar item accessibility label. */
+
 "Duplicate" = "Duplica";
 
 /* title for alert option confirming duplication of multiple files */
@@ -197,8 +202,8 @@
 /* Menu option in the document picker view */
 "Export to WebDAV" = "Esporta in WebDAV";
 
-/* Menu option in the document picker view */
-"Export to…" = "Esporta in…";
+/* Export document preview action title. */
+"Export…" = "Esporta...";
 
 /* finished */
 "Finished" = "Fine";
@@ -211,9 +216,6 @@
 
 /* Info item accessibility label */
 "Info" = "Info";
-
-/* error title */
-"Invalid Zip Archive" = "Archivio compresso non valido";
 
 /* doc picker title label editing accessibility value */
 "Is editing" = "Sta modificando";
@@ -239,9 +241,6 @@
 /* modified date accessibility value */
 "Modified %@" = "Modificato il %@";
 
-/* Cloud Storage Providers more information button title */
-"More Info…" = "Altre informazioni...";
-
 /* Menu option in the document picker view
    Move toolbar item accessibility label. */
 
@@ -258,13 +257,18 @@
 /* Share menu title */
 "Move to..." = "Sposta in…";
 
+/* Move document preview action title. */
+"Move…" = "Sposta...";
+
 /* Base name for newly created documents. This will have an number appended to it to make it unique. */
 "My Document" = "Documento personale";
 
 /* Base name for newly created templates. This will have an number appended to it to make it unique. */
 "My Template" = "Il mio modello";
 
-/* New Document toolbar item accessibility label. */
+/* New Document toolbar item accessibility label.
+   New Template button title */
+
 "New Document" = "Nuovo documento";
 
 /* Action sheet title for making a new folder from the selected documents */
@@ -293,8 +297,14 @@
 
 "OK" = "OK";
 
+/* demo disabled message */
+"OmniPresence allows you to use our free sync service or any compatible WebDAV server to automatically share documents between your devices, or to keep copies of your documents in the cloud in case you need to restore your device." = "OmniPresence ti consente di utilizzare il nostro servizio gratuito di sincronizzazione o altri server WebDAV compatibili per condividere automaticamente documenti tra i tuoi dispositivi, oppure per conservare copie dei tuoi documenti nel cloud nel caso avessi bisogno di ripristinare il dispositivo.";
+
 /* Omni Presence config email subject format */
 "OmniPresence Configuration: %@" = "Configurazione di OmniPresence: %@";
+
+/* demo disabled title */
+"OmniPresence is disabled in this demo version." = "OmniPresence è disattivata in questa versione demo.";
 
 /* Omni Presence config email body */
 "Open this file on another device to configure OmniPresence there." = "Apri questo documento su un altro dispositivo per configurarvi OmniPresence.";
@@ -378,6 +388,9 @@
 "Send to App" = "Invia all'app";
 
 /* Menu option in the document picker view */
+"Send to Files" = "Invia a File";
+
+/* Menu option in the document picker view */
 "Send to Photos" = "Invia a Foto";
 
 /* export options title
@@ -421,11 +434,11 @@
 /* Discard unsynced edits dialog: message format */
 "The \"%@\" account may have edited documents which have not yet been synced up to the cloud. Do you wish to discard any local edits?" = "L'account \"%@\" può aver modificato documenti non ancora sincronizzati con il cloud. Ignorare le modifiche locali?";
 
+/* dialog box title when prompting for the password/passphrase for an encrypted document - parameter is the display-name of the file being opened */
+"The document \"%@\" requires a password to open." = "È necessaria una password per aprire il documento \"%@\".";
+
 /* Error description for a document operation failing due to a missing file. */
 "The operation couldn't be completed." = "Impossibile completare l'operazione.";
-
-/* error description */
-"The zip archive must contain a single document." = "L'archivio compresso deve contenere solo un documento.";
 
 /* Photo Library permisssions error suggestion. */
 "This app does not have access to your Photo Library." = "L'app non ha accesso alla libreria fotografica.";
@@ -445,14 +458,8 @@
 /* sort by title */
 "Title" = "Titolo";
 
-/* Cloud Storage Providers preference informational description */
-"Turning on Cloud Storage Providers gives access to documents stored on cloud services, such as iCloud Drive or Dropbox. We are introducing access to Cloud Storage Providers as a BETA implementation; use caution when enabling this service. To learn more, see “Working in the Cloud” in the documentation." = "Attivando Provider di archiviazione cloud ottieni l'accesso ai documenti archiviati sui servizi cloud, come iCloud Drive o Dropbox. Stiamo presentando l'accesso a Provider di archiviazione cloud come implementazione BETA; presta la massima attenzione se attivi questo servizio. Per ulteriori informazioni, vedi \"Uso del cloud\" nella documentazione.";
-
 /* error title */
 "Unable to open file." = "Impossibile aprire il documento.";
-
-/* Cloud Storage Providers preference settings screen title */
-"Use Cloud Storage Providers" = "Usa provider di archiviazione cloud";
 
 /* Account validation status string. */
 "Validating account..." = "Convalido account…";

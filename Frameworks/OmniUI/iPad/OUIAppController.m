@@ -1,4 +1,4 @@
-// Copyright 2010-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -6,7 +6,6 @@
 // <http://www.omnigroup.com/developer/sourcecode/sourcelicense/>.
 
 #import <OmniUI/OUIAppController.h>
-#import <OmniUI/OUIAppController+InAppStore.h>
 
 #import <MessageUI/MFMailComposeViewController.h>
 #import <MobileCoreServices/UTCoreTypes.h>
@@ -18,13 +17,13 @@
 #import <OmniFoundation/OFBundleRegistry.h>
 #import <OmniFoundation/OFPreference.h>
 #import <OmniFoundation/OFVersionNumber.h>
-#import <OmniUI/OUIAboutThisAppViewController.h>
 #import <OmniUI/OUIAppController+SpecialURLHandling.h>
 #import <OmniUI/OUIBarButtonItem.h>
 #import <OmniUI/OUIChangePreferenceURLCommand.h>
 #import <OmniUI/OUIDebugURLCommand.h>
 #import <OmniUI/OUIKeyboardNotifier.h>
 #import <OmniUI/OUIPurchaseURLCommand.h>
+#import <OmniUI/OUISendFeedbackURLCommand.h>
 #import <OmniUI/OUIMenuController.h>
 #import <OmniUI/OUIMenuOption.h>
 #import <OmniUI/UIView-OUIExtensions.h>
@@ -141,7 +140,6 @@ static void __iOS7B5CleanConsoleOutput(void)
                                   nil
                                   ];
         [[NSUserDefaults standardUserDefaults] registerDefaults:defaults];
-        [OFBundleRegistry registerKnownBundles];
         [OFPreference class];
         
         // Ensure that OUIKeyboardNotifier instantiates the shared notifier before the keyboard is shown for the first time, otherwise `lastKnownKeyboardHeight` and `keyboardVisible` may be incorrect.
@@ -158,14 +156,18 @@ static void __iOS7B5CleanConsoleOutput(void)
     }
 }
 
-+ (instancetype)controller;
++ (nonnull instancetype)controller;
 {
-    id controller = [[UIApplication sharedApplication] delegate];
-    OBASSERT([controller isKindOfClass:self]);
+    static id controller;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        controller = [[UIApplication sharedApplication] delegate];
+        OBASSERT([controller isKindOfClass:self]);
+    });
     return controller;
 }
 
-+ (instancetype)sharedController;
++ (nonnull instancetype)sharedController;
 {
     return [self controller];
 }
@@ -179,9 +181,7 @@ static void __iOS7B5CleanConsoleOutput(void)
     [[self class] registerCommandClass:[OUIChangePreferenceURLCommand class] forSpecialURLPath:@"/change-preference"];
     [[self class] registerCommandClass:[OUIDebugURLCommand class] forSpecialURLPath:@"/debug"];
     [[self class] registerCommandClass:[OUIPurchaseURLCommand class] forSpecialURLPath:@"/purchase"];
-    
-    // Setup vendorID at app launch to fix <bug:///107092>. See bug notes for more details.
-    [self vendorID];
+    [[self class] registerCommandClass:[OUISendFeedbackURLCommand class] forSpecialURLPath:@"/send-feedback"];
     
     return self;
 }
@@ -195,6 +195,26 @@ static void __iOS7B5CleanConsoleOutput(void)
         appName = [infoDictionary objectForKey:(NSString *)kCFBundleNameKey];
     }
     return appName;
+}
+
++ (nullable NSString *)applicationEdition;
+{
+    return nil;
+}
+
++ (BOOL)inSandboxStore;
+{
+#if TARGET_IPHONE_SIMULATOR
+    return YES;
+#else
+    static BOOL inSandboxStore;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSString *receiptName = [[[NSBundle mainBundle] appStoreReceiptURL] lastPathComponent];
+        inSandboxStore = OFISEQUAL(receiptName, @"sandboxReceipt");
+    });
+    return inSandboxStore;
+#endif
 }
 
 + (BOOL)canHandleURLScheme:(NSString *)urlScheme;
@@ -228,6 +248,11 @@ static void __iOS7B5CleanConsoleOutput(void)
     [self presentError:error fromViewController:viewController file:NULL line:0];
 }
 
++ (void)presentError:(NSError *)error fromViewController:(UIViewController *)viewController cancelButtonTitle:(NSString *)cancelButtonTitle optionalActionTitle:(NSString *)optionalActionTitle optionalAction:(void (^ __nullable)(UIAlertAction *action))optionalAction;
+{
+    [self _presentError:error fromViewController:viewController file:nil line:0 cancelButtonTitle:cancelButtonTitle optionalActionTitle:optionalActionTitle optionalAction:optionalAction];
+}
+
 + (void)_presentError:(NSError *)error fromViewController:(UIViewController *)viewController file:(const char * _Nullable)file line:(int)line cancelButtonTitle:(NSString *)cancelButtonTitle optionalActionTitle:(NSString *)optionalActionTitle optionalAction:(void (^ __nullable)(UIAlertAction *action))optionalAction;
 {
     if (error == nil || [error causedByUserCancelling])
@@ -258,8 +283,13 @@ static void __iOS7B5CleanConsoleOutput(void)
             [alertController addAction:[UIAlertAction actionWithTitle:optionalActionTitle style:UIAlertActionStyleDefault handler:optionalAction]];
         }
 
-        [viewController presentViewController:alertController animated:YES completion:^{}];
-        
+        UIViewController *topViewController = viewController;
+        UIViewController *vc;
+        while ((vc = topViewController.presentedViewController)) {
+            topViewController = vc;
+        }
+
+        [topViewController presentViewController:alertController animated:YES completion:^{}];
     }];
 }
 
@@ -290,7 +320,7 @@ static void __iOS7B5CleanConsoleOutput(void)
 
 - (void)resetKeychain;
 {
-    OBFinishPorting; // Make this public? Move the credential stuff into OmniFoundation instead of OmniFileStore?
+    OBFinishPortingWithNote("<bug:///147851> (iOS-OmniOutliner Engineering: Make resetKeychain public? Move the credential stuff into OmniFoundation instead of OmniFileStore?)");
 //    OUIDeleteAllCredentials();
 }
 
@@ -307,7 +337,12 @@ static void __iOS7B5CleanConsoleOutput(void)
     }
 }
 
-- (void)showOnlineHelp:(id)sender;
+- (BOOL)hasOnlineHelp;
+{
+    return [self _onlineHelpURL] != nil;
+}
+
+- (void)showOnlineHelp:(id)sender NS_EXTENSION_UNAVAILABLE_IOS("");
 {
     [self _showOnlineHelp:sender];
 }
@@ -349,6 +384,11 @@ static void __iOS7B5CleanConsoleOutput(void)
 
 #pragma mark - Subclass responsibility
 
+- (NSString *)appSpecificDebugInfo
+{
+    return @"";
+}
+
 - (NSArray *)additionalAppMenuOptionsAtPosition:(OUIAppMenuOptionPosition)position;
 {
     return @[];
@@ -362,7 +402,15 @@ static void __iOS7B5CleanConsoleOutput(void)
 - (BOOL)showFeatureDisabledForRetailDemoAlertFromViewController:(UIViewController *)presentingViewController;
 {
     if ([self isRunningRetailDemo]) {
-        UIAlertController *alertController = [UIAlertController alertControllerWithTitle:NSLocalizedStringFromTableInBundle(@"Feature not enabled for this demo", @"OmniUI", OMNI_BUNDLE, @"disabled for demo") message:nil preferredStyle:UIAlertControllerStyleAlert];
+        NSString *alertString;
+        NSString *alertMessage;
+        UIViewController <OUIDisabledDemoFeatureAlerter>* alerter = (UIViewController <OUIDisabledDemoFeatureAlerter>*)presentingViewController;
+        alertString = [alerter featureDisabledForDemoAlertTitle];
+        if ([alerter respondsToSelector:@selector(featureDisabledForDemoAlertMessage)]) {
+            alertMessage = [alerter featureDisabledForDemoAlertMessage];
+        }
+        
+        UIAlertController *alertController = [UIAlertController alertControllerWithTitle:alertString message:alertMessage preferredStyle:UIAlertControllerStyleAlert];
         [alertController addAction:[UIAlertAction actionWithTitle:NSLocalizedStringFromTableInBundle(@"Done", @"OmniUI", OMNI_BUNDLE, @"Done") style:UIAlertActionStyleDefault handler:^(UIAlertAction * __nonnull action) {}]];
 
         [presentingViewController presentViewController:alertController animated:YES completion:NULL];
@@ -376,55 +424,79 @@ static void __iOS7B5CleanConsoleOutput(void)
 - (NSString *)fullReleaseString;
 {
     NSDictionary *infoDictionary = [[NSBundle mainBundle] infoDictionary];
-    NSString *testFlightString = [OUIAppController inSandboxStore] ? @" TestFlight" : @"";
-    NSString *proString = [self isPurchaseUnlocked:[self proUpgradeProductIdentifier]] ? @" [Pro]" : @"";
-    return [NSString stringWithFormat:@"%@ %@%@%@ (v%@)", [OUIAppController applicationName], [infoDictionary objectForKey:@"CFBundleShortVersionString"], proString, testFlightString, [infoDictionary objectForKey:@"CFBundleVersion"]];
+    NSString *testFlightString = [[self class] inSandboxStore] ? @" TestFlight" : @"";
+    NSString *appEdition = [[self class] applicationEdition];
+    NSString *editionString = [NSString isEmptyString:appEdition] ? @"" : [@" " stringByAppendingString:appEdition];
+    return [NSString stringWithFormat:@"%@ %@%@%@ (v%@)", [[self class] applicationName], [infoDictionary objectForKey:@"CFBundleShortVersionString"], editionString, testFlightString, [infoDictionary objectForKey:@"CFBundleVersion"]];
 }
 
+- (NSString *)_feedbackAddress;
+{
+    return [[[NSBundle mainBundle] infoDictionary] objectForKey:@"OUIFeedbackAddress"];
+}
 
-- (void)sendFeedbackWithSubject:(NSString *)subject body:(NSString * _Nullable)body;
+- (NSURL *)_feedbackURLWithSubject:(NSString *)subject body:(nullable NSString *)body;
+{
+    NSString *feedbackAddress = [self _feedbackAddress];
+    NSString *urlString = [NSString stringWithFormat:@"mailto:%@?subject=%@", feedbackAddress,
+                           [NSString encodeURLString:subject asQuery:NO leaveSlashes:NO leaveColons:NO]];
+    if (![NSString isEmptyString:body])
+        urlString = [urlString stringByAppendingFormat:@"&body=%@", [NSString encodeURLString:body asQuery:NO leaveSlashes:NO leaveColons:NO]];
+    return [NSURL URLWithString:urlString];
+}
+
+- (NSString *)_defaultFeedbackSubject;
+{
+    return [NSString stringWithFormat:@"%@ Feedback", self.fullReleaseString];
+}
+
+- (NSURL *)_defaultFeedbackURL;
+{
+    return [self _feedbackURLWithSubject:[self _defaultFeedbackSubject] body:nil];
+}
+
+- (void)sendFeedbackWithSubject:(NSString * _Nullable)subject body:(NSString * _Nullable)body;
 {
     // May need to allow the app delegate to provide this conditionally later (OmniFocus has a retail build, for example)
-    NSString *feedbackAddress = [[[NSBundle mainBundle] infoDictionary] objectForKey:@"OUIFeedbackAddress"];
+    NSString *feedbackAddress = [self _feedbackAddress];
     OBASSERT(feedbackAddress);
     if (feedbackAddress == nil)
         return;
-    
-    UIViewController *viewControllerToPresentFrom = self.window.rootViewController;
-    while (viewControllerToPresentFrom.presentedViewController != nil)
-        viewControllerToPresentFrom = viewControllerToPresentFrom.presentedViewController;
 
-    BOOL useComposeView = viewControllerToPresentFrom != nil && [MFMailComposeViewController canSendMail];
-    if (!useComposeView) {
-        NSString *urlString = [NSString stringWithFormat:@"mailto:%@?subject=%@", feedbackAddress,
-                               [NSString encodeURLString:subject asQuery:NO leaveSlashes:NO leaveColons:NO]];
-        
-        if (![NSString isEmptyString:body])
-            urlString = [urlString stringByAppendingFormat:@"&body=%@", [NSString encodeURLString:body asQuery:NO leaveSlashes:NO leaveColons:NO]];
-        
-        NSURL *url = [NSURL URLWithString:urlString];
-        OBASSERT(url);
-        if (![[UIApplication sharedApplication] openURL:url]) {
-            // Need to pop up an alert telling the user? Might happen now since we don't have Mail,  but they shouldn't be able to delete that in the real world.  Though maybe our url string is bad.
-            NSLog(@"Unable to open mail url %@ from string\n%@\n", url, urlString);
-            OBASSERT_NOT_REACHED("Couldn't open mail url");
-        }
+    MFMailComposeViewController *controller = [self mailComposeController];
+    if (!controller) {
         return;
     }
     
-    // TODO: Allow sending a document with the mail?
+    if (subject == nil)
+        subject = [self _defaultFeedbackSubject];
     
-    MFMailComposeViewController *controller = [[MFMailComposeViewController alloc] init];
-    controller.navigationBar.barStyle = UIBarStyleDefault;
-    controller.mailComposeDelegate = self;
-    [controller setToRecipients:[NSArray arrayWithObject:feedbackAddress]];
     [controller setSubject:subject];
     
     // N.B. The static analyzer doesn't know that +isEmptyString: is also a null check, so we duplicate it here
     if (body != nil && ![NSString isEmptyString:body])
         [controller setMessageBody:body isHTML:NO];
     
-    [viewControllerToPresentFrom presentViewController:controller animated:YES completion:nil];
+    [self sendMailTo:[NSArray arrayWithObject:feedbackAddress] withComposeController:controller];
+}
+
+- (MFMailComposeViewController *)mailComposeController {
+    if (![MFMailComposeViewController canSendMail]) {
+        return nil;
+    }
+    MFMailComposeViewController *controller = [[MFMailComposeViewController alloc] init];
+    controller.navigationBar.barStyle = UIBarStyleDefault;
+    controller.mailComposeDelegate = self;
+    return controller;
+}
+
+- (void)sendMailTo:(NSArray<NSString *> *)recipients withComposeController:(MFMailComposeViewController *)mailComposeController {
+    [mailComposeController setToRecipients:recipients];
+    UIViewController *viewControllerToPresentFrom = self.window.rootViewController;
+    while (viewControllerToPresentFrom.presentedViewController != nil) {
+        viewControllerToPresentFrom = viewControllerToPresentFrom.presentedViewController;
+    }
+    [viewControllerToPresentFrom presentViewController:mailComposeController animated:YES completion:nil];
 }
 
 - (UIImage *)settingsMenuImage;
@@ -435,6 +507,43 @@ static void __iOS7B5CleanConsoleOutput(void)
 - (UIImage *)inAppPurchasesMenuImage;
 {
     return menuImage(@"OUIMenuItemPurchases.png");
+}
+
+- (UIImage *)quickStartMenuImage {
+    return menuImage(@"OUIMenuItemQuickStart.png");
+}
+
+- (UIImage *)trialModeMenuImage {
+    return menuImage(@"OUIMenuItemTrial.png");
+}
+
+- (UIImage *)introVideoMenuImage {
+    return menuImage(@"OUIMenuItemVideo.png");
+}
+
+- (BOOL)useCompactBarButtonItemsIfApplicable;
+{
+    return NO;
+}
+
+- (UIImage *)exportBarButtonItemImageInHostViewController:(UIViewController *)hostViewController;
+{
+    NSString *imageName = @"OUIExport";
+
+    if (self.useCompactBarButtonItemsIfApplicable) {
+        BOOL isHorizontallyCompact = hostViewController.traitCollection.horizontalSizeClass == UIUserInterfaceSizeClassCompact;
+        BOOL isVerticallyCompact = hostViewController.traitCollection.verticalSizeClass == UIUserInterfaceSizeClassCompact;
+        if (isHorizontallyCompact || isVerticallyCompact) {
+            imageName = @"OUIExport-Compact";
+        }
+    }
+
+    return [UIImage imageNamed:imageName inBundle:OMNI_BUNDLE compatibleWithTraitCollection:nil];
+}
+
+- (BOOL)canCreateNewDocument
+{
+    return YES;
 }
 
 #pragma mark - App menu support
@@ -472,7 +581,7 @@ NSString *const OUIAboutScreenBindingsDictionaryFeedbackAddressKey = @"feedbackA
     NSDictionary *infoDictionary = [[NSBundle mainBundle] infoDictionary];
     NSString *versionString = infoDictionary[@"CFBundleShortVersionString"];
     NSString *copyrightString = infoDictionary[@"NSHumanReadableCopyright"];
-    NSString *feedbackAddress = infoDictionary[@"OUIFeedbackAddress"];
+    NSString *feedbackAddress = [self _feedbackAddress];
     
     return @{
              OUIAboutScreenBindingsDictionaryVersionStringKey : versionString,
@@ -552,38 +661,48 @@ NSString *const OUIAboutScreenBindingsDictionaryFeedbackAddressKey = @"feedbackA
     [self.window.rootViewController presentViewController:_appMenuController animated:YES completion:nil];
 }
 
-- (void)_sendFeedback:(id)sender NS_EXTENSION_UNAVAILABLE_IOS("");
+- (IBAction)sendFeedback:(id)sender NS_EXTENSION_UNAVAILABLE_IOS("");
 {
-    NSString *subject = [NSString stringWithFormat:@"%@ Feedback", self.fullReleaseString];
-    
-    [self sendFeedbackWithSubject:subject body:nil];
+    [self sendFeedbackWithSubject:[self _defaultFeedbackSubject] body:nil];
 }
 
-- (OUIWebViewController *)showWebViewWithURL:(NSURL *)url title:(NSString * _Nullable)title withModalPresentationStyle:(UIModalPresentationStyle)presentationStyle
+- (nullable OUIWebViewController *)showWebViewWithURL:(NSURL *)url title:(nullable NSString *)title NS_EXTENSION_UNAVAILABLE_IOS("")
+{
+    return [self showWebViewWithURL:url title:title modalPresentationStyle:UIModalPresentationFullScreen modalTransitionStyle:UIModalTransitionStyleCrossDissolve animated:YES navigationController:nil];
+}
+
+- (nullable OUIWebViewController *)showWebViewWithURL:(NSURL *)url title:(nullable NSString *)title modalPresentationStyle:(UIModalPresentationStyle)presentationStyle modalTransitionStyle:(UIModalTransitionStyle)transitionStyle animated:(BOOL)animated  NS_EXTENSION_UNAVAILABLE_IOS("")
+{
+    return [self showWebViewWithURL:url title:title modalPresentationStyle:presentationStyle modalTransitionStyle:transitionStyle animated:animated navigationController:nil];
+}
+
+- (nullable OUIWebViewController *)showWebViewWithURL:(NSURL *)url title:(nullable NSString *)title modalPresentationStyle:(UIModalPresentationStyle)presentationStyle modalTransitionStyle:(UIModalTransitionStyle)transitionStyle  animated:(BOOL)animated navigationController:(nullable UINavigationController *)navigationController NS_EXTENSION_UNAVAILABLE_IOS("")
 {
     OBASSERT(url != nil); //Seems like it would be a mistake to ask to show nothing. —LM
-    if (url == nil)
+    if (url == nil) {
         return nil;
+    }
     
     OUIWebViewController *webController = [[OUIWebViewController alloc] init];
     webController.delegate = self;
     webController.title = title;
     webController.URL = url;
-    UINavigationController *webNavigationController = [[UINavigationController alloc] initWithRootViewController:webController];
-    webNavigationController.navigationBar.barStyle = UIBarStyleDefault;
     
-    webNavigationController.modalPresentationStyle = presentationStyle;
-    
-    [self.window.rootViewController presentViewController:webNavigationController animated:YES completion:nil];
+    if (navigationController != nil) {
+        [navigationController pushViewController:webController animated:YES];
+    } else {
+        UINavigationController *webNavigationController = [[UINavigationController alloc] initWithRootViewController:webController];
+        webNavigationController.navigationBar.barStyle = UIBarStyleDefault;
+        
+        webNavigationController.modalPresentationStyle = presentationStyle;
+        webNavigationController.modalTransitionStyle = transitionStyle;
+        
+        [self.window.rootViewController presentViewController:webNavigationController animated:animated completion:nil];
+    }
     return webController;
 }
 
-- (OUIWebViewController *)showWebViewWithURL:(NSURL *)url title:(NSString * _Nullable)title;
-{
-    return [self showWebViewWithURL:url title:title withModalPresentationStyle:UIModalPresentationFullScreen];
-}
-
-- (void)_showLatestNewsMessage
+- (void)_showLatestNewsMessage NS_EXTENSION_UNAVAILABLE_IOS("")
 {
     [self showNewsURLString:[self mostRecentNewsURLString] evenIfShownAlready:YES];
 }
@@ -638,7 +757,7 @@ NSString *const OUIAboutScreenBindingsDictionaryFeedbackAddressKey = @"feedbackA
     }
     
     if (showNoMatterWhat || ![self haveShownReleaseNotes:urlString]) {
-        self.newsViewController = [self showWebViewWithURL:[NSURL URLWithString:urlString] title:NSLocalizedStringFromTableInBundle(@"News", @"OmniUI", OMNI_BUNDLE, @"News view title") withModalPresentationStyle:UIModalPresentationFormSheet];
+        self.newsViewController = [self showWebViewWithURL:[NSURL URLWithString:urlString] title:NSLocalizedStringFromTableInBundle(@"News", @"OmniUI", OMNI_BUNDLE, @"News view title") modalPresentationStyle:UIModalPresentationFormSheet modalTransitionStyle:UIModalTransitionStyleCoverVertical animated:YES];
     }
     
     self.newsURLCurrentlyShowing = urlString;
@@ -658,29 +777,29 @@ NSString *const OUIAboutScreenBindingsDictionaryFeedbackAddressKey = @"feedbackA
     return foundIt;
 }
 
-- (void)showAboutScreenInNavigationController:(UINavigationController * _Nullable)navigationController;
+- (NSString *)_aboutPanelJSONBindingsString;
 {
-    OUIAboutThisAppViewController *aboutController = [[OUIAboutThisAppViewController alloc] init];
-    [aboutController loadAboutPanelWithTitle:[self aboutScreenTitle] URL:[self aboutScreenURL] javascriptBindingsDictionary:[self aboutScreenBindingsDictionary]];
+    __autoreleasing NSError *jsonError = nil;
+    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:[self aboutScreenBindingsDictionary] options:0 error:&jsonError];
+    assert(jsonData != nil);
 
-    if (navigationController) {
-        [navigationController pushViewController:aboutController animated:YES];
-    } else {
-        navigationController = [[UINavigationController alloc] initWithRootViewController:aboutController];
-        navigationController.modalPresentationStyle = UIModalPresentationFormSheet;
-        navigationController.modalTransitionStyle = UIModalTransitionStyleCoverVertical;
-
-        UIViewController *viewController = self.window.rootViewController;
-        [viewController presentViewController:navigationController animated:YES completion:nil];
-    }
+    NSString *jsonValue = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
+    NSString *jsonBindingsString = [NSString stringWithFormat:@"aboutBindings=%@;", jsonValue];
+    return jsonBindingsString;
 }
 
-- (void)_showAboutScreen:(id)sender;
+- (void)showAboutScreenInNavigationController:(UINavigationController * _Nullable)navigationController NS_EXTENSION_UNAVAILABLE_IOS("")
+{
+    OUIWebViewController *webViewController = [self showWebViewWithURL:[self aboutScreenURL] title:[self aboutScreenTitle] modalPresentationStyle:UIModalPresentationFormSheet modalTransitionStyle:UIModalTransitionStyleCoverVertical animated:YES navigationController:navigationController];
+    [webViewController invokeJavaScriptBeforeLoad:[self _aboutPanelJSONBindingsString]];
+}
+
+- (void)_showAboutScreen:(id)sender NS_EXTENSION_UNAVAILABLE_IOS("");
 {
     [self showAboutScreenInNavigationController:nil];
 }
 
-- (void)_showReleaseNotes:(id)sender;
+- (void)_showReleaseNotes:(id)sender NS_EXTENSION_UNAVAILABLE_IOS("");
 {
     [self showWebViewWithURL:[[NSBundle mainBundle] URLForResource:@"MessageOfTheDay" withExtension:@"html"] title:NSLocalizedStringFromTableInBundle(@"Release Notes", @"OmniUI", OMNI_BUNDLE, @"release notes html screen title")];
 }
@@ -719,7 +838,7 @@ static NSString * const OUIHelpBookNameKey = @"OUIHelpBookName";
     return [mainBundle localizedStringForKey:OUIHelpBookNameKey value:helpBookName table:@"InfoPlist"];
 }
 
-- (void)_showOnlineHelp:(id)sender;
+- (void)_showOnlineHelp:(id)sender NS_EXTENSION_UNAVAILABLE_IOS("");
 {
     NSURL *helpIndexURL = [self _onlineHelpURL];
     if (!helpIndexURL) {
@@ -804,7 +923,7 @@ static UIImage *menuImage(NSString *name)
     
     NSString *feedbackMenuTitle = [self feedbackMenuTitle];
     if (![NSString isEmptyString:feedbackMenuTitle] && ![self isRunningRetailDemo]) {
-        option = [OUIMenuOption optionWithFirstResponderSelector:@selector(_sendFeedback:)
+        option = [OUIMenuOption optionWithFirstResponderSelector:@selector(sendFeedback:)
                                                            title:feedbackMenuTitle
                                                            image:menuImage(@"OUIMenuItemSendFeedback.png")];
         [options addObject:option];
@@ -822,6 +941,10 @@ static UIImage *menuImage(NSString *name)
         
     }
     
+    additionalOptions = [self additionalAppMenuOptionsAtPosition:OUIAppMenuOptionPositionBeforeReleaseNotes];
+    if (additionalOptions)
+        [options addObjectsFromArray:additionalOptions];
+    
     option = [OUIMenuOption optionWithFirstResponderSelector:@selector(_showReleaseNotes:)
                                                        title:NSLocalizedStringFromTableInBundle(@"Release Notes", @"OmniUI", OMNI_BUNDLE, @"App menu item title")
                                                        image:menuImage(@"OUIMenuItemReleaseNotes.png")];
@@ -830,20 +953,6 @@ static UIImage *menuImage(NSString *name)
     additionalOptions = [self additionalAppMenuOptionsAtPosition:OUIAppMenuOptionPositionAfterReleaseNotes];
     if (additionalOptions)
         [options addObjectsFromArray:additionalOptions];
-    
-    for (NSString *productIdentifier in [self inAppPurchaseIdentifiers]) {
-        if ([self isPurchaseUnlocked:productIdentifier])
-            continue;
-
-        NSString *purchaseTitle = [self purchaseMenuItemTitleForInAppStoreProductIdentifier:productIdentifier];
-        if ([NSString isEmptyString:purchaseTitle])
-            continue;
-        
-        option = [[OUIMenuOption alloc] initWithTitle:purchaseTitle image:self.inAppPurchasesMenuImage action:^{
-            [[OUIAppController controller] showInAppPurchases:productIdentifier viewController:self.window.rootViewController];
-        }];
-        [options addObject:option];
-    }
     
     additionalOptions = [self additionalAppMenuOptionsAtPosition:OUIAppMenuOptionPositionAtEnd];
     if (additionalOptions)
@@ -859,7 +968,7 @@ static UIImage *menuImage(NSString *name)
 
 #pragma mark - OUIWebViewControllerDelegate
 
-- (void)webViewControllerDidClose:(OUIWebViewController *)webViewController;
+- (BOOL)webViewControllerShouldClose:(OUIWebViewController *)webViewController NS_EXTENSION_UNAVAILABLE_IOS("");
 {
     if (webViewController == self.newsViewController
         && self.newsURLCurrentlyShowing != nil
@@ -883,8 +992,8 @@ static UIImage *menuImage(NSString *name)
         
         [[NSNotificationCenter defaultCenter] postNotificationName:OUIAttentionSeekingNotification object:self userInfo:@{ OUIAttentionSeekingForNewsKey : @(NO) }];
     }
-    
-    [webViewController.presentingViewController dismissViewControllerAnimated:YES completion:nil];
+
+    return YES;
 }
 
 #pragma mark - UIResponder subclass
@@ -972,4 +1081,11 @@ static UIImage *menuImage(NSString *name)
     //Whatever work you want done after the app finishes waiting for Apple's snapshots, implement it inside this method in your subclasses.
 }
 
+@end
+
+@implementation UIViewController (OUIDisabledDemoFeatureAlerter)
+- (NSString *)featureDisabledForDemoAlertTitle;
+{
+    return NSLocalizedStringFromTableInBundle(@"Feature not enabled for this demo", @"OmniUI", OMNI_BUNDLE, @"disabled for demo");
+}
 @end

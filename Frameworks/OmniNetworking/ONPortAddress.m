@@ -1,4 +1,4 @@
-// Copyright 1997-2016 Omni Development, Inc. All rights reserved.
+// Copyright 1997-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -18,6 +18,9 @@
 RCS_ID("$Id$")
 
 @implementation ONPortAddress
+{
+    struct sockaddr *portAddress;
+}
 
 - initWithHost:(ONHost *)aHost portNumber:(unsigned short int)port;
 {
@@ -183,7 +186,7 @@ RCS_ID("$Id$")
         struct sockaddr_in *ipv4Address;
         
         ipv4Address = (struct sockaddr_in *)malloc(sizeof(struct sockaddr_in));
-        bzero(&ipv4Address, sizeof(*ipv4Address));
+        bzero(ipv4Address, sizeof(*ipv4Address));
 
         ipv4Address->sin_len = sizeof(*ipv4Address);
         ipv4Address->sin_family = AF_INET;

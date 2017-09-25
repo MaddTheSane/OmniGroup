@@ -1,4 +1,4 @@
-// Copyright 2011-2015 Omni Development, Inc. All rights reserved.
+// Copyright 2011-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -35,6 +35,12 @@ extern NSString *OFUTIForFileExtensionPreferringNative(NSString *extension, NSNu
 // Returns a uniform type identifier for the given tag class and value. If multiple identifiers are defined for the same tag value, this function prefers types that are registered by the running executable's main bundle. Optionally, returned types can be restricted to those conforming to the identifier named by the conformingToUTIOrNull parameter.
 extern NSString *OFUTIForTagPreferringNative(CFStringRef tagClass, NSString *tag, CFStringRef _Nullable conformingToUTIOrNull);
 
+extern NSString * _Nullable OFUTIPreferredTagWithClass(NSString *fileType, CFStringRef tag);
+extern NSString * _Nullable OFUTIDescription(NSString *fileType);
+
+// Returns a file extension for a given uniform type identifier.  This function prefers prefers types that are registered by the running exceutable's main bundle
+extern NSString * _Nullable OFPreferredFilenameExtensionForTypePreferringNative(NSString *fileType);
+
 // Hide the bridging and return an autoreleased NSString
 #define OFPreferredPathExtensionForUTI(uti) ((NSString *)CFBridgingRelease(UTTypeCopyPreferredTagWithClass(_OFAsCFString(uti), kUTTagClassFilenameExtension)))
 
@@ -48,5 +54,6 @@ extern void OFUTIEnumerateKnownTypesForTagPreferringNative(NSString *tagClass, N
 
 extern BOOL _OFTypeConformsToOneOfTypes(NSString *type, ...) NS_REQUIRES_NIL_TERMINATION;
 #define OFTypeConformsToOneOfTypes(type, ...) _OFTypeConformsToOneOfTypes(_OFAsNSString(type), ## __VA_ARGS__)
+extern BOOL OFTypeConformsToOneOfTypesInArray(NSString * _Nullable type, NSArray<NSString *> *types);
 
 NS_ASSUME_NONNULL_END

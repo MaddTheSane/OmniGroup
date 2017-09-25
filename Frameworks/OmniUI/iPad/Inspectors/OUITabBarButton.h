@@ -1,4 +1,4 @@
-// Copyright 2013-2015 Omni Development, Inc. All rights reserved.
+// Copyright 2013-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -21,6 +21,7 @@
 + (instancetype)verticalTabBarButton;
 
 @property (nonatomic) BOOL showButtonImage; // default is YES for vertical buttons, NO for horizontal buttons.
+@property (nonatomic) BOOL showButtonTitle; // default is YES.
 
 - (void)appearanceDidChange;
 @property (nonatomic, weak) id <OUITabBarAppearanceDelegate> appearanceDelegate;

@@ -1,4 +1,4 @@
-// Copyright 2010-2015 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -102,7 +102,7 @@ static void _dumpImageInfo(void)
             _dumpImageInfo();
         }
         
-        OBASSERT_NOT_REACHED("Should have been unlocked");
+        OBASSERT_NOT_REACHED("Should have been unlocked. bug:///142479 (Frameworks-iOS Engineering: -[OUIInteractionLock dealloc] assertion failure opening iCloud Drive document when document already open with split-screen sharing)");
 
         // sync since our pointer is about to be available for reuse
         void *ptr = (__bridge void *)self; // don't capture self in the block since we are deallocating.
@@ -110,7 +110,10 @@ static void _dumpImageInfo(void)
             NSUInteger lockIndex = [ActiveLockReferences indexOfObjectPassingTest:^BOOL(OFWeakReference *ref, NSUInteger idx, BOOL *stop) {
                 return [ref referencesObject:ptr];
             }];
-            
+
+            if (lockIndex == NSNotFound)
+                return;
+
 #ifdef OMNI_ASSERTIONS_ON
             OFWeakReference *ref = ActiveLockReferences[lockIndex];
 #endif
@@ -140,7 +143,6 @@ static void _dumpImageInfo(void)
 {
     DEBUG_INTERACTION_LOCK(@"self: %@", self);
     OBPRECONDITION([NSThread isMainThread], "UIKit isn't guaranteed to be thread safe");
-    OBPRECONDITION(_locked);
     
     if (!_locked)
         return;

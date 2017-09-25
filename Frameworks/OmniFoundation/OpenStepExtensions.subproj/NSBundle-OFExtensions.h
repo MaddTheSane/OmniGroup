@@ -1,4 +1,4 @@
-// Copyright 2005-2006, 2008, 2010, 2012 Omni Development, Inc. All rights reserved.
+// Copyright 2005-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -16,11 +16,16 @@
 
 @interface NSBundle (OFExtensions)
 
+#if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
+/// Various pieces of information extraced from the code signature for this bundle.
+/// See Security/SecCode.h for the dictionary keys.
 - (NSDictionary *)codeSigningInfoDictionary:(NSError **)error;
-    // Various pieces of information extraced from the code signature for this bundle.
-    // See Security/SecCode.h for the dictionary keys
+#endif
 
+/// The code signing entitlements for this process. On iOS, these can only be extracted from the embedded provisioning profile, if one exists.
 - (NSDictionary *)codeSigningEntitlements:(NSError **)error;
-    // The code sign entitlements for this process
 
 @end
+
+/// If we are running a bundled app, this will return the main bundle.  Otherwise, if we are running unit tests, this will return the unit test bundle.
+extern NSBundle * OFControllingBundle(void);

@@ -1,4 +1,4 @@
-// Copyright 2010-2015 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -16,11 +16,18 @@
 
 @required
 - (CGRect)scalingScrollViewContentViewFullScreenBounds:(OUIScalingScrollView *)scalingScrollView;
+- (CGFloat)scrollBufferAsPercentOfViewportSize;
+- (CGSize)unscaledContentSize;
+
+@optional
+- (void)scrollViewDidChangeFrame;
 
 @end
 
 @interface OUIScalingScrollView : UIScrollView
 
+@property(readonly) CGSize scrollBufferSize;
+- (CGSize)preferredScrollBufferSizeForScale:(CGFloat)scale; // for subclasses to override if needed
 @property(nonatomic) OFExtent allowedEffectiveScaleExtent;
 @property(nonatomic) BOOL centerContent;
 @property(nonatomic) UIEdgeInsets minimumInsets;

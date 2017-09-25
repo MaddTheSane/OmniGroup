@@ -1,4 +1,4 @@
-// Copyright 2002-2005, 2007, 2010, 2013-2014 Omni Development, Inc. All rights reserved.
+// Copyright 2002-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -91,11 +91,12 @@ static BOOL (*originalPutKeyFormAndDataInRecord)(id self, SEL _cmd, NSAppleEvent
     return ok;
 }
 
-+ (void)performPosing
-{
+OBPerformPosing(^{
+    Class self = objc_getClass("NSWhoseSpecifier");
+
     originalObjectsByEvaluatingWithContainers = (void *)OBReplaceMethodImplementationWithSelector(self,  @selector(objectsByEvaluatingWithContainers:), @selector(replacement_objectsByEvaluatingWithContainers:));
     originalPutKeyFormAndDataInRecord = (typeof(originalPutKeyFormAndDataInRecord))OBReplaceMethodImplementationWithSelector(self,  @selector(_putKeyFormAndDataInRecord:), @selector(replacement_putKeyFormAndDataInRecord:));
-}
+});
 
 @end
 
@@ -155,7 +156,7 @@ static BOOL (*originalPutKeyFormAndDataInRecord)(id self, SEL _cmd, NSAppleEvent
 static id (*original_NSScriptObjectSpecifier_initWithContainerClassDescription_containerSpecifier_property)(NSScriptObjectSpecifier *self, SEL _cmd, NSScriptClassDescription *classDesc, NSScriptObjectSpecifier *container, NSString *key) = NULL;
 static id replacement_NSScriptObjectSpecifier_initWithContainerClassDescription_containerSpecifier_property(NSScriptObjectSpecifier *self, SEL _cmd, NSScriptClassDescription *classDesc, NSScriptObjectSpecifier *container, NSString *key)
 {
-    OBPRECONDITION(container || [classDesc.className isEqual:@"application"]);
+    OBPRECONDITION(container || classDesc.appleEventCode == 'capp');
     OBPRECONDITION(key);
     OBPRECONDITION([classDesc classDescriptionForKey:key]/*element*/ || [classDesc typeForKey:key]/*property*/, "No class description or type registered for the key \"%@\" of class description \"%@\"", key, classDesc);
     
@@ -167,7 +168,7 @@ static id (*original_NSUniqueIDSpecifier_initWithContainerClassDescription_conta
 static id replacement_NSUniqueIDSpecifier_initWithContainerClassDescription_containerSpecifier_key_uniqueID(NSUniqueIDSpecifier *self, SEL _cmd, NSScriptClassDescription *classDesc, NSScriptObjectSpecifier *container, NSString *key, id uniqueID)
 {
     OBPRECONDITION(classDesc);
-    OBPRECONDITION(container || [classDesc.className isEqual:@"application"]);
+    OBPRECONDITION(container || classDesc.appleEventCode == 'capp');
     OBPRECONDITION(key);
     OBPRECONDITION([classDesc classDescriptionForKey:key]);
     OBPRECONDITION(uniqueID);

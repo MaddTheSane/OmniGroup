@@ -1,4 +1,4 @@
-// Copyright 2008-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2008-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -37,10 +37,9 @@ extern BOOL ODAVShouldOfferToReportError(NSError *error);
 #define ODAVError(error, code, description, reason) ODAVErrorWithInfo((error), (code), (description), (reason), nil)
 
 #define ODAVResponseLocationErrorKey (@"Location")
+#define ODAVPreviousRedirectsErrorKey (@"Redirects")
 
-extern NSString * const ODAVURLErrorFailingURLErrorKey;          // > 4.0 use NSURLErrorFailingURLErrorKey
-extern NSString * const ODAVURLErrorFailingURLStringErrorKey;    // > 4.0 use NSURLErrorFailingURLStringErrorKey
-
+extern NSString * const ODAVURLErrorFailingURLErrorKey __attribute__((deprecated("use NSURLErrorFailingURLErrorKey")));          // > 4.0 use NSURLErrorFailingURLErrorKey
 
 // Codes are HTTP error codes.  You'd think Foundation would define such a domain...
 extern NSString * const ODAVHTTPErrorDomain;
@@ -103,8 +102,13 @@ typedef enum {
 } ODAVHTTPErrorCode;
 
 @interface NSError (ODAVExtensions)
+
+/// Returns an error indicating a certificate trust problem with the given challenge. This error has no localized strings in its userInfo dictionary, since it is intended to be caught at the app level. Errors of this kind should cause localized UI to be presented to the user to evaluate trust and possibly restart the operation.
 + (NSError *)certificateTrustErrorForChallenge:(NSURLAuthenticationChallenge *)challenge;
-- (BOOL)causedByPermissionFailure;
+
+- (BOOL)causedByDAVPermissionFailure;
+- (BOOL)causedByMissingDAVResource;
+
 @end
 
 // User info key that contains the NSURLAuthenticationChallenge passed when a certificate trust issue was encountered

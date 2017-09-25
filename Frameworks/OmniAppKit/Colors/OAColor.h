@@ -1,4 +1,4 @@
-// Copyright 2003-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2003-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -12,28 +12,47 @@
 
 #import <OmniBase/assertions.h>
 
-#if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_MAC
 #import <Foundation/NSGeometry.h>
+#import <CoreGraphics/CGColor.h>
 @class NSColor;
 @class NSAppleEventDescriptor;
-#else
+#endif
+
+#if OMNI_BUILDING_FOR_IOS
 #import <UIKit/UIColor.h>
 #import <CoreGraphics/CGGeometry.h>
 #import <CoreGraphics/CGColor.h>
 @class OAColor;
 #endif
 
+#if OMNI_BUILDING_FOR_SERVER
+#import <OmniFoundation/OFGeometry.h> // For CGFloat
+@class OAColor;
+#endif
+
+#if 0 && defined(DEBUG_bungi)
+    #define OA_SUPPORT_PATTERN_COLOR 1
+#else
+    #define OA_SUPPORT_PATTERN_COLOR 0
+#endif
+
 NS_ASSUME_NONNULL_BEGIN
 
-#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_IOS
 #define OA_PLATFORM_COLOR_CLASS UIColor
-#else
+#endif
+
+#if OMNI_BUILDING_FOR_MAC
 #define OA_PLATFORM_COLOR_CLASS NSColor
 #endif
+
+#ifdef OA_PLATFORM_COLOR_CLASS
 @class OA_PLATFORM_COLOR_CLASS;
 
 // To expose to Swift:
 typedef OA_PLATFORM_COLOR_CLASS *OAPlatformColorClass;
+#endif
 
 typedef struct {
     CGFloat r, g, b, a;
@@ -43,16 +62,23 @@ typedef struct {
     CGFloat w, a;
 } OAWhiteAlpha;
 
-#if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_MAC
 extern OALinearRGBA OAGetColorComponents(NSColor *c);
-#else
+#endif
+
+#if OMNI_BUILDING_FOR_IOS
 extern OALinearRGBA OAGetColorComponents(OAColor *c);
 #endif
+
 extern BOOL OAColorComponentsEqual(OALinearRGBA x, OALinearRGBA y);
 
+#if OMNI_BUILDING_FOR_MAC || OMNI_BUILDING_FOR_IOS
 extern OALinearRGBA OAGetColorRefComponents(CGColorRef c);
+#endif
+
 extern CGFloat OAGetRGBAColorLuma(OALinearRGBA c);
-#if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
+
+#if OMNI_BUILDING_FOR_MAC
 extern CGFloat OAGetColorLuma(NSColor *c, CGFloat *outAlpha);
 #endif
 
@@ -74,17 +100,19 @@ static inline OALinearRGBA OABlendLinearRGBAColors(OALinearRGBA A, OALinearRGBA 
     };
 }
 
-#if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
-extern NSColor *OACompositeColors(NSColor *topColor, NSColor *bottomColor, BOOL * _Nullable isOpaque);
+#if OMNI_BUILDING_FOR_MAC
+extern NSColor * _Nullable OACompositeColors(NSColor * _Nullable topColor, NSColor * _Nullable bottomColor, BOOL * _Nullable isOpaque);
 #else
-extern OAColor *OACompositeColors(OAColor *topColor, OAColor *bottomColor, BOOL * _Nullable isOpaque);
+extern OAColor * _Nullable OACompositeColors(OAColor * _Nullable topColor, OAColor * _Nullable bottomColor, BOOL * _Nullable isOpaque);
 #endif
 
+#if OMNI_BUILDING_FOR_MAC || OMNI_BUILDING_FOR_IOS
 extern CGColorRef OACreateCompositeColorRef(CGColorRef topColor, CGColorRef bottomColor, BOOL * _Nullable isOpaque) CF_RETURNS_RETAINED;
-
 CGColorRef OACreateCompositeColorFromColors(CGColorSpaceRef destinationColorSpace, NSArray *colors) CF_RETURNS_RETAINED; // Bottom-most color goes first and must be opaque
+#endif
 
-#if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
+
+#if OMNI_BUILDING_FOR_MAC
 extern CGColorRef __nullable OACreateColorRefFromColor(CGColorSpaceRef destinationColorSpace, NSColor *c) CF_RETURNS_RETAINED;
 extern NSColor * __nullable OAColorFromColorRef(CGColorRef c);
 
@@ -109,15 +137,21 @@ extern OAHSV OARGBToHSV(OALinearRGBA c);
 extern OALinearRGBA OAHSVToRGB(OAHSV c);
 
 @interface OAColor : NSObject <NSCopying>
-{
-    OA_PLATFORM_COLOR_CLASS *_platformColor;
-}
 
+#if OMNI_BUILDING_FOR_MAC || OMNI_BUILDING_FOR_IOS
 + (OAColor *)colorWithCGColor:(CGColorRef)cgColor;
+#endif
+
+#ifdef OA_PLATFORM_COLOR_CLASS
 + (OAColor *)colorWithPlatformColor:(OA_PLATFORM_COLOR_CLASS *)color;
+#endif
+
+#if OA_SUPPORT_PATTERN_COLOR
++ (OAColor *)colorWithPatternImageData:(NSData *)imageData;
+#endif
 
 + (nullable OAColor *)colorFromRGBAString:(NSString *)rgbaString;
-- (NSString *)rgbaString;
+@property(nonatomic,readonly) NSString *rgbaString;
 
 + (nullable OAColor *)colorForPreferenceKey:(NSString *)preferenceKey;
 + (void)setColor:(OAColor *)color forPreferenceKey:(NSString *)preferenceKey;
@@ -126,31 +160,30 @@ extern OALinearRGBA OAHSVToRGB(OAHSV c);
 + (OAColor *)colorWithHue:(CGFloat)hue saturation:(CGFloat)saturation brightness:(CGFloat)brightness alpha:(CGFloat)alpha;
 + (OAColor *)colorWithWhite:(CGFloat)white alpha:(CGFloat)alpha;
 
-// All OAColors are supposedly in the calibrated color space, but add these for API compatibility with NSColor
-+ (OAColor *)colorWithCalibratedRed:(CGFloat)red green:(CGFloat)green blue:(CGFloat)blue alpha:(CGFloat)alpha;
-+ (OAColor *)colorWithCalibratedHue:(CGFloat)hue saturation:(CGFloat)saturation brightness:(CGFloat)brightness alpha:(CGFloat)alpha;
-+ (OAColor *)colorWithCalibratedWhite:(CGFloat)white alpha:(CGFloat)alpha;
+@property(class,readonly,nonatomic) OAColor *blackColor;
+@property(class,readonly,nonatomic) OAColor *darkGrayColor;
+@property(class,readonly,nonatomic) OAColor *lightGrayColor;
+@property(class,readonly,nonatomic) OAColor *whiteColor;
+@property(class,readonly,nonatomic) OAColor *grayColor;
+@property(class,readonly,nonatomic) OAColor *redColor;
+@property(class,readonly,nonatomic) OAColor *greenColor;
+@property(class,readonly,nonatomic) OAColor *blueColor;
+@property(class,readonly,nonatomic) OAColor *cyanColor;
+@property(class,readonly,nonatomic) OAColor *yellowColor;
+@property(class,readonly,nonatomic) OAColor *magentaColor;
+@property(class,readonly,nonatomic) OAColor *orangeColor;
+@property(class,readonly,nonatomic) OAColor *purpleColor;
+@property(class,readonly,nonatomic) OAColor *brownColor;
+@property(class,readonly,nonatomic) OAColor *clearColor;
 
-+ (OAColor *)blackColor;
-+ (OAColor *)darkGrayColor;
-+ (OAColor *)lightGrayColor;
-+ (OAColor *)whiteColor;
-+ (OAColor *)grayColor;
-+ (OAColor *)redColor;
-+ (OAColor *)greenColor;
-+ (OAColor *)blueColor;
-+ (OAColor *)cyanColor;
-+ (OAColor *)yellowColor;
-+ (OAColor *)magentaColor;
-+ (OAColor *)orangeColor;
-+ (OAColor *)purpleColor;
-+ (OAColor *)brownColor;
-+ (OAColor *)clearColor;
+@property(class,readonly,nonatomic) OAColor *keyboardFocusIndicatorColor;
+@property(class,readonly,nonatomic) OAColor *selectedTextBackgroundColor;
 
-+ (OAColor *)keyboardFocusIndicatorColor;
-+ (OAColor *)selectedTextBackgroundColor;
+#ifdef OA_PLATFORM_COLOR_CLASS
+@property(nonatomic,readonly) OA_PLATFORM_COLOR_CLASS *toColor;
 
 - (void)set;
+#endif
 
 @end
 
@@ -180,8 +213,11 @@ extern OALinearRGBA OAHSVToRGB(OAHSV c);
 - (BOOL)isEqualToColorInSameColorSpace:(OAColor *)color;
 - (NSUInteger)hash;
 
-@property(readonly,nonatomic) OA_PLATFORM_COLOR_CLASS *toColor;
-#if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
+#ifdef OA_PLATFORM_COLOR_CLASS
+- (OA_PLATFORM_COLOR_CLASS *)makePlatformColor; // This is cached in the -platformColor property and should otherwise not be called.
+#endif
+
+#if OMNI_BUILDING_FOR_MAC
 - (NSAppleEventDescriptor *)scriptingColorDescriptor;
 #endif
 
@@ -250,7 +286,7 @@ static inline UIColor * __attribute__((overloadable)) OAMakeUIColor(OAWhiteAlpha
 
 #endif
 
-#if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_MAC
 typedef struct {
     OALinearRGBA color1, color2;
 } OARGBAColorPair;

@@ -1,4 +1,4 @@
-// Copyright 2010-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -7,23 +7,17 @@
 
 #import <OmniDocumentStore/ODSScope-Subclass.h>
 
-#import <MobileCoreServices/MobileCoreServices.h>
 #import <OmniDocumentStore/ODSErrors.h>
 #import <OmniDocumentStore/ODSFolderItem.h>
 #import <OmniDocumentStore/ODSUtilities.h>
-#import <OmniFoundation/NSFileCoordinator-OFExtensions.h>
-#import <OmniFoundation/NSFileManager-OFTemporaryPath.h>
-#import <OmniFoundation/NSSet-OFExtensions.h>
-#import <OmniFoundation/NSString-OFPathExtensions.h>
-#import <OmniFoundation/NSURL-OFExtensions.h>
-#import <OmniFoundation/OFFileEdit.h>
-#import <OmniFoundation/OFFileMotionResult.h>
-#import <OmniFoundation/OFUTI.h>
 
 #import "ODSStore-Internal.h"
 #import "ODSFileItem-Internal.h"
 #import "ODSItem-Internal.h"
 #import "ODSScope-Internal.h"
+
+@import MobileCoreServices;
+@import OmniFoundation;
 
 RCS_ID("$Id$");
 
@@ -237,7 +231,7 @@ static NSString *_makeCanonicalPath(NSString *path)
         if (otherFileItem.scope != self)
             continue; // cache keys aren't comparable across scopes
         
-        OBFinishPortingLater("move this to subclasses ... OFX scope doesn't care about cache key goop. Can also relax the restriction that document directories end in Documents for OFX");
+        OBFinishPortingLater("<bug:///147935> (iOS-OmniOutliner Engineering: move this to subclasses ... OFX scope doesn't care about cache key goop. Can also relax the restriction that document directories end in Documents for OFX)");
         OBASSERT(OFNOTEQUAL(ODSScopeCacheKeyForURL(otherFileItem.fileURL), ODSScopeCacheKeyForURL(fileURL)));
     }
 #endif
@@ -350,7 +344,7 @@ static void _addItemAndNotifyHandler(ODSScope *self, OFFileMotionResult *motionR
 
 - (NSURL *)urlForNewDocumentInFolderAtURL:(NSURL *)folderURL baseName:(NSString *)baseName fileType:(NSString *)documentUTI;
 {
-    OBPRECONDITION([NSOperationQueue currentQueue] == _actionOperationQueue);
+    OBPRECONDITION([NSOperationQueue currentQueue] == _actionOperationQueue, "bug:///137297");
     
     OBPRECONDITION(documentUTI);
     
@@ -463,7 +457,7 @@ static OFFileEdit *_performAdd(ODSScope *scope, NSURL *fromURL, NSURL *toURL, Ad
              if (!replaced) {
                  if (![replaceError hasUnderlyingErrorDomain:NSPOSIXErrorDomain code:ENOENT]) {
                      innerError = replaceError;
-                     [replaceError log:@"Error replacing %@ with %@", toURL, newWritingURL];
+                     [replaceError log:@"Error replacing %@ with %@", newWritingURL, moveSourceURL];
                      return;
                  }
              }
@@ -471,13 +465,20 @@ static OFFileEdit *_performAdd(ODSScope *scope, NSURL *fromURL, NSURL *toURL, Ad
          
          if (!replaced) {
              __autoreleasing NSError *moveError = nil;
-             if (![coordinator moveItemAtURL:moveSourceURL toURL:toURL createIntermediateDirectories:(options & AddByCreatingParentDirectories) error:&moveError]) {
-                 NSLog(@"Error moving %@ -> %@: %@", moveSourceURL, toURL, [moveError toPropertyList]);
+             if (![coordinator moveItemAtURL:moveSourceURL toURL:newWritingURL createIntermediateDirectories:(options & AddByCreatingParentDirectories) error:&moveError]) {
+                 NSLog(@"Error moving %@ -> %@: %@", moveSourceURL, newWritingURL, [moveError toPropertyList]);
                  innerError = moveError;
                  return;
              }
          }
-         
+
+         // We are making a new file here, so make sure the modification date is updated (for our initial user edit date). If needed, we could pass a flag in to disable this (or switch this off by default, but have a flag to enable it). The important bit is that we do this on the background file queue before we look up the fileEdit.
+         __autoreleasing NSError *touchError;
+         if (![[NSFileManager defaultManager] touchItemAtURL:newWritingURL error:NULL]) {
+             [touchError log:@"Cannot update modification date of %@", newWritingURL];
+             // not fatal...
+         }
+
          __autoreleasing NSError *fileError = nil;
          fileEdit = [[OFFileEdit alloc] initWithFileURL:newWritingURL error:&fileError];
          if (!fileEdit) {
@@ -766,10 +767,13 @@ static OFFileEdit *_performAdd(ODSScope *scope, NSURL *fromURL, NSURL *toURL, Ad
             [self _updateItemTree];
             
             if (completionHandler) {
-                // Give the completion handler the immediate children of parentFolder that were created (so if we had "a/b/c" duplicating "a/b" to "a/b2", we'd pass back "a/b2" not "a/b2/c".
-                NSSet *addedChildren = [parentFolder childrenContainingItems:createdFileItems];
-                DEBUG_STORE(@"%@ yielded added children %@", motionType, [addedChildren valueForKey:@"shortDescription"]);
-                completionHandler(addedChildren);
+                NSSet *moveItems = createdFileItems;
+                if ([motionType isEqualToString:@"COPY"]) {
+                    // Give the completion handler the immediate children of parentFolder that were created (so if we had "a/b/c" duplicating "a/b" to "a/b2", we'd pass back "a/b2" not "a/b2/c".
+                    moveItems = [parentFolder childrenContainingItems:moveItems];
+                }
+                DEBUG_STORE(@"%@ yielded added children %@", motionType, [moveItems valueForKey:@"shortDescription"]);
+                completionHandler(moveItems);
             }
         }];
     }];
@@ -997,12 +1001,22 @@ static NSString *_filenameForUserGivenFolderName(NSString *name)
     __block BOOL success = NO;
     if (shouldUseCoordinator) {
         NSFileCoordinator *coordinator = [[NSFileCoordinator alloc] initWithFilePresenter:nil];
+        __block NSError *strongError = nil;
         [coordinator coordinateWritingItemAtURL:sourceURL options:NSFileCoordinatorWritingForMoving writingItemAtURL:destinationURL options:NSFileCoordinatorWritingForMerging error:outError byAccessor:^(NSURL *newURL1, NSURL *newURL2) {
 
             DEBUG_STORE(@"Moving document: %@ -> %@ (scope %@)", sourceURL, destinationURL, self);
             // The documentation also says that this method does a coordinated move, so we don't need to (and in fact, experimentally, if we try we deadlock).
-            success = [[NSFileManager defaultManager] moveItemAtURL:sourceURL toURL:destinationURL error:outError];
+            __autoreleasing NSError *error;
+            success = [[NSFileManager defaultManager] moveItemAtURL:sourceURL toURL:destinationURL error:&error];
+            if (!success) {
+                strongError = error;
+            }
         }];
+        if (!success) {
+            if (outError) {
+                *outError = strongError;
+            }
+        }
     } else {
         DEBUG_STORE(@"Moving document (without extra coordination): %@ -> %@ (scope %@)", sourceURL, destinationURL, self);
         success = [[NSFileManager defaultManager] moveItemAtURL:sourceURL toURL:destinationURL error:outError];
@@ -1036,6 +1050,7 @@ static NSString *_filenameForUserGivenFolderName(NSString *name)
         destinationFolderURL = [sourceFolderURL URLByAppendingPathComponent:destinationFolderName isDirectory:YES];
 
         destinationRelativePath = OFFileURLRelativePath(self.documentsURL, destinationFolderURL);
+        OBASSERT_NOTNULL(parentRelativePath);
         OBASSERT([destinationRelativePath isEqualToString:[parentRelativePath stringByAppendingPathComponent:destinationFolderName]]);
     }
     
@@ -1100,12 +1115,23 @@ static ODSScope *_trashScope = nil;
     assert(trashScope != nil);
 
     __block BOOL success = NO;
+    __block NSError *strongError = nil;
     __block NSURL *resultingURL = nil;
     [trashScope _performSynchronousFileAccessUsingBlock:^{
         NSMutableSet *usedFilenames = [trashScope _copyCurrentlyUsedFileNamesInFolderAtURL:nil];
-        resultingURL = [trashScope _moveURL:url avoidingFileNames:usedFilenames usingCoordinator:NO error:outError];
+
+        __autoreleasing NSError *error = nil;
+        resultingURL = [trashScope _moveURL:url avoidingFileNames:usedFilenames usingCoordinator:NO error:&error];
+        if (!resultingURL) {
+            strongError = error;
+        }
+
         success = (resultingURL != nil);
     }];
+
+    if (!success && outError) {
+        *outError = strongError;
+    }
 
     if (outResultingURL != NULL && resultingURL != nil)
         *outResultingURL = resultingURL;
@@ -1198,7 +1224,7 @@ static ODSScope *_templateScope = nil;
     void (^motionCompletion)(NSSet *createdItems) = ^(NSSet *createdItems){
         OBASSERT([NSThread isMainThread]);
         if (completionHandler)
-            completionHandler(movedFileItems, errors);
+            completionHandler(createdItems, errors);
     };
     
     // TODO: This is ugly. In the case of a move, at least, we want to pass the file presenter that would hear about the move so that it will not get notifications. We do this since we have to handle the notifications ourselves anyway (since sometimes they don't get sent -- for case-only renames, for example). ODSLocalDirectoryScope conforms, but OFXDocumentStoreScope does not, leaving OFXAccountAgent to deal with NSFilePresenter.
@@ -1391,8 +1417,10 @@ NSString *ODSScopeFindAvailableName(NSSet *usedFileNames, NSString *baseName, NS
             counter++;
         }
         
-        if (![NSString isEmptyString:extension]) // Is nil when we are creating new folders
+        if (![NSString isEmptyString:extension]) { // Is nil when we are creating new folders
+            OBASSERT_NOTNULL(extension);
             candidateName = [candidateName stringByAppendingPathExtension:extension];
+        }
         
         // Not using -memeber: because it uses -isEqual: which was incorrectly returning nil with some Japanese filenames.
         NSString *matchedFileName = [usedFileNames any:^BOOL(id object) {

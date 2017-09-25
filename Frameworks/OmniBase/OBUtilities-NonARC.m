@@ -1,4 +1,4 @@
-// Copyright 1997-2010, 2012-2014 Omni Development, Inc. All rights reserved.
+// Copyright 1997-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -10,16 +10,6 @@
 #import <OmniBase/rcsid.h>
 
 RCS_ID("$Id$");
-
-id OBAllocateObjectWithIndexedIvars(Class cls, size_t indexedIvarsSize)
-{
-    return NSAllocateObject(cls, indexedIvarsSize, NULL);
-}
-
-void *OBObjectGetIndexedIvars(id object)
-{
-    return object_getIndexedIvars(object);
-}
 
 void OBObjectGetUnsafeObjectIvar(id object, const char *ivarName, __unsafe_unretained id *outValue)
 {

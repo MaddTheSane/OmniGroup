@@ -1,4 +1,4 @@
-// Copyright 2010-2015 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -20,9 +20,17 @@
 @property (nonatomic) BOOL drawsBorder;
 
 /// If set, called to get various appearance properties. If nil, default values are used
-@property (nonatomic, weak) id <OUINoteTextViewAppearanceDelegate> appearanceDelegate;
+@property (nonatomic, weak) IBOutlet id <OUINoteTextViewAppearanceDelegate> appearanceDelegate;
 
 - (void)appearanceDidChange;
+
+// -------------------------------------------------------------------------
+// Properties to communicate to subclasses when textStorage attributes are changing for internal reasons.
+@property (nonatomic, readonly, getter=isConfiguringForEditing) BOOL configuringForEditing;
+@property (nonatomic, readonly, getter=isChangingThemedAppearance) BOOL changingThemedAppearance;
+@property (nonatomic, readonly, getter=isResigningFirstResponder) BOOL resigningFirstResponder;
+// -------------------------------------------------------------------------
+
 
 @end
 

@@ -1,4 +1,4 @@
-// Copyright 2010-2015 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -165,7 +165,6 @@ NSString * const OUIDocumentNavigationItemOriginalDocumentNameUserInfoKey = @"OU
 {
     [super setTitle:title];
     _documentTitleView.title = title;
-    [_documentTitleView sizeToFit];
 }
 
 // We allow overriding the title temporarily (while in Edit mode on the toolbar, for example, to display instructional text). When the titleView is set back to nil we use our normal rename UI.
@@ -318,6 +317,10 @@ NSString * const OUIDocumentNavigationItemOriginalDocumentNameUserInfoKey = @"OU
 
 - (void)documentTitleView:(OUIDocumentTitleView *)documentTitleView titleTapped:(id)sender;
 {
+    if (_renaming) {
+        return;
+    }
+    
     _renaming = YES;
     [self _updateItemsForRenaming];
 }
@@ -347,6 +350,7 @@ NSString * const OUIDocumentNavigationItemOriginalDocumentNameUserInfoKey = @"OU
             
             // Set our textField as the titleView and give it focus.
             self.titleView = _documentTitleTextFieldView;
+            _documentTitleTextField.returnKeyType = UIReturnKeyDone;
             [_documentTitleTextField becomeFirstResponder];
             
             // Add Shild View

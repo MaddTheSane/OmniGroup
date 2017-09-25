@@ -1,4 +1,4 @@
-// Copyright 2015-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2015-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -30,12 +30,20 @@ public struct UTI {
 
     public static let Zip = UTI("com.pkware.zip-archive") // This is the base type for public.zip-archive, but the latter defines a 'zip' extension, while this is usable for zip-formatted files that don't use that extension.
 
+    public static let UTF8PlainText = UTI(kUTTypeUTF8PlainText as String)
+    public static let PlainText = UTI(kUTTypePlainText as String)
+
     public static func fileType(forFileURL fileURL:URL, preferringNative:Bool = true) throws -> UTI {
         var error:NSError?
         if let rawFileType = OFUTIForFileURLPreferringNative(fileURL, &error) {
             return UTI(rawFileType)
         }
-        throw error!
+        if let error_ = error {
+            throw error_
+        } else {
+            assertionFailure("Should fill out the error")
+            throw NSError(domain: "UTI", code: 0) // some unknown error
+        }
     }
 
     public static func fileType(forPathExtension pathExtension:String, isDirectory:Bool?, preferringNative:Bool = true) throws -> UTI {

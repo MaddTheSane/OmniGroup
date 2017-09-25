@@ -1,4 +1,4 @@
-// Copyright 2010-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -63,9 +63,16 @@ RCS_ID("$Id$")
 
 #pragma mark - OUIAppController
 
+#if 0
 - (NSString *)aboutMenuTitle;
 {
     return nil; // Hides the 'About' item in the gear menu
+}
+#endif
+
+- (NSURL *)aboutScreenURL;
+{
+    return [NSURL URLWithString:@"data:"];
 }
 
 #pragma mark - OUIAppController (InAppStore)

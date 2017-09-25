@@ -21,11 +21,7 @@ RCS_ID("$Id$")
 @property (nonatomic, weak) OIInspectorRegistry *inspectorRegistry;
 @property (nonatomic, strong) OFMutableBijection *inspectorViewsByIdentifier;
 @property (nonatomic, strong) NSMutableDictionary *inspectorViewWidthConstraintsByIdentifier;
-//@property (nonatomic, strong) OFIEqualityConstraintManager *equalLabelWidthsConstraintManager;
-//
-//@property (nonatomic, strong) OFITextField *noSelectionLabel;
-//
-//@property (nonatomic, assign, getter = isObservingInspectorExpandednessChanges) BOOL observingInspectorExpandednessChanges;
+@property (nonatomic, assign) BOOL showSlicesWithNoObjects;
 
 @end
 
@@ -36,15 +32,18 @@ RCS_ID("$Id$")
     if ((self = [super initWithDictionary:dict inspectorRegistry:inspectorRegistry bundle:sourceBundle]) == nil)
         return nil;
     
+    _showSlicesWithNoObjects = [[dict objectForKey:@"showSlicesWithNoObjects"] boolValue];
+    
     self.inspectorRegistry = inspectorRegistry;
     _sliceControllers = [[NSMutableArray alloc] init];
 
     // Read our sub-inspectors from the plist
     for (NSDictionary *slicePlist in [dict objectForKey:@"slices"]) {
         NSString *identifier = [slicePlist objectForKey:@"identifier"];
-        if ([self shouldHideSliceWithIdentifier:identifier]) // OP uses this to hide non-Pro slices
+        NSObject *appDelegate = (NSObject *)[[NSApplication sharedApplication] delegate];
+        if (![appDelegate shouldLoadInspectorWithIdentifier:identifier inspectorRegistry:inspectorRegistry])
             continue;
-        
+
         OIInspector <OIConcreteInspector> *inspector = [OIInspector inspectorWithDictionary:slicePlist inspectorRegistry:inspectorRegistry bundle:sourceBundle];
         
         if (!inspector) {
@@ -52,7 +51,7 @@ RCS_ID("$Id$")
             return nil;
         }
 
-        OIAutoLayoutInspectorController *controller = [[OIAutoLayoutInspectorController alloc] initWithInspector:inspector];
+        OIAutoLayoutInspectorController *controller = [[OIAutoLayoutInspectorController alloc] initWithInspector:inspector inspectorRegistry:inspectorRegistry];
         controller.interfaceType = OIInspectorInterfaceTypeEmbedded;
         
         if (!controller)
@@ -97,9 +96,13 @@ RCS_ID("$Id$")
     return nil;
 }
 
-- (BOOL)shouldHideSliceWithIdentifier:(NSString *)identifier;
+- (NSArray <OIInspector *> *)sliceInspectors;
 {
-    return NO;
+    NSMutableArray *result = [NSMutableArray array];
+    for (OIInspectorController *inspectorController in _sliceControllers) {
+        [result addObject:inspectorController.inspector];
+    }
+    return result;
 }
 
 #pragma mark -
@@ -119,7 +122,7 @@ RCS_ID("$Id$")
     for (OIAutoLayoutInspectorController *slice in _sliceControllers) {
         OIInspector<OIConcreteInspector> *sliceInspector = slice.inspector;
         NSArray *interestingObjects = [self.inspectorRegistry copyObjectsInterestingToInspector:sliceInspector];
-        BOOL showInspector = NO;
+        BOOL showInspector = self.showSlicesWithNoObjects;
         for (id object in interestingObjects) {
             if ([sliceInspector shouldBeUsedForObject:object]) {
                 showInspector = YES;
@@ -142,10 +145,8 @@ RCS_ID("$Id$")
     OBPRECONDITION([self.containerStackView isDescendantOf:self.view]);
     OBPRECONDITION(self.inspectorViewsByIdentifier == nil);
     OBPRECONDITION(self.inspectorViewWidthConstraintsByIdentifier == nil);
-    //    OBPRECONDITION(self.equalLabelWidthsConstraintManager == nil);
     
     self.inspectorViewsByIdentifier = [OFMutableBijection bijection];
-    //    self.equalLabelWidthsConstraintManager = [[OFIEqualityConstraintManager alloc] initWithContainer:self attribute:NSLayoutAttributeWidth];
 
     NSSet *inspectorIdentifiers = [_sliceControllers setByPerformingBlock:^id(OIInspectorController *controller) {
         return controller.inspectorIdentifier;
@@ -190,10 +191,6 @@ RCS_ID("$Id$")
 {
     OBExpectDeallocation(_containerStackView);
     _containerStackView.delegate = nil;
-    
-    //    _equalLabelWidthsConstraintManager = nil;
-    //
-    //    _noSelectionLabel = nil;
 }
 
 #pragma mark - NSView subclass
@@ -222,8 +219,8 @@ RCS_ID("$Id$")
     OBPRECONDITION(self.inspectorViewWidthConstraintsByIdentifier != nil);
     OBPRECONDITION(self.inspectorViewWidthConstraintsByIdentifier[identifier] != nil);
     
-    [self.view removeConstraint:self.inspectorViewWidthConstraintsByIdentifier[identifier]];
-//    [self.inspectorViewWidthConstraintsByIdentifier removeObjectForKey:identifier];
+    NSLayoutConstraint *constraint = self.inspectorViewWidthConstraintsByIdentifier[identifier];
+    constraint.active = NO;
 }
 
 - (void)_addInspectorWidthConstraintForIdentifier:(NSString *)identifier;
@@ -232,20 +229,23 @@ RCS_ID("$Id$")
         self.inspectorViewWidthConstraintsByIdentifier = [NSMutableDictionary dictionary];
     }
     
-    OBASSERT(self.inspectorViewWidthConstraintsByIdentifier[identifier] == nil);
-    
-    NSView *view = self.inspectorViewsByIdentifier[identifier];
-    
-    NSLayoutConstraint *constraint = [NSLayoutConstraint constraintWithItem:view
-                                                                  attribute:NSLayoutAttributeWidth
-                                                                  relatedBy:NSLayoutRelationEqual
-                                                                     toItem:self.view
-                                                                  attribute:NSLayoutAttributeWidth
-                                                                 multiplier:1.0f
-                                                                   constant:0.0f];
-    
-    [self.view addConstraint:constraint];
-    self.inspectorViewWidthConstraintsByIdentifier[identifier] = constraint;
+    if (!self.inspectorViewWidthConstraintsByIdentifier[identifier]) {
+        NSView *view = self.inspectorViewsByIdentifier[identifier];
+        
+        NSLayoutConstraint *constraint = [NSLayoutConstraint constraintWithItem:view
+                                                                      attribute:NSLayoutAttributeWidth
+                                                                      relatedBy:NSLayoutRelationEqual
+                                                                         toItem:self.view
+                                                                      attribute:NSLayoutAttributeWidth
+                                                                     multiplier:1.0f
+                                                                       constant:0.0f];
+        
+        [self.view addConstraint:constraint];
+        self.inspectorViewWidthConstraintsByIdentifier[identifier] = constraint;
+    } else {
+        NSLayoutConstraint *constraint = self.inspectorViewWidthConstraintsByIdentifier[identifier];
+        constraint.active = YES;
+    }
 }
 
 #pragma mark - NSStackViewDelegate
@@ -259,11 +259,6 @@ RCS_ID("$Id$")
         
         NSString *identifier = [self.inspectorViewsByIdentifier keyForObject:view];
         [self _removeInspectorWidthConstraintForIdentifier:identifier];
-        //
-        //        OIInspectorController *inspectorController = [self.inspectorRegistry controllerWithIdentifier:identifier];
-        //        OIInspector *inspector = [inspectorController inspector];
-        //        if ([inspector conformsToProtocol:@protocol(OFIInspectorLabeledContentLayout)])
-        //            [self.equalLabelWidthsConstraintManager removeViews:[(id<OFIInspectorLabeledContentLayout>)inspector labelsRequiringEqualWidthConstraints]];
     }
 }
 
@@ -275,11 +270,6 @@ RCS_ID("$Id$")
         OBASSERT([[self.inspectorViewsByIdentifier allObjects] containsObject:view]);
         NSString *identifier = [self.inspectorViewsByIdentifier keyForObject:view];
         [self _addInspectorWidthConstraintForIdentifier:identifier];
-        
-        //        OIInspectorController *inspectorController = [self.inspectorRegistry controllerWithIdentifier:identifier];
-        //        OIInspector *inspector = [inspectorController inspector];
-        //        if ([inspector conformsToProtocol:@protocol(OFIInspectorLabeledContentLayout)])
-        //            [self.equalLabelWidthsConstraintManager addViews:[(id<OFIInspectorLabeledContentLayout>)inspector labelsRequiringEqualWidthConstraints]];
     }
 }
 
@@ -324,7 +314,7 @@ RCS_ID("$Id$")
     noSelectionShadow.shadowOffset = (NSSize){.width = 0, .height = -1.0f};
     NSString *noSelection = NSLocalizedStringFromTableInBundle(@"No Selection", @"OmniInspector", [OIInspectorRegistry bundle], @"no selection placeholder string");
     NSDictionary *attributes = @{ NSFontAttributeName : [NSFont boldSystemFontOfSize:20.0f],
-                                  NSForegroundColorAttributeName : [NSColor colorWithCalibratedHue:0.0f saturation:0.0f brightness:0.75f alpha:1.0f],
+                                  NSForegroundColorAttributeName : [NSColor colorWithHue:0.0f saturation:0.0f brightness:0.75f alpha:1.0f],
                                   NSShadowAttributeName : noSelectionShadow };
     NSAttributedString *noSelectionString = [[NSAttributedString alloc] initWithString:noSelection
                                                                             attributes:attributes];

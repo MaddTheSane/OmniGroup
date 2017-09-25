@@ -1,4 +1,4 @@
-// Copyright 2010-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -9,11 +9,13 @@
 
 #import <MessageUI/MessageUI.h>
 #import <WebKit/WebKit.h>
+#import <MobileCoreServices/MobileCoreServices.h>
 
 #import <OmniFoundation/OFOrderedMutableDictionary.h>
 #import <OmniFoundation/OFVersionNumber.h>
 #import <OmniUI/OUIAppController.h>
 #import <OmniUI/OUIBarButtonItem.h>
+#import <OmniUI/UIPopoverPresentationController-OUIExtensions.h>
 
 RCS_ID("$Id$")
 
@@ -63,23 +65,32 @@ RCS_ID("$Id$")
 
 - (IBAction)close:(id)sender;
 {
-    if ([_delegate respondsToSelector:@selector(webViewControllerDidClose:)]) {
-        [_delegate webViewControllerDidClose:self];
-    }
+    if ([_delegate respondsToSelector:@selector(webViewControllerShouldClose:)] && ![_delegate webViewControllerShouldClose:self])
+        return;
+
+    [self dismissViewControllerAnimated:YES completion:^{
+        if (_closeBlock != NULL) {
+            _closeBlock(self);
+        }
+    }];
 }
 
 #pragma mark - API
 
-- (void)_updateBarButtonItemForURL:(NSURL *)aURL;
+- (void)_updateBarButtonItems;
 {
-    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(close:)];
+    NSMutableArray <UIBarButtonItem *> *items = [NSMutableArray array];
+
+    [items addObject: [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(close:)]];
+
+    self.navigationItem.rightBarButtonItems = items;
 }
 
 - (void)setURL:(NSURL *)aURL;
 {
     NSURLRequest *request = [[NSURLRequest alloc] initWithURL:aURL];
     [self.webView loadRequest:request];
-    [self _updateBarButtonItemForURL:aURL];
+    [self _updateBarButtonItems];
     [self startSpinner];
 }
 
@@ -104,6 +115,17 @@ RCS_ID("$Id$")
     [self.webView loadData:data MIMEType:mimeType characterEncodingName:@"utf-8" baseURL:baseURL];
 }
 
+- (void)invokeJavaScriptBeforeLoad:(NSString *)javaScript;
+{
+    OBPRECONDITION(javaScript != nil);
+    if (javaScript == nil) {
+        return;
+    }
+    
+    WKUserScript *userScript = [[WKUserScript alloc] initWithSource:javaScript injectionTime:WKUserScriptInjectionTimeAtDocumentStart forMainFrameOnly:YES];
+    [self.webView.configuration.userContentController addUserScript:userScript];
+}
+
 - (void)invokeJavaScriptAfterLoad:(NSString *)javaScript completionHandler:(void (^)(id, NSError *))completionHandler;
 {
     OBPRECONDITION(javaScript != nil);
@@ -120,6 +142,25 @@ RCS_ID("$Id$")
     self.onLoadJavaScripts[javaScript] = [completionHandler copy] ?: [NSNull null];
 }
 
+- (void)callJavaScript:(NSString *)javaScript completionHandler:(void (^)(id, NSError *error))completionHandler;
+{
+#ifdef DEBUG_kc
+    NSLog(@"DEBUG JAVASCRIPT: %@", javaScript);
+#endif
+    [self.webView evaluateJavaScript:javaScript completionHandler:completionHandler];
+}
+
+- (void)callJavaScriptFunction:(NSString *)function withJSONParameters:(id)parameters completionHandler:(void (^)(id, NSError *error))completionHandler;
+{
+    NSError *jsonError = nil;
+    NSString *parametersArchive = [[NSString alloc] initWithData:[NSJSONSerialization dataWithJSONObject:parameters options:0 error:&jsonError] encoding:NSUTF8StringEncoding];
+    if (parametersArchive == nil) {
+        completionHandler(nil, jsonError);
+    } else {
+        [self callJavaScript:[NSString stringWithFormat:@"%@(%@)", function, parametersArchive] completionHandler:completionHandler];
+    }
+}
+
 #pragma mark - MFMailComposeViewControllerDelegate
 
 - (void)mailComposeController:(MFMailComposeViewController *)controller didFinishWithResult:(MFMailComposeResult)result error:(NSError *)error;
@@ -132,23 +173,38 @@ RCS_ID("$Id$")
 - (void)webView:(WKWebView *)webView decidePolicyForNavigationAction:(WKNavigationAction *)navigationAction decisionHandler:(void (^)(WKNavigationActionPolicy))decisionHandler NS_EXTENSION_UNAVAILABLE_IOS("");
 {
     NSURL *requestURL = [navigationAction.request URL];
+    NSString *scheme = [[requestURL scheme] lowercaseString];
+    
+    // Callback
+    if ([scheme isEqualToString:@"callback"]) {
+        if (_callbackBlock != NULL) {
+            NSString *callback = requestURL.resourceSpecifier;
+            _callbackBlock(self, callback);
+        }
+        decisionHandler(WKNavigationActionPolicyCancel);
+        return; // Don't load this in the WebView
+    }
 
-    if (navigationAction.navigationType == WKNavigationTypeLinkActivated) {
+    // Special URL
+    if ([OUIAppController canHandleURLScheme:scheme] && [[[UIApplication sharedApplication] delegate] application:[UIApplication sharedApplication] openURL:requestURL options:@{UIApplicationOpenURLOptionsOpenInPlaceKey : @(NO), UIApplicationOpenURLOptionsSourceApplicationKey : [[NSBundle mainBundle] bundleIdentifier]}]) {
+        decisionHandler(WKNavigationActionPolicyCancel);
+        return; // Don't load this in the WebView
+    }
+
+    // Mailto link
+    if ([scheme isEqualToString:@"mailto"]) {
+        MFMailComposeViewController *controller = [[MFMailComposeViewController alloc] init];
+        controller.mailComposeDelegate = self;
+        [controller setToRecipients:[NSArray arrayWithObject:[requestURL resourceSpecifier]]];
+        [self presentViewController:controller animated:YES completion:nil];
+        decisionHandler(WKNavigationActionPolicyCancel);
+        return; // Don't load this in the WebView
+    }
+
+    if (navigationAction.navigationType == WKNavigationTypeLinkActivated || navigationAction.navigationType == WKNavigationTypeOther) {
 #ifdef DEBUG_kc
         NSLog(@"WebView link: %@", requestURL);
 #endif
-
-        NSString *scheme = [[requestURL scheme] lowercaseString];
-
-        // Mailto link
-        if ([scheme isEqualToString:@"mailto"]) {
-            MFMailComposeViewController *controller = [[MFMailComposeViewController alloc] init];
-            controller.mailComposeDelegate = self;
-            [controller setToRecipients:[NSArray arrayWithObject:[requestURL resourceSpecifier]]];
-            [self presentViewController:controller animated:YES completion:nil];
-            decisionHandler(WKNavigationActionPolicyCancel);
-            return; // Don't load this in the WebView
-        }
 
         // Explicitly kick over to Safari
         if ([scheme isEqualToString:@"x-safari"]) { // Hand off x-safari URLs to the OS
@@ -159,10 +215,13 @@ RCS_ID("$Id$")
             }
         }
 
+        // Our load request should be handled locally
+        BOOL isLoadRequest = [requestURL isEqual:self.URL] && (navigationAction.navigationType == WKNavigationTypeOther);
 
-        // Implicitly kick web all URLs over to Safari 
-        BOOL isWebURL = !([requestURL isFileURL]);
-
+        // Implicitly kick web all URLs over to Safari
+        BOOL isLocalAnchor = [scheme isEqualToString:@"x-invalid"];
+        BOOL isWebURL = !isLoadRequest && !isLocalAnchor && ![requestURL isFileURL];
+        
         if (isWebURL) {
             if ([[UIApplication sharedApplication] openURL:requestURL] == NO) {
                 NSString *alertTitle = NSLocalizedStringFromTableInBundle(@"Link could not be opened. Please check Safari restrictions in Settings.", @"OmniUI", OMNI_BUNDLE, @"Web view error opening URL title.");
@@ -179,24 +238,30 @@ RCS_ID("$Id$")
             decisionHandler(WKNavigationActionPolicyCancel);
             return;
         }
-
-        // Special URL
-        if ([OUIAppController canHandleURLScheme:scheme] && [[[UIApplication sharedApplication] delegate] application:[UIApplication sharedApplication] openURL:requestURL options:@{UIApplicationOpenURLOptionsOpenInPlaceKey : @(NO), UIApplicationOpenURLOptionsSourceApplicationKey : [[NSBundle mainBundle] bundleIdentifier]}]) {
-            decisionHandler(WKNavigationActionPolicyCancel);
-            return; // Don't load this in the WebView
-        }
     }
 
     // Go ahead and load this in the WebView
-    [self _updateBarButtonItemForURL:requestURL];
+    [self _updateBarButtonItems];
 
     // we have removed the back button so if you get here, hopefully you are our initial launch page and nothing else.
     decisionHandler(WKNavigationActionPolicyAllow);
 }
 
+- (void)webView:(WKWebView *)webView didCommitNavigation:(null_unspecified WKNavigation *)navigation;
+{
+    if (_commitLoadBlock != NULL) {
+        _commitLoadBlock(self, webView.URL);
+    }
+}
+
 - (void)webView:(WKWebView *)webView didFinishNavigation:(WKNavigation *)navigation;
 {
     [self endSpinner];
+
+    if (_reloadBlock != NULL) {
+        _reloadBlock(self, webView.URL);
+    }
+
     [self _runOnLoadJavaScripts];
 }
 
@@ -312,7 +377,7 @@ RCS_ID("$Id$")
     // Avoid creating a retain cycle here; we don't want to keep the web view alive and processing onload scripts when this view controller has been dismissed
     __weak typeof(self) weakSelf = self;
     NSString *javaScript = OB_CHECKED_CAST(NSString, [self.onLoadJavaScripts keyAtIndex:0]);
-    [self.webView evaluateJavaScript:javaScript completionHandler:^(id _Nullable result, NSError * _Nullable error) {
+    [self.webView evaluateJavaScript:javaScript completionHandler:^(id result, NSError *error) {
         __strong typeof(self) strongSelf = weakSelf;
         if (strongSelf == nil) {
             return;

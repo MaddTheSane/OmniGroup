@@ -1,4 +1,4 @@
-// Copyright 2003-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2003-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -13,6 +13,7 @@
 #import <OmniFoundation/OFXMLCursor.h>
 #import <OmniFoundation/OFXMLElement.h>
 #import <OmniFoundation/OFXMLString.h>
+#import <OmniFoundation/OFXMLComment.h>
 #import <OmniFoundation/OFXMLBuffer.h>
 #import <OmniFoundation/OFXMLUnparsedElement.h>
 #import <OmniFoundation/OFXMLQName.h>
@@ -47,24 +48,34 @@ NS_ASSUME_NONNULL_BEGIN
 
     // Support for callers to squirrel away state and then extract it again.
     NSMutableDictionary *_userObjects;
+
+    // Set while we are parsing, in order to read the root element.
+    OFXMLElementParser *_elementParser;
+}
+
++ (Class)elementParserClass;
+{
+    return [OFXMLElementParser class];
 }
 
 - (nullable instancetype)initWithRootElement:(OFXMLElement *)rootElement
-          dtdSystemID:(nullable CFURLRef)dtdSystemID
-          dtdPublicID:(nullable NSString *)dtdPublicID
-   whitespaceBehavior:(nullable OFXMLWhitespaceBehavior *)whitespaceBehavior
-       stringEncoding:(CFStringEncoding)stringEncoding
-                error:(NSError **)outError;
+                                 dtdSystemID:(nullable CFURLRef)dtdSystemID
+                                 dtdPublicID:(nullable NSString *)dtdPublicID
+                                    schemaID:(nullable CFURLRef)schemaID
+                             schemaNamespace:(nullable NSString *)schemaNamespace
+                          whitespaceBehavior:(nullable OFXMLWhitespaceBehavior *)whitespaceBehavior
+                              stringEncoding:(CFStringEncoding)stringEncoding
+                                       error:(NSError **)outError;
 {
     OBPRECONDITION(rootElement);
-    
+
     if (!(self = [super init]))
         return nil;
     [self _preInit];
 
     if (!whitespaceBehavior)
         whitespaceBehavior = [OFXMLWhitespaceBehavior autoWhitespaceBehavior];
-    
+
     NSString *encodingName = (NSString *)CFStringConvertEncodingToIANACharSetName(stringEncoding);
     if (!encodingName) {
         OBASSERT_NOT_REACHED("Unable to determine the IANA character set name for the given CFStringEncoding");
@@ -77,14 +88,28 @@ NS_ASSUME_NONNULL_BEGIN
     if (dtdSystemID)
         _dtdSystemID = CFRetain(dtdSystemID);
     _dtdPublicID = [dtdPublicID copy];
-    
+
+    if (schemaID)
+        _schemaID = CFRetain(schemaID);
+    _schemaNamespace = [schemaNamespace copy];
+
     _stringEncoding = stringEncoding;
     _rootElement = [rootElement retain];
     _whitespaceBehavior = [whitespaceBehavior retain];
-    
+
     [_elementStack addObject:_rootElement];
-    
+
     return [self _commonSetupSuffix:outError];
+}
+
+- (nullable instancetype)initWithRootElement:(OFXMLElement *)rootElement
+          dtdSystemID:(nullable CFURLRef)dtdSystemID
+          dtdPublicID:(nullable NSString *)dtdPublicID
+   whitespaceBehavior:(nullable OFXMLWhitespaceBehavior *)whitespaceBehavior
+       stringEncoding:(CFStringEncoding)stringEncoding
+                error:(NSError **)outError;
+{
+    return [self initWithRootElement:rootElement dtdSystemID:dtdSystemID dtdPublicID:dtdPublicID schemaID:NULL schemaNamespace:nil whitespaceBehavior:whitespaceBehavior stringEncoding:stringEncoding error:outError];
 }
 
 - (nullable instancetype)initWithRootElementName:(NSString *)rootElementName
@@ -101,6 +126,22 @@ NS_ASSUME_NONNULL_BEGIN
                   whitespaceBehavior:whitespaceBehavior
                       stringEncoding:stringEncoding
                                error:outError];
+    [element release];
+    return self;
+}
+
+- (nullable instancetype)initWithRootElementName:(NSString *)rootElementName
+                                        schemaID:(nullable CFURLRef)schemaID
+                                 schemaNamespace:(nullable NSString *)schemaNamespace
+                                    namespaceURL:(nullable NSURL *)rootElementNameSpace
+                              whitespaceBehavior:(nullable OFXMLWhitespaceBehavior *)whitespaceBehavior
+                                  stringEncoding:(CFStringEncoding)stringEncoding
+                                           error:(NSError **)outError;
+{
+    OFXMLElement *element = [[OFXMLElement alloc] initWithName:rootElementName];
+    if (rootElementNameSpace)
+        [element setAttribute:@"xmlns" string:[rootElementNameSpace absoluteString]];
+    self = [self initWithRootElement:element dtdSystemID:NULL dtdPublicID:nil schemaID:schemaID schemaNamespace:schemaNamespace whitespaceBehavior:whitespaceBehavior stringEncoding:stringEncoding error:outError];
     [element release];
     return self;
 }
@@ -126,15 +167,34 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (nullable instancetype)initWithData:(NSData *)xmlData whitespaceBehavior:(nullable OFXMLWhitespaceBehavior *)whitespaceBehavior error:(NSError **)outError;
 {
-    // Preserve whitespace by default
-    return [self initWithData:xmlData whitespaceBehavior:whitespaceBehavior defaultWhitespaceBehavior:OFXMLWhitespaceBehaviorTypePreserve error:outError];
+    return [self initWithData:xmlData whitespaceBehavior:whitespaceBehavior prepareParser:nil error:outError];
 }
+
+- (nullable instancetype)initWithData:(NSData *)xmlData whitespaceBehavior:(nullable OFXMLWhitespaceBehavior *)whitespaceBehavior prepareParser:(nullable NS_NOESCAPE OFXMLDocumentPrepareParser)prepareParser error:(NSError **)outError;
+{
+    // Preserve whitespace by default
+    return [self initWithData:xmlData whitespaceBehavior:whitespaceBehavior defaultWhitespaceBehavior:OFXMLWhitespaceBehaviorTypePreserve prepareParser:prepareParser error:outError];
+}
+
 
 - (nullable instancetype)initWithData:(NSData *)xmlData whitespaceBehavior:(nullable OFXMLWhitespaceBehavior *)whitespaceBehavior defaultWhitespaceBehavior:(OFXMLWhitespaceBehaviorType)defaultWhitespaceBehavior error:(NSError **)outError;
 {
-    NSInputStream *inputStream = [[[NSInputStream alloc] initWithData:xmlData] autorelease];
-    return [self initWithInputStream:inputStream whitespaceBehavior:whitespaceBehavior defaultWhitespaceBehavior:defaultWhitespaceBehavior error:outError];
+    return [self initWithData:xmlData whitespaceBehavior:whitespaceBehavior defaultWhitespaceBehavior:defaultWhitespaceBehavior prepareParser:nil error:outError];
 }
+
+- (nullable instancetype)initWithData:(NSData *)xmlData whitespaceBehavior:(nullable OFXMLWhitespaceBehavior *)whitespaceBehavior defaultWhitespaceBehavior:(OFXMLWhitespaceBehaviorType)defaultWhitespaceBehavior prepareParser:(nullable NS_NOESCAPE OFXMLDocumentPrepareParser)prepareParser error:(NSError **)outError;
+{
+    // NSInputStream crashes on 10.12.x with a nil input.
+    if (!xmlData) {
+        OFError(outError, OFXMLDocumentEmptyInputError, @"Cannot create XML document.", @"Nil data passed to create XML document.");
+        [self release];
+        return nil;
+    }
+    
+    NSInputStream *inputStream = [[[NSInputStream alloc] initWithData:xmlData] autorelease];
+    return [self initWithInputStream:inputStream whitespaceBehavior:whitespaceBehavior defaultWhitespaceBehavior:defaultWhitespaceBehavior prepareParser:prepareParser error:outError];
+}
+
 
 - (nullable instancetype)initWithInputStream:(NSInputStream *)inputStream whitespaceBehavior:(nullable OFXMLWhitespaceBehavior *)whitespaceBehavior error:(NSError **)outError;
 {
@@ -144,20 +204,25 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (nullable instancetype)initWithInputStream:(NSInputStream *)inputStream whitespaceBehavior:(nullable OFXMLWhitespaceBehavior *)whitespaceBehavior defaultWhitespaceBehavior:(OFXMLWhitespaceBehaviorType)defaultWhitespaceBehavior error:(NSError **)outError;
 {
+    return [self initWithInputStream:inputStream whitespaceBehavior:whitespaceBehavior defaultWhitespaceBehavior:defaultWhitespaceBehavior prepareParser:nil error:outError];
+}
+
+- (nullable instancetype)initWithInputStream:(NSInputStream *)inputStream whitespaceBehavior:(nullable OFXMLWhitespaceBehavior *)whitespaceBehavior defaultWhitespaceBehavior:(OFXMLWhitespaceBehaviorType)defaultWhitespaceBehavior prepareParser:(nullable NS_NOESCAPE OFXMLDocumentPrepareParser)prepareParser error:(NSError **)outError;
+{
     if (!(self = [super init]))
         return nil;
     [self _preInit];
 
     if (!whitespaceBehavior)
         whitespaceBehavior = [OFXMLWhitespaceBehavior autoWhitespaceBehavior];
-    
+
     _whitespaceBehavior = [whitespaceBehavior retain];
-    
-    if (![self _parseInputStream:inputStream defaultWhitespaceBehavior:defaultWhitespaceBehavior error:outError]) {
+
+    if (![self _parseInputStream:inputStream defaultWhitespaceBehavior:defaultWhitespaceBehavior prepareParser:prepareParser error:outError]) {
         [self release];
         return nil;
     }
-    
+
     return [self _commonSetupSuffix:outError];
 }
 
@@ -167,6 +232,9 @@ NS_ASSUME_NONNULL_BEGIN
     [_processingInstructions release];
     if (_dtdSystemID)
         CFRelease(_dtdSystemID);
+    if (_schemaID) {
+        CFRelease(_schemaID);
+    }
     [_dtdPublicID release];
     [_rootElement release];
     [_loadWarnings release];
@@ -174,6 +242,11 @@ NS_ASSUME_NONNULL_BEGIN
     [_whitespaceBehavior release];
     [_userObjects release];
     [super dealloc];
+}
+
+- (__kindof OFXMLElementParser *)makeElementParser;
+{
+    return [[[OFXMLElementParser alloc] init] autorelease];
 }
 
 - (nullable NSData *)xmlData:(NSError **)outError;
@@ -219,14 +292,18 @@ NS_ASSUME_NONNULL_BEGIN
                 encodingName = CFSTR("UTF-8");
             }
             OFXMLBufferAppendString(xml, encodingName);
-            
-            OFXMLBufferAppendUTF8CString(xml, "\" standalone=\"");
-            if (_standalone)
-                OFXMLBufferAppendUTF8CString(xml, "yes");
-            else
-                OFXMLBufferAppendUTF8CString(xml, "no");
-            OFXMLBufferAppendUTF8CString(xml, "\"?>\n");
-            
+
+            OFXMLBufferAppendUTF8CString(xml, "\"");
+            // the standalone pseudo-attribute is only really necessary for DTD declarations not schema or relax ng.
+            if (_dtdPublicID || _dtdSystemID) {
+                OFXMLBufferAppendUTF8CString(xml, " standalone=\"");
+                if (_standalone)
+                    OFXMLBufferAppendUTF8CString(xml, "yes\"");
+                else
+                    OFXMLBufferAppendUTF8CString(xml, "no\"");
+            }
+            OFXMLBufferAppendUTF8CString(xml, "?>\n");
+
             // Add processing instructions.
             {
                 NSCharacterSet *nonWhitespaceCharacterSet = [[NSCharacterSet whitespaceAndNewlineCharacterSet] invertedSet];
@@ -244,7 +321,13 @@ NS_ASSUME_NONNULL_BEGIN
                     OFXMLBufferAppendUTF8CString(xml, "?>\n");
                 }
             }
-            
+            if (_schemaID && _schemaNamespace) {
+                OFXMLBufferAppendUTF8CString(xml, "<?xml-model href=\"");
+                OFXMLBufferAppendString(xml, CFURLGetString(_schemaID));
+                OFXMLBufferAppendUTF8CString(xml, "\" type=\"application/xml\" schematypens=\"");
+                OFXMLBufferAppendString(xml, (__bridge CFStringRef)_schemaNamespace);
+                OFXMLBufferAppendUTF8CString(xml, "?>\n");
+            }
             if (_dtdPublicID || _dtdSystemID) {
                 OFXMLBufferAppendUTF8CString(xml, "<!DOCTYPE ");
                 OFXMLBufferAppendString(xml, (CFStringRef)[_rootElement name]);
@@ -385,7 +468,7 @@ NS_ASSUME_NONNULL_BEGIN
     [top appendChild: string];
 }
 
-- (void) appendString: (NSString *) string quotingMask: (unsigned int) quotingMask newlineReplacment: (NSString *) newlineReplacment;
+- (void) appendString: (NSString *) string quotingMask: (unsigned int) quotingMask newlineReplacment: (nullable NSString *) newlineReplacment;
 {
     OFXMLElement *top = [self topElement];
     OBASSERT([top isKindOfClass: [OFXMLElement class]]);
@@ -433,7 +516,7 @@ NS_ASSUME_NONNULL_BEGIN
     [[self topElement] setAttribute: name double: value format: @"%.15g"];
 }
 
-- (void) setAttribute: (NSString *) name double: (float) value format: (NSString *) formatString;
+- (void) setAttribute: (NSString *) name double: (double) value format: (NSString *) formatString;
 {
     [[self topElement] setAttribute: name double: value format: formatString];
 }
@@ -500,107 +583,29 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (void)parser:(OFXMLParser *)parser startElementWithQName:(OFXMLQName *)qname multipleAttributeGenerator:(id <OFXMLParserMultipleAttributeGenerator>)multipleAttributeGenerator singleAttributeGenerator:(id <OFXMLParserSingleAttributeGenerator>)singleAttributeGenerator;
 {
-    OBPRECONDITION(qname);
+    OBPRECONDITION(_elementParser);
 
-    OFXMLElement *element;
-    
-    if (multipleAttributeGenerator) {
-        __block NSMutableArray *attributeOrder = nil;
-        __block NSMutableDictionary *attributeDictionary = nil;
-        
-        [multipleAttributeGenerator generateAttributesWithPlainNames:^(NSMutableArray<NSString *> *names, NSMutableDictionary<NSString *,NSString *> *values) {
-            // We are *not* copying these since OFXMLParser specifically yields mutable instances for its target to take over.
-            attributeOrder = [names retain];
-            attributeDictionary = [values retain];
-        }];
-        
-        element = [[OFXMLElement alloc] initWithName:qname.name attributeOrder:attributeOrder attributes:attributeDictionary];
-        [attributeOrder release];
-        [attributeDictionary release];
-    } else if (singleAttributeGenerator) {
-        __block NSString *attributeName = nil;
-        __block NSString *attributeValue = nil;
-
-        [singleAttributeGenerator generateAttributeWithPlainName:^(NSString *name, NSString *value) {
-            attributeName = [name copy];
-            attributeValue = [value copy];
-        }];
-        
-        element = [[OFXMLElement alloc] initWithName:qname.name attributeName:attributeName attributeValue:attributeValue];
-        [attributeName release];
-        [attributeValue release];
-    } else {
-        element = [[OFXMLElement alloc] initWithName:qname.name];
-    }
-
-    
-    if (!_rootElement) {
-        _rootElement = [element retain];
-        OBASSERT([_elementStack count] == 0);
-        [_elementStack addObject: _rootElement];
-    } else {
-        OBASSERT([_elementStack count] != 0);
-        [[_elementStack lastObject] appendChild: element];
-        [_elementStack addObject: element];
-    }
-    [element release];
-    
-    OBPOSTCONDITION([_elementStack count] == parser.elementDepth);
+    // Delegate parsing for the root element.
+    parser.target = _elementParser;
+    [_elementParser parser:parser startElementWithQName:qname multipleAttributeGenerator:multipleAttributeGenerator singleAttributeGenerator:singleAttributeGenerator];
 }
 
-// Should only be called if the whitespace behavior indicates we wanted it and we are inside the root element.
-- (void)parser:(OFXMLParser *)parser addWhitespace:(NSString *)whitespace;
-{
-    OBPRECONDITION(_rootElement);
+#pragma mark - OFXMLElementParserDelegate
 
-    // Note that we are not calling -_addString: here since that does string merging but whitespace should (I think) only be reported in cases where we don't want it merged or it can't be merged.  This needs more investigation and test cases, etc.
-    [self.topElement appendChild:whitespace];
+- (OFXMLParserElementBehavior)elementParser:(OFXMLElementParser *)elementParser behaviorForElementWithQName:(OFXMLQName *)name multipleAttributeGenerator:(id <OFXMLParserMultipleAttributeGenerator>)multipleAttributeGenerator singleAttributeGenerator:(id <OFXMLParserSingleAttributeGenerator>)singleAttributeGenerator;
+{
+    // We could maybe call the optional OFXMLParserTarget method on ourselves, but that's a bit odd since if this gets called, we aren't the target. Instead, subclasses can override this required delegate method.
+    return OFXMLParserElementBehaviorParse;
 }
 
-// If the last child of the top element is a string, replace it with the concatenation of the two strings.
-// TODO: Later we should have OFXMLString be an array of strings that is lazily concatenated to avoid slow degenerate cases (and then replace the last string with a OFXMLString with the two elements).  Actually, it might be better to just stick in an NSMutableArray of strings and then clean it up when the element is finished.
-- (void)parser:(OFXMLParser *)parser addString:(NSString *)string;
+- (void)elementParser:(OFXMLElementParser *)elementParser parser:(OFXMLParser *)parser parsedElement:(OFXMLElement *)element;
 {
-    OFXMLElement *top = self.topElement;
-    NSArray *children = top.children;
-    NSUInteger count = [children count];
-    
-    if (count) {
-        id lastChild = [children lastObject];
-        if ([lastChild isKindOfClass:[NSString class]]) {
-            NSString *newString = [[NSString alloc] initWithFormat: @"%@%@", lastChild, string];
-            [top removeChildAtIndex:count - 1];
-            [top appendChild:newString];
-            [newString release];
-            return;
-        }
-    }
-    
-    [top appendChild:string];
-}
+    OBPRECONDITION(_rootElement == nil);
 
-- (void)parserEndElement:(OFXMLParser *)parser;
-{
-    OBPRECONDITION([_elementStack count] != 0);
-    
-    OFXMLElement *element = [_elementStack lastObject];
-    if (_rootElement == element)
-        return;
-    
-    [_elementStack removeLastObject];
-    
-    OBPOSTCONDITION([_elementStack count] == parser.elementDepth);
-}
+    _rootElement = [element retain];
 
-- (void)parser:(OFXMLParser *)parser endUnparsedElementWithQName:(OFXMLQName *)qname identifier:(NSString *)identifier contents:(NSData *)contents;
-{
-    OBPRECONDITION(_rootElement);
-    
-    OFXMLUnparsedElement *element = [[OFXMLUnparsedElement alloc] initWithQName:qname identifier:identifier data:contents];
-    [self.topElement appendChild:element];
-    [element release];
-    
-    OBPOSTCONDITION([_elementStack count] == parser.elementDepth);
+    OBASSERT([_elementStack count] == 0);
+    [_elementStack addObject: _rootElement];
 }
 
 #pragma mark - Debugging
@@ -654,9 +659,17 @@ NS_ASSUME_NONNULL_BEGIN
     return self;
 }
 
-- (BOOL)_parseInputStream:(NSInputStream *)inputStream defaultWhitespaceBehavior:(OFXMLWhitespaceBehaviorType)defaultWhitespaceBehavior error:(NSError **)outError;
+- (BOOL)_parseInputStream:(NSInputStream *)inputStream defaultWhitespaceBehavior:(OFXMLWhitespaceBehaviorType)defaultWhitespaceBehavior prepareParser:(nullable NS_NOESCAPE OFXMLDocumentPrepareParser)prepareParser error:(NSError **)outError;
 {
     OFXMLParser *parser = [[OFXMLParser alloc] initWithWhitespaceBehavior:[self whitespaceBehavior] defaultWhitespaceBehavior:defaultWhitespaceBehavior target:self];
+
+    _elementParser = [[self makeElementParser] retain];
+    _elementParser.delegate = self;
+
+    if (prepareParser) {
+        prepareParser(self, parser);
+    }
+
     if (![parser parseInputStream:inputStream error:outError]) {
         [parser release];
         return NO;
@@ -665,7 +678,10 @@ NS_ASSUME_NONNULL_BEGIN
     OBASSERT(_rootElement);
     
     _stringEncoding = parser.encoding;
-    
+
+    [_elementParser release];
+    _elementParser = nil;
+
     [_loadWarnings release];
     _loadWarnings = nil;
     

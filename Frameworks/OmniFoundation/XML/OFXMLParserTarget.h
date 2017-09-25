@@ -1,4 +1,4 @@
-// Copyright 2003-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2003-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -19,6 +19,9 @@
 // In the QName case, an attribute of "xmlns:ns=someurl" is reported as an attribute with a name of "ns", a namespace of "http://www.w3.org/2000/xmlns/" and a value of "someurl". If ":ns" isn't present, the name is the empty string.
 - (void)generateAttributesWithQNames:(void (^ NS_NOESCAPE)(NSMutableArray <OFXMLQName *> *qnames, NSMutableArray <NSString *> *values))receiver;
 
+// Like -generateAttributesWithQNames:, but no arrays are generated. Instead, the block is called once for each pair.
+- (void)generateAttributeQNamePairs:(void (^ NS_NOESCAPE)(OFXMLQName *attributeQName, NSString *attributeValue))receiver;
+
 // In the plain name case, an attribute of "xmlns:ns=someurl" is reported with the name "xmlns:ns" with a value of "someurl". If ":ns" isn't present, the name is just "xmlns". The namespace on attributes is lost (though we could report "<ns:a>" or "ns:b=foo" with the prefix intact, but the prefix is open to change. Ideally everything should move toward the QName interface, but this gives a higher performance backwards compatibility path for OFXMLDocument.
 - (void)generateAttributesWithPlainNames:(void (^ NS_NOESCAPE)(NSMutableArray <NSString *> *names, NSMutableDictionary <NSString *, NSString *> *values))receiver;
 
@@ -27,7 +30,7 @@
 // For the case of a single attribute, where we can potentially avoid building collections, this is passed.
 @protocol OFXMLParserSingleAttributeGenerator
 
-- (void)generateAttributeWithQName:(void (^ NS_NOESCAPE)(OFXMLQName *qnames, NSString *value))receiver;
+- (void)generateAttributeWithQName:(void (^ NS_NOESCAPE)(OFXMLQName *qname, NSString *value))receiver;
 - (void)generateAttributeWithPlainName:(void (^ NS_NOESCAPE)(NSString *name, NSString *value))receiver;
 
 @end
@@ -39,7 +42,7 @@ typedef enum {
     OFXMLParserElementBehaviorSkip, // Skip this entire element.  No start/end callbacks will occur.
 } OFXMLParserElementBehavior;
 
-@protocol OFXMLParserTarget
+@protocol OFXMLParserTarget <NSObject>
 @optional
 
 // If this returns NULL, the parser will create and free its own.  Otherwise, it will use this and not free it.
@@ -53,14 +56,20 @@ typedef enum {
 
 - (void)parser:(OFXMLParser *)parser startElementWithQName:(OFXMLQName *)qname multipleAttributeGenerator:(id <OFXMLParserMultipleAttributeGenerator>)multipleAttributeGenerator singleAttributeGenerator:(id <OFXMLParserSingleAttributeGenerator>)singleAttributeGenerator;
 
-- (void)parserEndElement:(OFXMLParser *)parser;
+- (void)parser:(OFXMLParser *)parser endElementWithQName:(OFXMLQName *)qname;
 - (void)parser:(OFXMLParser *)parser endUnparsedElementWithQName:(OFXMLQName *)qname identifier:(NSString *)identifier contents:(NSData *)contents;
 
 - (void)parser:(OFXMLParser *)parser addWhitespace:(NSString *)whitespace;
 - (void)parser:(OFXMLParser *)parser addString:(NSString *)string;
+- (void)parser:(OFXMLParser *)parser addComment:(NSString *)string;
 
 // Deprecated
 - (OFXMLParserElementBehavior)parser:(OFXMLParser *)parser behaviorForElementWithQName:(OFXMLQName *)name attributeQNames:(NSMutableArray *)attributeQNames attributeValues:(NSMutableArray *)attributeValues OB_DEPRECATED_ATTRIBUTE;
 - (void)parser:(OFXMLParser *)parser startElementWithQName:(OFXMLQName *)qname attributeQNames:(NSMutableArray <OFXMLQName *> *)attributeQNames attributeValues:(NSMutableArray <NSString *> *)attributeValues OB_DEPRECATED_ATTRIBUTE;
 
+@end
+
+
+@interface NSObject (OFXMLParserTargetDeprecated)
+- (void)parserEndElement:(OFXMLParser *)parser OB_DEPRECATED_ATTRIBUTE;
 @end

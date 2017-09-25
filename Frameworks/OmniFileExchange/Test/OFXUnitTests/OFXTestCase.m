@@ -1,4 +1,4 @@
-// Copyright 2013-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2013-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -46,7 +46,7 @@ RCS_ID("$Id$")
 {
     OBINITIALIZE;
     
-    OBFinishPortingLater("Make this configurable so that these tests can be run against the real class too");
+    OBFinishPortingLater("<bug:///147836> (iOS-OmniOutliner Engineering: OFXTestCase.m:49 - Make this configurable so that these tests can be run against the real class too)");
     [OFNetStateNotifierMock install];
     
     OFXTraceEnabled = YES;
@@ -648,7 +648,7 @@ static void _logAgentState(OFXAgent *agent)
     OFXAgent *firstAgent = agents[0];
     NSArray *otherAgents = [agents subarrayWithRange:NSMakeRange(1, [agents count] - 1)];
     
-    NSDictionary *firstAgentFileIdentiferToEditIdentifer = [NSMutableDictionary new];
+    NSDictionary *firstAgentFileIdentifierToEditIdentifier = [NSMutableDictionary new];
     {
         NSMutableDictionary *fileToEdit = [NSMutableDictionary dictionary];
         
@@ -664,14 +664,14 @@ static void _logAgentState(OFXAgent *agent)
             fileToEdit[metadata.fileIdentifier] = metadata.editIdentifier;
         }
         
-        firstAgentFileIdentiferToEditIdentifer = [fileToEdit copy];
+        firstAgentFileIdentifierToEditIdentifier = [fileToEdit copy];
     }
     
     for (OFXAgent *agent in otherAgents) {
-        NSMutableDictionary *fileToEdit = [firstAgentFileIdentiferToEditIdentifer mutableCopy];
+        NSMutableDictionary *fileToEdit = [firstAgentFileIdentifierToEditIdentifier mutableCopy];
         
         NSSet *metadataItems = [self metadataItemsForAgent:agent];
-        if ([metadataItems count] != [firstAgentFileIdentiferToEditIdentifer count])
+        if ([metadataItems count] != [firstAgentFileIdentifierToEditIdentifier count])
             return NO;
         
         for (OFXFileMetadata *metadata in metadataItems) {
@@ -1231,9 +1231,17 @@ static void _recursivelyClearDates(NSFileWrapper *wrapper)
     OBPRECONDITION(fileURL);
     
     __block NSData *result = nil;
+    __block NSError *strongError = nil;
     [self coordinateWritingItemAtURL:fileURL options:NSFileCoordinatorWritingForMerging error:outError byAccessor:^(NSURL *newURL) {
-        result = [NSData dataWithContentsOfURL:fileURL options:options error:outError];
+        __autoreleasing NSError *error;
+        result = [NSData dataWithContentsOfURL:fileURL options:options error:&error];
+        if (!result) {
+            strongError = error;
+        }
     }];
+    if (!result && outError) {
+        *outError = strongError;
+    }
     return result;
 }
 
@@ -1243,10 +1251,17 @@ static void _recursivelyClearDates(NSFileWrapper *wrapper)
     OBPRECONDITION(fileURL);
     
     __block BOOL success = NO;
+    __block NSError *strongError = nil;
     [self coordinateWritingItemAtURL:fileURL options:NSFileCoordinatorWritingForMerging error:outError byAccessor:^(NSURL *newURL) {
-        success = [data writeToURL:fileURL options:options error:outError];
+        __autoreleasing NSError *error;
+        success = [data writeToURL:fileURL options:options error:&error];
+        if (!success) {
+            strongError = error;
+        }
     }];
-    
+    if (!success && outError) {
+        *outError = strongError;
+    }
     return success;
 }
 

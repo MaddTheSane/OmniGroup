@@ -1,4 +1,4 @@
-// Copyright 2010-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -15,6 +15,17 @@
 #import <CoreGraphics/CGBase.h>
 #import <OmniUI/OUINavigationController.h>
 
+@class OUIInspectorPane;
+
+#pragma mark - OUIInspectorPaneContaining
+@protocol OUIInspectorPaneContaining <NSObject>
+
+@property (nonatomic, strong, readonly) NSArray<OUIInspectorPane *> *panes;
+
+- (void)popPaneAnimated:(BOOL)animated;
+
+@end
+
 @class OUIStackedSlicesInspectorPane, OUIInspectorPane, OUIInspectorSlice, OUIBarButtonItem;
 @class UIBarButtonItem, UINavigationController;
 
@@ -23,8 +34,8 @@ extern const NSTimeInterval OUICrossFadeDuration;
 
 extern NSString * const OUIInspectorWillBeginChangingInspectedObjectsNotification;
 extern NSString * const OUIInspectorDidEndChangingInspectedObjectsNotification;
-extern NSString * const OUIInspectorPopoverDidDismissNotification;
 
+#pragma mark - OUIInspector
 @interface OUIInspector : NSObject
 
 + (UIBarButtonItem *)inspectorBarButtonItemWithTarget:(id)target action:(SEL)action;
@@ -46,32 +57,19 @@ extern NSString * const OUIInspectorPopoverDidDismissNotification;
 @property(readonly,nonatomic) OUIInspectorPane *mainPane;
 @property(readonly,nonatomic) CGFloat height;
 @property(assign,nonatomic) BOOL alwaysShowToolbar;
-@property(nonatomic, weak) UIView *gesturePassThroughView;
-@property(nonatomic) BOOL animatingPushOrPop;
 
 @property(weak,nonatomic) id <OUIInspectorDelegate> delegate;
 
-// this is exposed so that OG-iPad can swap to the image picker. It probably shouldn't be used for much, if anything else.
-@property(readwrite,strong,nonatomic) UINavigationController *navigationController;
+@property(nonatomic, strong, readonly) UIViewController<OUIInspectorPaneContaining> *viewController;
 
-- (BOOL)isEmbededInOtherNavigationController; // Subclass to return YES if you intend to embed the inspector into a your own navigation controller (you might not yet have the navigation controller, though).
-- (UINavigationController *)embeddingNavigationController; // Needed when pushing detail panes with -isEmbededInOtherNavigationController.
+- (void)setShowDoneButton:(BOOL)shouldShow;
 
-@property(readonly,nonatomic,getter=isVisible) BOOL visible;
 
-- (BOOL)inspectObjects:(NSArray *)objects withViewController:(UIViewController *)viewController useFullScreenOnHorizontalCompact:(BOOL)useFullScreenOnHorizontalCompact fromBarButtonItem:(UIBarButtonItem *)item NS_EXTENSION_UNAVAILABLE_IOS("Inspection is not available in extensions.");
-- (BOOL)inspectObjects:(NSArray *)objects withViewController:(UIViewController *)viewController fromBarButtonItem:(UIBarButtonItem *)item NS_EXTENSION_UNAVAILABLE_IOS("Inspection is not available in extensions.");
-- (BOOL)inspectObjects:(NSArray *)objects withViewController:(UIViewController *)viewController fromRect:(CGRect)rect inView:(UIView *)view useFullScreenOnHorizontalCompact:(BOOL)useFullScreenOnHorizontalCompact permittedArrowDirections:(UIPopoverArrowDirection)arrowDirections NS_EXTENSION_UNAVAILABLE_IOS("Inspection is not available in extensions.");
-- (BOOL)inspectObjects:(NSArray *)objects withViewController:(UIViewController *)viewController fromRect:(CGRect)rect inView:(UIView *)view permittedArrowDirections:(UIPopoverArrowDirection)arrowDirections NS_EXTENSION_UNAVAILABLE_IOS("Inspection is not available in extensions.");
-- (void)redisplayInspectorForNewTraitCollection:(UITraitCollection *)traitsCollection NS_EXTENSION_UNAVAILABLE_IOS("Inspection is not available in extensions.");
-- (void)updateInterfaceFromInspectedObjects:(OUIInspectorUpdateReason)reason; // If you wrap edits in the will/did change methods below, this will be called automatically on the 'did'.
-- (void)dismissImmediatelyIfVisible;
-- (void)dismiss;
-- (void)dismissAnimated:(BOOL)animated;
 
-@property (nonatomic) BOOL useFullScreenOnHorizontalCompact;
-
-- (void)updateInspectorWithTraitCollection:(UITraitCollection *)traitCollection;
+/// Updates the inspected objects if self.viewController.view is within the window bounds. This allows us to ignore updates if we're not currently visible.
+- (void)updateInspectedObjects;
+/// Forces the inspected objects to update, even if self.viewController.view is not currently visible.
+- (void)forceUpdateInspectedObjects;
 
 - (NSArray *)makeAvailableSlicesForStackedSlicesPane:(OUIStackedSlicesInspectorPane *)pane;
 
@@ -81,26 +79,26 @@ extern NSString * const OUIInspectorPopoverDidDismissNotification;
 - (void)pushPane:(OUIInspectorPane *)pane; // clones the inspected objects of the current top pane
 - (void)popToPane:(OUIInspectorPane *)pane;
 
+/**
+ Same as `(OUIInspectorPane *)self.navigationController.topViewController`.
+ */
 @property(readonly,nonatomic) OUIInspectorPane *topVisiblePane;
 
+- (void)updateInterfaceFromInspectedObjects:(OUIInspectorUpdateReason)reason; // If you wrap edits in the will/did change methods below, this will be called automatically on the 'did'.
 - (void)willBeginChangingInspectedObjects; // start of ui action
 - (void)didEndChangingInspectedObjects;    // end of ui action
 
 - (void)beginChangeGroup;  // start of intermideate event
 - (void)endChangeGroup;    // end of intermediate event
 
-@property (copy, nonatomic) void (^presentInspectorCompletion)(void);
-@property (copy, nonatomic) void (^animationsToPerformAlongsidePresentation)(id<UIViewControllerTransitionCoordinatorContext> context);
-@property (copy, nonatomic) void (^dismissInspectorCompletion)(void);
-/// There are times were you can request an animated dismissal but are dismissed non-animated anyway. Most people expect these to get called even if we don't dismiss animated. These are now called during a transition coordinator if one exists or immediately after dimissal.
-@property (copy, nonatomic) void (^animationsToPerformAlongsideDismissal)(id<UIViewControllerTransitionCoordinatorContext> context);
-
 @end
 
+#pragma mark - NSObject (OUIInspectable)
 @interface NSObject (OUIInspectable)
 - (BOOL)shouldBeInspectedByInspectorSlice:(OUIInspectorSlice *)inspector protocol:(Protocol *)protocol;
 @end
 
+#pragma mark - OUIColorInspection
 @class OAColor;
 @protocol OUIColorInspection <NSObject>
 - (OAColor *)colorForInspectorSlice:(OUIInspectorSlice *)inspector;
@@ -108,6 +106,7 @@ extern NSString * const OUIInspectorPopoverDidDismissNotification;
 - (NSString *)preferenceKeyForInspectorSlice:(OUIInspectorSlice *)inspector;
 @end
 
+#pragma mark - OUIFontInspection
 @class OAFontDescriptor;
 @protocol OUIFontInspection <NSObject>
 - (OAFontDescriptor *)fontDescriptorForInspectorSlice:(OUIInspectorSlice *)inspector;
@@ -123,16 +122,9 @@ extern NSString * const OUIInspectorPopoverDidDismissNotification;
 
 @end
 
+#pragma mark - OUIParagraphInspection
 @class NSParagraphStyle;
 @protocol OUIParagraphInspection <NSObject>
 - (NSParagraphStyle *)paragraphStyleForInspectorSlice:(OUIInspectorSlice *)inspector;
 - (void)setParagraphStyle:(NSParagraphStyle *)paragraphStyle fromInspectorSlice:(OUIInspectorSlice *)inspector;
-@end
-
-
-@interface OUIInspectorNavigationController : OUINavigationController
-
-@property (nonatomic, weak) UIView *gesturePassThroughView;
-@property BOOL willDismissInspector;
-
 @end

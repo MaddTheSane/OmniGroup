@@ -1,0 +1,150 @@
+/* OUITabBar N of M accessibility value */
+"%@ of %@" = "%1$@ de %2$@";
+
+/* Default title for the About menu item
+   title for in app purchase - placeholder is product title */
+"About %@" = "Sobre o %@";
+
+/* MultiPane Back button title, when system is compact */
+"Back" = "Voltar";
+
+/* Bold button accessibility label */
+"Bold" = "Negrito";
+
+/* button title
+   button title - password/passphrase prompt
+   cancel button title
+   Cancel button title
+   toolbar item title */
+
+
+
+
+"Cancel" = "Cancelar";
+
+/* Center Text Align button accessibility label. */
+"Center text align" = "Alinhamento de texto centralizado";
+
+/* Certificate trust alert title */
+"Certificate Trust" = "Confiabilidade de Certificado";
+
+/* alert message */
+"Changed the '%@' preference from '%@' to '%@'" = "Preferência '%1$@' alterada de '%2$@' para '%3$@'";
+
+/* placeholder text - password/passphrase confirmation field in prompt */
+"confirm" = "confirmar";
+
+/* Certificate trust alert button title */
+"Continue" = "Continuar";
+
+/* increment button accessibility label */
+"Decrement" = "Redução";
+
+/* Done
+   toolbar item title */
+
+"Done" = "Concluído";
+
+/* toolbar item title */
+"Edit" = "Editar";
+
+/* disabled for demo */
+"Feature not enabled for this demo" = "Recurso não ativado nesta demo";
+
+/* Overlay text when zoomed to fit screen */
+"Fit" = "Ajustar";
+
+/* Help and Settings toolbar item accessibility label. */
+"Help and Settings" = "Ajuda e Ajustes";
+
+/* increment button accessibility label */
+"Increment" = "Incrementar";
+
+/* default special URL confirm button title */
+"Invoke" = "Invocar";
+
+/* button title */
+"Invoke and Quit" = "Invocar e Encerrar";
+
+/* Italic button accessibility label */
+"Italic" = "Itálico";
+
+/* Justified Text Align button accessibility label. */
+"Justified text align" = "Alinhamento de texto justificado";
+
+/* Left Text Align button accessibility label. */
+"Left text align" = "Alinhamento de texto à esquerda";
+
+/* Web view error opening URL title. */
+"Link could not be opened. Please check Safari restrictions in Settings." = "Não foi possível abrir o link. Consulte as restrições do Safari em Ajustes.";
+
+/* News menu item
+   News view title */
+
+"News" = "Notícias";
+
+/* empty value cell placeholder */
+"None" = "Nenhum";
+
+/* Full screen note editor title */
+"Note" = "Nota";
+
+/* Text letting the user know why nothing is showing in the inspector */
+"Nothing to Inspect" = "Nada a Inspecionar";
+
+/* button title
+   button title - password/passphrase prompt
+   Dismiss alert
+   Dismiss failed purchase alert
+   Dismiss failed restore alert
+   Web view error opening URL cancel button. */
+
+
+"OK" = "OK";
+
+/* placeholder text - password/passphrase field of login/password prompt */
+"password" = "senha";
+
+/* alert title */
+"Preference changed" = "Preferência alterada";
+
+/* Redo button title */
+"Redo" = "Refazer";
+
+/* App menu item title
+   release notes html screen title */
+
+"Release Notes" = "Notas da Versão";
+
+/* Right Text Align button accessibility label. */
+"Right text align" = "Alinhamento de texto à direita";
+
+/* Search field placeholder text */
+"Search" = "Busca";
+
+/* Strike Through button accessibility label */
+"Strike Through" = "Tachado";
+
+/* Certificate trust alert button title */
+"Trust Always" = "Confiar Sempre";
+
+/* Underline button accessibility label */
+"Underline" = "Sublinhar";
+
+/* Undo button title */
+"Undo" = "Desfazer";
+
+/* placeholder text - username field of login/password prompt */
+"username" = "nome de usuário";
+
+/* alert message */
+"You have tapped on a link which will change the following preferences:\n\n\"%@\"\n\nDo you wish to accept these changes?" = "Você tocou em um link que alterará as seguintes preferências:\n\n\"%@\"\n\nDeseja aceitar essas alterações?";
+
+/* debug setting alert message */
+"You have tapped on a link which will run the following debugging command:\n\n\"%@\"\n\nIf you weren’t instructed to do this by Omni Support Humans, please don’t.\nDo you wish to run this command?" = "Você tocou em um link que executará o seguinte comando de depuração:\n\n\"%@\"\n\nCaso não tenha recebido instruções da Equipe de Suporte da Omni para fazê-lo, não o faça.\nDeseja executar esse comando?";
+
+/* default special URL alert message */
+"You have tapped on an Omni special URL:\n\n\"%@\"\n\nRun this command?" = "Você tocou em um URL especial da Omni:\n\n\"%@\"\n\nExecutar este comando?";
+
+/* zoom label */
+"Zoom" = "Zoom";

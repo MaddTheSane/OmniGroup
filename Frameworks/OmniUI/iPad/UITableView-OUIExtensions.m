@@ -1,4 +1,4 @@
-// Copyright 2010-2015 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -45,10 +45,10 @@ void OUITableViewFinishedReactingToSelection(UITableView *tableView, OUITableVie
 void OUITableViewFinishedReactingToSelectionWithPredicate(UITableView *tableView, OUITableViewCellSelectionType type, BOOL (^predicate)(NSIndexPath *indexPath))
 {
     NSIndexPath *selectedIndexPath = [tableView indexPathForSelectedRow];
-    OBASSERT(selectedIndexPath);
-    
-    // Clear the selection
-    [tableView deselectRowAtIndexPath:selectedIndexPath animated:YES];
+    if (selectedIndexPath) {
+        // Clear the selection
+        [tableView deselectRowAtIndexPath:selectedIndexPath animated:YES];
+    }
     
     // Update the checkmarks on all the visible cells.    
     for (UITableViewCell *cell in [tableView visibleCells]) {
@@ -95,14 +95,14 @@ OAColor *OUITableViewCellBackgroundColorForControlState(const OUITableViewCellBa
 {
     switch (state) {
         case UIControlStateHighlighted:
-            return [OAColor colorWithCalibratedHue:colors->highlighted.h saturation:colors->highlighted.s brightness:colors->highlighted.v alpha:colors->highlighted.a];
+            return [OAColor colorWithHue:colors->highlighted.h saturation:colors->highlighted.s brightness:colors->highlighted.v alpha:colors->highlighted.a];
         case UIControlStateSelected:
-            return [OAColor colorWithCalibratedHue:colors->selected.h saturation:colors->selected.s brightness:colors->selected.v alpha:colors->selected.a];
+            return [OAColor colorWithHue:colors->selected.h saturation:colors->selected.s brightness:colors->selected.v alpha:colors->selected.a];
         default:
             OBASSERT_NOT_REACHED("Unknown control state");
             // fall through
         case UIControlStateNormal:
-            return [OAColor colorWithCalibratedHue:colors->normal.h saturation:colors->normal.s brightness:colors->normal.v alpha:colors->normal.a];
+            return [OAColor colorWithHue:colors->normal.h saturation:colors->normal.s brightness:colors->normal.v alpha:colors->normal.a];
     }
 }
 
@@ -128,7 +128,6 @@ void OUITableViewAdjustHeightToFitContents(UITableView *tableView)
     OBPRECONDITION(tableView.autoresizingMask == 0);
     
     CGSize contentSize = tableView.contentSize;
-    OBASSERT(contentSize.height > 0); // No rows?
     
     UIEdgeInsets contentInsets = tableView.contentInset;
     

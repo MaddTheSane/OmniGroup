@@ -1,4 +1,4 @@
-// Copyright 2010-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -16,7 +16,7 @@
 RCS_ID("$Id$");
 
 #define ALLOW_LINK_DETECTION (YES)
-// App-scheme links are handled by -[NSTextStorage(OUIExtensions) detectAppSchemeLinks] because UITextView fails to handle them properly on iOS 10. bug:///134447 (iOS-OmniFocus Regression: Data detection for phone numbers and addresses no longer works)
+
 static UIDataDetectorTypes typesToDetectWithUITextView = (
                                                           UIDataDetectorTypeLink |
                                                           UIDataDetectorTypePhoneNumber |
@@ -40,6 +40,11 @@ CGFloat OUINoteTextViewPlacholderTopMarginAutomatic = -1000;
     BOOL _observingEditingNotifications;
     __weak id <OUINoteTextViewAppearanceDelegate> _weak_appearanceDelegate;
 }
+
+// Redeclare as readwrite
+@property (nonatomic, readwrite, getter=isConfiguringForEditing) BOOL configuringForEditing;
+@property (nonatomic, readwrite, getter=isChangingThemedAppearance) BOOL changingThemedAppearance;
+@property (nonatomic, readwrite, getter=isResigningFirstResponder) BOOL resigningFirstResponder;
 
 @end
 
@@ -250,7 +255,6 @@ CGFloat OUINoteTextViewPlacholderTopMarginAutomatic = -1000;
     // OmniFocus doesn't use the text view that way, so we ignore that.
     // However, thanks to Apple, we do need to detect links on the text if we aren't in the process of editing it. bug:///134348 (iOS-OmniFocus Bug: Implement our own link detection for notes) and bug:///134447 (iOS-OmniFocus Regression: Data detection for phone numbers and addresses no longer works)
     if (![self isFirstResponder] && _detectsLinks) {
-        [self.textStorage detectAppSchemeLinks];
         self.dataDetectorTypes = typesToDetectWithUITextView;
     }
     [self setNeedsDisplay];
@@ -258,15 +262,16 @@ CGFloat OUINoteTextViewPlacholderTopMarginAutomatic = -1000;
 
 - (BOOL)resignFirstResponder;
 {
+    self.resigningFirstResponder = YES;
     BOOL result = [super resignFirstResponder];
     
     if (result && _detectsLinks) {
         // Set editable to NO when resigning first responder so that links are tappable.
         self.editable = NO;
-        [self.textStorage detectAppSchemeLinks];
         self.dataDetectorTypes = typesToDetectWithUITextView;
     }
     
+    self.resigningFirstResponder = NO;
     return result;
 }
 
@@ -274,10 +279,8 @@ CGFloat OUINoteTextViewPlacholderTopMarginAutomatic = -1000;
 {
     [super touchesEnded:touches withEvent:event];
     
-    // If we got to -touchesEnded, then a link was NOT tapped.
-    // Move the insertion point underneath the touch, and become editable and firstRsponder
-    
-    [self _becomeEditableWithTouches:touches makeFirstResponder:YES];
+    // If we got to -touchesEnded and a link was NOT tapped, move the insertion point underneath the touch and become editable and firstResponder.
+    [self _openLinkOrBecomeEditableWithTouches:touches makeFirstResponder:YES];
 }
 
 #pragma mark UIScrollView subclass
@@ -334,15 +337,20 @@ CGFloat OUINoteTextViewPlacholderTopMarginAutomatic = -1000;
 
 - (void)appearanceDidChange;
 {
-    if (self.appearanceDelegate != nil) {
-        self.layer.borderColor = [self.appearanceDelegate borderColorForTextView:self].CGColor;
-        self.keyboardAppearance = [self.appearanceDelegate keyboardAppearanceForTextView:self];
-        [self reloadInputViews];
-    } else {
-        self.layer.borderColor = [[UIColor lightGrayColor] CGColor];
+    self.changingThemedAppearance = YES;
+    {
+        if (self.appearanceDelegate != nil) {
+            self.layer.borderColor = [self.appearanceDelegate borderColorForTextView:self].CGColor;
+            self.keyboardAppearance = [self.appearanceDelegate keyboardAppearanceForTextView:self];
+            [self reloadInputViews];
+        } else {
+            self.layer.borderColor = [[UIColor lightGrayColor] CGColor];
+        }
+        
+        self.textColor = [self _textColor];
     }
+    self.changingThemedAppearance = NO;
     
-    self.textColor = [self _textColor];
     [self setNeedsDisplay];
 }
 
@@ -353,7 +361,7 @@ CGFloat OUINoteTextViewPlacholderTopMarginAutomatic = -1000;
     return (![self isFirstResponder] && ![self hasText] && _drawsPlaceholder && ![NSString isEmptyString:_placeholder]);
 }
 
-- (void)_becomeEditableWithTouches:(NSSet *)touches makeFirstResponder:(BOOL)makeFirstResponder;
+- (void)_openLinkOrBecomeEditableWithTouches:(NSSet *)touches makeFirstResponder:(BOOL)makeFirstResponder NS_EXTENSION_UNAVAILABLE_IOS("");
 {
     if ([self isEditable])
         return;
@@ -371,13 +379,22 @@ CGFloat OUINoteTextViewPlacholderTopMarginAutomatic = -1000;
     point.x -= textContainerInset.left;
 
     NSString *text = self.text;
-    NSUInteger characterIndex = [layoutManager characterIndexForPoint:point inTextContainer:textContainer fractionOfDistanceBetweenInsertionPoints:NULL];
+    CGFloat partialFraction;
+    NSUInteger characterIndex = [layoutManager characterIndexForPoint:point inTextContainer:textContainer fractionOfDistanceBetweenInsertionPoints:&partialFraction];
+    if (partialFraction > 0.0f && partialFraction < 1.0f) {
+        // Check to see whether the touch landed on a link
+        NSURL *linkURL = [textStorage attribute:NSLinkAttributeName atIndex:characterIndex effectiveRange:NULL];
+        if (linkURL != nil) {
+            return; // UIKit will handle opening this link after the touch ends, as long as we don't block it by making ourselves editable.
+        }
+    }
 
     self.editable = YES;
 
     // We don't want live links when editing. Leaving them live exposes underlying user interaction bugs in UITextView where the link range is extended inappropriately.
     self.dataDetectorTypes = UIDataDetectorTypeNone;
     NSDictionary *textAttributes = @{ NSFontAttributeName: self.font, NSForegroundColorAttributeName: self.textColor ?: [self _textColor] };
+    self.configuringForEditing = YES;
     [textStorage beginEditing];
     {
         [textStorage removeAllLinks];
@@ -385,6 +402,7 @@ CGFloat OUINoteTextViewPlacholderTopMarginAutomatic = -1000;
     }
     [textStorage endEditing];
     [layoutManager ensureLayoutForCharacterRange:NSMakeRange(0, textStorage.length)];
+    self.configuringForEditing = NO;
 
     // Replicate UITextView's behavior where it puts the insertion point before/after the word clicked in.
     // We choose the nearest end based on character distance, not pixel distance.

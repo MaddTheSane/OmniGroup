@@ -1,4 +1,4 @@
-// Copyright 2010-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -7,19 +7,12 @@
 
 #import <OmniUIDocument/OUIDocument.h>
 
+#import <OmniFoundation/OmniFoundation.h>
 #import <OmniDocumentStore/ODSStore.h>
 #import <OmniDocumentStore/ODSScope.h>
 #import <OmniDocumentStore/ODSFileItem.h>
 #import <OmniDocumentStore/ODSUtilities.h>
 #import <OmniFileExchange/OmniFileExchange.h>
-#import <OmniFoundation/NSDate-OFExtensions.h>
-#import <OmniFoundation/NSFileManager-OFSimpleExtensions.h>
-#import <OmniFoundation/NSUndoManager-OFExtensions.h>
-#import <OmniFoundation/OFBackgroundActivity.h>
-#import <OmniFoundation/OFFileEdit.h>
-#import <OmniFoundation/OFPreference.h>
-#import <OmniFoundation/OFRelativeDateFormatter.h>
-#import <OmniFoundation/OFVersionNumber.h>
 #import <OmniUIDocument/OUIDocumentPreview.h>
 #import <OmniUIDocument/OUIDocumentViewController.h>
 #import <OmniUI/OUIInspector.h>
@@ -27,6 +20,8 @@
 #import <OmniUI/OUIUndoIndicator.h>
 #import <OmniUI/UIView-OUIExtensions.h>
 #import <OmniUI/OUIShieldView.h>
+#import <OmniUI/OUIPasswordAlert.h>
+#import <OmniUI/OUIInteractionLock.h>
 
 #import "OUIDocument-Internal.h"
 #import "OUIDocumentAppController-Internal.h"
@@ -60,6 +55,17 @@ static int32_t OUIDocumentInstanceCount = 0;
 
 @interface OUIDocument (/**NSUndoManager Observer*/)
 @property (strong,nonatomic) NSUndoManager *observedUndoManager;
+@end
+
+@interface OUIDocument ()
+@property (nonatomic) BOOL isDefinitelyClosing;
+@end
+
+OB_HIDDEN
+@interface OUIDocumentEncryptionPassphrasePromptOperation : OFAsynchronousOperation
+@property (weak) OUIDocument *document;
+@property (readonly, strong) NSError *error;
+@property (readonly, copy) NSString *password;
 @end
 
 @implementation OUIDocument
@@ -147,6 +153,15 @@ static NSString * const OUIDocumentUndoManagerRunLoopPrivateMode = @"com.omnigro
     return [self initWithFileItem:nil url:saveURL error:outError];
 }
 
+- initWithContentsOfImportableFileAtURL:(NSURL *)importableURL toBeSavedToURL:(NSURL *)saveURL error:(NSError **)outError;
+{
+    if ([NSThread isMainThread]) {
+        OBFinishPortingLater("<bug:///147561> Subclassers are supposed to read the contents at importableURL, so this should be on a background queue.");
+    }
+
+    return [self initWithFileItem:nil url:saveURL error:outError];
+}
+
 - initEmptyDocumentToBeSavedToURL:(NSURL *)url error:(NSError **)outError;
 {
     OBPRECONDITION(url);
@@ -167,7 +182,11 @@ static NSString * const OUIDocumentUndoManagerRunLoopPrivateMode = @"com.omnigro
 
     OBPRECONDITION(fileItem || url);
     OBPRECONDITION(!fileItem || [fileItem.fileURL isEqual:url]);
-    OBPRECONDITION(OBClassImplementingMethod([self class], @selector(initEmptyDocumentToBeSavedToURL:error:)) == [OUIDocument class]); // Should subclass -initEmptyDocumentToBeSavedToURL:templateURL:error:
+
+#ifdef OMNI_ASSERTIONS_ON
+    Class implementingClass = OBClassImplementingMethod([self class], @selector(initEmptyDocumentToBeSavedToURL:error:));
+    OBPRECONDITION([NSStringFromClass(implementingClass) hasPrefix:@"OUI"], "Should subclass -initEmptyDocumentToBeSavedToURL:templateURL:error:");
+#endif
     
     if (!(self = [super initWithFileURL:url]))
         return nil;
@@ -249,6 +268,7 @@ static NSString * const OUIDocumentUndoManagerRunLoopPrivateMode = @"com.omnigro
     __autoreleasing NSError *resourceError = nil;
     if (![fileURL getResourceValue:&isDirectoryNumber forKey:NSURLIsDirectoryKey error:&resourceError]) {
 #ifdef DEBUG
+        // One way to get here is closing a document that was deleted by a cloud provider while our app was backgrounded. Not sure if we should handle that differently.
         NSLog(@"Error getting directory key for %@: %@", fileURL, [resourceError toPropertyList]);
 #endif
     }
@@ -425,6 +445,15 @@ static NSString * const OUIDocumentUndoManagerRunLoopPrivateMode = @"com.omnigro
     OBRequestConcreteImplementation(self, _cmd);
 }
 
+- (void)setApplicationLock:(OUIInteractionLock *)applicationLock;
+{
+    if (_applicationLock == applicationLock) {
+        return;
+    }
+    [_applicationLock unlock];
+    _applicationLock = applicationLock;
+}
+
 - (UIResponder *)defaultFirstResponder;
 {
     UIViewController <OUIDocumentViewController> *viewController = self.documentViewController;
@@ -579,14 +608,17 @@ static NSString * const OriginalChangeTokenKey = @"originalToken";
     }
 #endif
 
-    [self _autoresolveConflicts];
+    if ([[OFPreference preferenceForKey:@"OUIDocumentAutoresolvesConflicts" defaultValue:@(NO)] boolValue])
+          [self _autoresolveConflicts];
 
+    __weak OUIDocument *welf = self;
     [super openWithCompletionHandler:^(BOOL success){
+        OUIDocument *strelf = welf;
         DEBUG_DOCUMENT(@"%@ %@ success %d", [self shortDescription], NSStringFromSelector(_cmd), success);
         
 #if 0
         // Silly hack to help in testing whether we properly write blank previews and avoid re-opening previously open documents. You can test the re-opening case by making a good document, opening it, renaming it to the bad name and then backgrounding the app (so that we record the last open document).
-        if ([[[[self.fileURL path] lastPathComponent] stringByDeletingPathExtension] localizedCaseInsensitiveCompare:@"Opening this file will crash"] == NSOrderedSame) {
+        if ([[[[strelf.fileURL path] lastPathComponent] stringByDeletingPathExtension] localizedCaseInsensitiveCompare:@"Opening this file will crash"] == NSOrderedSame) {
             NSLog(@"Why yes, it will.");
             abort();
         }
@@ -601,22 +633,24 @@ static NSString * const OriginalChangeTokenKey = @"originalToken";
                 _documentViewController = [self makeViewController];
                 OBASSERT([_documentViewController conformsToProtocol:@protocol(OUIDocumentViewController)]);
                 OBASSERT(_documentViewController.document == nil); // we'll set it; -makeViewController shouldn't bother
-                _documentViewController.document = self;
+                _documentViewController.document = strelf;
                 
                 // Don't provoke loading of views before they are configured for preview generation (also our view controller will never be presented).
-                if (!self.forPreviewGeneration) {
-                    [self updateViewControllerToPresent];
+                if (!strelf.forPreviewGeneration) {
+                    [strelf updateViewControllerToPresent];
                     
-                    NSString *lastEditedMessage = [self _lastEditedMessage];
-                    [self _queueUpdateMessage:lastEditedMessage];
+                    [strelf _queueUpdateMessageProvider:^NSString *{
+                        NSString *lastEditedMessage = [strelf _lastEditedMessage];
+                        return lastEditedMessage;
+                    }];
                 }
             }
 
             // clear out any undo actions created during init
-            [self.undoManager removeAllActions];
+            [strelf.undoManager removeAllActions];
             
             // this implicitly kills any groups; make sure our flag gets cleared too.
-            OBASSERT([self.undoManager groupingLevel] == 0);
+            OBASSERT([strelf.undoManager groupingLevel] == 0);
             _hasUndoGroupOpen = NO;
         }
         
@@ -624,7 +658,7 @@ static NSString * const OriginalChangeTokenKey = @"originalToken";
         completionHandler(reallyReportSuccess);  // if we're just going to close immediately because we were already asked to close before we even finished opening (see <bug:///125526> (Bug: ~10 second freeze after deleting 'Complex' stencil)), then pass NO as the success flag to the open completion handler to avoid doing useless work.
         
         if (goingToCloseImmediatelyAnyway) {
-            [self closeWithCompletionHandler:_savedCloseCompletionBlock];
+            [strelf closeWithCompletionHandler:_savedCloseCompletionBlock];
             _savedCloseCompletionBlock = nil;
         }
     }];
@@ -634,7 +668,7 @@ static NSString * const OriginalChangeTokenKey = @"originalToken";
 {
     OBPRECONDITION((self.documentState & UIDocumentStateClosed) == 0);
     
-    if ((self.documentState & UIDocumentStateClosed) != 0) {
+    if (!self.isDefinitelyClosing && (self.documentState & UIDocumentStateClosed) != 0) {
         // we may be being asked to close before we have finished opening.  note that and save the completion handler for when we can actually close.
         // we will close if/when we have successfully opened.
         _savedCloseCompletionBlock = [completionHandler copy];
@@ -655,6 +689,8 @@ static NSString * const OriginalChangeTokenKey = @"originalToken";
     OUIWithoutAnimating(^{
         // If the user is just switching to another app quickly and coming right back (maybe to paste something at us), we don't want to end editing.
         // Instead, we should commit any partial edits, but leave the editor up.
+        
+        OBASSERT_IF(self.forPreviewGeneration, self.hasUnsavedChanges == NO, "Don't modify a document while generating a preview");
         
         [self _willSave];
 
@@ -691,19 +727,19 @@ static NSString * const OriginalChangeTokenKey = @"originalToken";
     
     // Make sure that if the app is backgrounded, we don't get left in the middle of a close operation (still being a file presenter) where the user could delete us (via iTunes or iCloud) and then on foregrounding of the app UIDocument can get confused.
     OFBackgroundActivity *activity = [OFBackgroundActivity backgroundActivityWithIdentifier:@"com.omnigroup.OmniUI.OUIDocument.close"];
-    
-    [super closeWithCompletionHandler:^(BOOL success){
+
+    void (^closedCompletion)(BOOL success) = ^void(BOOL success) {
         DEBUG_DOCUMENT(@"%@ %@ success %d", [self shortDescription], NSStringFromSelector(_cmd), success);
 
         [self _updateUndoIndicator];
-        
+
         void (^previewCompletion)(void) = ^{
             OBASSERT(_isClosing == YES);
             _isClosing = NO;
-            
+
             if (completionHandler)
-                completionHandler(success);
-            
+            completionHandler(success);
+
             if (_afterCloseRelinquishToWriter) {
                 // A document that was open to generate previews has been closed. We need to finish up accomodating that deletion now.
                 OBASSERT(self.forPreviewGeneration);
@@ -714,26 +750,36 @@ static NSString * const OriginalChangeTokenKey = @"originalToken";
 
             // Let the document picker know that a new preview is available. We do this here rather than in OUIDocumentPreviewGenerator since if a new document is opened while an existing document is already open (and thus the old document is closed), say by tapping on a document while in Mail and while our app is running and showing a document, then the preview generator might not ever do the generation.
             [[NSNotificationCenter defaultCenter] postNotificationName:OUIDocumentPreviewsUpdatedForFileItemNotification object:self.fileItem userInfo:nil];
-            
+
             [activity finished];
         };
 
         ODSFileItem *fileItem = self.fileItem;
         if (fileItem != nil && !hadError) { // New document being closed to save its initial state before being opened to edit?
-            
-            // Our save path should have updated our file item's latest fileEdit.
-            OBASSERT([fileItem.fileModificationDate isEqual:self.fileModificationDate]);
 
+            // Our save path should have updated our file item's latest fileEdit.
+            if (fileItem.fileModificationDate != nil) {
+                OBASSERT([fileItem.fileModificationDate isEqual:self.fileModificationDate]);
+            }
             // The date refresh is asynchronous, so we'll force preview loading in the case that we know we should consider the previews out of date.
             OFFileEdit *fileEdit = fileItem.fileEdit;
-            
-            [self _writePreviewsIfNeeded:(hadChanges == NO) fileEdit:fileEdit withCompletionHandler:previewCompletion];
-            
-            [OUIDocumentAppController setDocumentState:viewState forFileEdit:fileEdit];
+            if (fileEdit != nil) {
+                [self _writePreviewsIfNeeded:(hadChanges == NO) fileEdit:fileEdit withCompletionHandler:previewCompletion];
+
+                [OUIDocumentAppController setDocumentState:viewState forFileEdit:fileEdit];
+            } else {
+                previewCompletion();
+            }
         } else {
             previewCompletion();
         }
-    }];
+    };
+
+    if ((self.documentState & UIDocumentStateClosed) != 0) {
+        closedCompletion(YES);
+    } else {
+        [super closeWithCompletionHandler:closedCompletion];
+    }
 }
 
 /*
@@ -743,13 +789,14 @@ static NSString * const OriginalChangeTokenKey = @"originalToken";
  */
 - (void)autosaveWithCompletionHandler:(void (^)(BOOL))completionHandler;
 {
-    OBPRECONDITION([self hasUnsavedChanges]);
     OBPRECONDITION(![self.undoManager isUndoing]);
     OBPRECONDITION(![self.undoManager isRedoing]);
     
     DEBUG_UNDO(@"Autosave running...");
 
-    [self _willSave];
+    if ([self hasUnsavedChanges]) { // If we somehow end up here with unsaved changes, don't call -_willSave.
+        [self _willSave];
+    }
 
     [super autosaveWithCompletionHandler:^(BOOL success){
         DEBUG_UNDO(@"  Autosave success = %d", success);
@@ -809,15 +856,20 @@ static NSString * const OriginalChangeTokenKey = @"originalToken";
     completionHandler = [completionHandler copy];
 
     BOOL isChangingFileType = !OFISEQUAL(self.fileType, self.savingFileType);
-    BOOL ensureUniqueName = isChangingFileType && _documentScope != nil;
-    ODSFileItem *fileItem = nil;
-    if (ensureUniqueName) {
-        fileItem = self.fileItem;
-        OBASSERT(fileItem, "If we are converting file types, we assume the original file existed (this is not a new unsaved document)");
-        url = [_documentScope urlForNewDocumentInFolder:fileItem.parentFolder baseName:[fileItem.name stringByDeletingPathExtension] fileType:self.savingFileType];
-        if ([url.pathExtension isEqualToString:fileItem.fileURL.pathExtension]) {
-            // this should mean that no rename is necessary.  we should overwrite this file with the same name instead of using the unnecessary unique name we just generated (e.g. we are changing from a flat .graffle to a package .graffle)
-            url = fileItem.fileURL;
+    bool ensureUniqueName = NO;
+    if (isChangingFileType) {
+        // TODO: This will hit an assertion if it actually executed. See bug:///137297 (iOS-OmniGraffle Crasher: Assertion fail shortly after editing document -[ODSScope urlForNewDocumentInFolderAtURL:baseName:fileType:])
+        // In this particular case, though we are going to end up with the same URL (we are upgrading a document from flat file to file wrapper but with the same path extension).
+        ensureUniqueName = _documentScope != nil && ![[url pathExtension] isEqual:[self fileNameExtensionForType:self.savingFileType saveOperation:saveOperation]];
+
+        if (ensureUniqueName) {
+            ODSFileItem *fileItem = self.fileItem;
+            OBASSERT(fileItem, "If we are converting file types, we assume the original file existed (this is not a new unsaved document)");
+            url = [_documentScope urlForNewDocumentInFolder:fileItem.parentFolder baseName:[fileItem.name stringByDeletingPathExtension] fileType:self.savingFileType];
+            if ([url.pathExtension isEqualToString:fileItem.fileURL.pathExtension]) {
+                // this should mean that no rename is necessary.  we should overwrite this file with the same name instead of using the unnecessary unique name we just generated (e.g. we are changing from a flat .graffle to a package .graffle)
+                url = fileItem.fileURL;
+            }
         }
     }
     
@@ -869,9 +921,9 @@ static NSString * const OriginalChangeTokenKey = @"originalToken";
     };
 
     if (ensureUniqueName) {
-        OBASSERT(fileItem);
+        OBASSERT(self.fileItem);
         // this ensures that our fileItem gets its URL updated to match.
-        [_documentScope updateFileItem:fileItem withBlock:saveBlock completionHandler:nil];
+        [_documentScope updateFileItem:self.fileItem withBlock:saveBlock completionHandler:nil];
     } else
         saveBlock(nil);
 }
@@ -986,10 +1038,10 @@ static NSString * const OriginalChangeTokenKey = @"originalToken";
     completionHandler = [completionHandler copy];
     
     // The document may not exist (deletions while we were backgrounded, which don't go through -accommodatePresentedItemDeletionWithCompletionHandler:, but at any rate we can't read it.
-    OUIDocumentAppController *controller = [OUIDocumentAppController controller];
-    [controller closeDocumentWithCompletionHandler:^{
-        [self _cleanupAndSignalFailedRevertWithCompletionHandler:completionHandler];
-    }];
+        OUIDocumentAppController *controller = [OUIDocumentAppController controller];
+        [controller closeDocumentWithCompletionHandler:^{
+            [self _cleanupAndSignalFailedRevertWithCompletionHandler:completionHandler];
+        }];
 }
 
 - (void)_cleanupAndSignalFailedRevertWithCompletionHandler:(void (^)(BOOL success))completionHandler;
@@ -1022,14 +1074,19 @@ static NSString * const OriginalChangeTokenKey = @"originalToken";
 
     // Forget our view controller since UIDocument's reloading will call -openWithCompletionHandler: again and we'll make a new view controller
     // Note; doing a view controller rebuild via -relinquishPresentedItemToWriter: seems hard/impossible not only due to the crazy spaghetti mess of blocks but also because it is invoked on UIDocument's background thread, while we need to mess with UIViews.
+    __weak OUIDocument *document = self;
     UIViewController <OUIDocumentViewController> *oldDocumentViewController = _documentViewController;
+    UIViewController *oldPresentedViewController = self.viewControllerToPresent;
     _documentViewController = nil;
-    [oldDocumentViewController.presentedViewController dismissViewControllerAnimated:NO completion:nil];
     oldDocumentViewController.document = nil;
     completionHandler = [completionHandler copy];
     
     [super revertToContentsOfURL:url completionHandler:^(BOOL success){
         if (!success) {
+            __strong OUIDocument *strongDoc = document;
+            [[OUIDocumentAppController controller] documentDidFailToRebuildViewController:strongDoc];
+            [oldPresentedViewController dismissViewControllerAnimated:NO completion:nil];
+            document.isDefinitelyClosing = YES;
             // Possibly deleted via iTunes while the document was open and we were backgrounded. Hit this as part of <bug:///77658> ([Crash] After deleting a lot of docs via iTunes you crash on next launch of app) and logged Radar 10775218: UIDocument should manage background tasks when performing state transitions. We should be working around this with our own background task management now.
             NSLog(@"Failed to revert document %@", self);
             
@@ -1051,8 +1108,10 @@ static NSString * const OriginalChangeTokenKey = @"originalToken";
             
             [self updateViewControllerToPresent];
 
-            NSString *lastEditedMessage = [self _lastEditedMessage];
-            [self _queueUpdateMessage:lastEditedMessage];
+            [self _queueUpdateMessageProvider:^NSString *{
+                NSString *lastEditedMessage = [self _lastEditedMessage];
+                return lastEditedMessage;
+            }];
         }
     }];
 }
@@ -1181,23 +1240,28 @@ static NSString * const OriginalChangeTokenKey = @"originalToken";
     if (_accommodatingDeletion)
         return; // Don't pop up an alert about moving into the dead zone.
     
-    NSString *updateMessage = nil;
+    NSURL *originalURLPriorToPresentedItemDidMoveToURL = _originalURLPriorToPresentedItemDidMoveToURL;
+    __weak typeof(self) weakSelf = self;
+    [self _queueUpdateMessageProvider:^NSString *{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        NSString *updateMessage = nil;
         
-    // TODO: Test changing file extension? Maybe have 'type changed' variant?
-    // TODO: Test incoming delete. We should not alert if we got closed
-    if (OFNOTEQUAL([_originalURLPriorToPresentedItemDidMoveToURL lastPathComponent], [newURL lastPathComponent])) {
-        NSString *messageFormat = NSLocalizedStringFromTableInBundle(@"Renamed to %@.", @"OmniUIDocument", OMNI_BUNDLE, @"Message format for alert informing user that the document has been renamed on another device");
+        // TODO: Test changing file extension? Maybe have 'type changed' variant?
+        // TODO: Test incoming delete. We should not alert if we got closed
+        if (OFNOTEQUAL([originalURLPriorToPresentedItemDidMoveToURL lastPathComponent], [newURL lastPathComponent])) {
+            NSString *messageFormat = NSLocalizedStringFromTableInBundle(@"Renamed to %@.", @"OmniUIDocument", OMNI_BUNDLE, @"Message format for alert informing user that the document has been renamed on another device");
+            
+            NSString *displayName = [[strongSelf.fileItem class] displayNameForFileURL:newURL fileType:strongSelf.fileType];
+            OBFinishPortingLater("<bug:///147832> (iOS-OmniOutliner Bug: OUIDocument.m:1245 - Can't ask the file item for its editing name. Need a class method of some sort)");
+            updateMessage = [NSString stringWithFormat:messageFormat, displayName];
+        } else {
+            // The code above handles both renames and deletions. If we get althey way to here, we will assume a move has happend. Unfortunately, there is no way to know where the standard 'Shared Documents' part of the path ends and the user created/visible path begins. Because of this, we can't provide any relevant folder/path information. For now, we'll just let the user know that the document was moved.
+            updateMessage = NSLocalizedStringFromTableInBundle(@"Document moved.", @"OmniUIDocument", OMNI_BUNDLE, @"Message letting the user know that their document was moved from one folder to another.");
+            
+        }
         
-        NSString *displayName = [[self.fileItem class] displayNameForFileURL:newURL fileType:self.fileType];
-        OBFinishPortingLater("Can't ask the file item for its editing name. Need a class method of some sort.");
-        updateMessage = [NSString stringWithFormat:messageFormat, displayName];
-    } else {
-        // The code above handles both renames and deletions. If we get althey way to here, we will assume a move has happend. Unfortunately, there is no way to know where the standard 'Shared Documents' part of the path ends and the user created/visible path begins. Because of this, we can't provide any relevant folder/path information. For now, we'll just let the user know that the document was moved.
-        updateMessage = NSLocalizedStringFromTableInBundle(@"Document moved.", @"OmniUIDocument", OMNI_BUNDLE, @"Message letting the user know that their document was moved from one folder to another.");
-        
-    }
-    
-    [self _queueUpdateMessage:updateMessage];
+        return updateMessage;
+    }];
 }
 
 - (NSString *)_persistentPathForFile;
@@ -1415,6 +1479,13 @@ static OFPreference *LastEditsPreference;
 
 + (OUIImageLocation *)placeholderPreviewImageForFileURL:(NSURL *)fileURL area:(OUIDocumentPreviewArea)area;
 {
+//    OBFinishPortingLater("bug:///138402 (iOS-OmniGraffle Crasher: Crash when closing a document)");
+//    return nil;
+    OBRequestConcreteImplementation(self, _cmd);
+}
+
++ (OUIImageLocation *)encryptedPlaceholderPreviewImageForFileURL:(NSURL *)fileURL area:(OUIDocumentPreviewArea)area;
+{
     OBRequestConcreteImplementation(self, _cmd);
 }
 
@@ -1505,6 +1576,8 @@ static OFPreference *LastEditsPreference;
 
 - (void)_undoManagerDidOpenGroup:(NSNotification *)note;
 {
+    OBASSERT(self.forPreviewGeneration == NO); // Make sure we don't provoke a save due to just opening a document to make a preview!
+
     DEBUG_UNDO(@"%@ level:%ld", [note name], [self.undoManager groupingLevel]);
     
     // Immediately open a nested group. This will allows NSUndoManager to automatically open groups for us on the first undo operation, but prevents it from closing the whole group.
@@ -1541,31 +1614,40 @@ static OFPreference *LastEditsPreference;
     [self finishUndoGroup];
 }
 
-/// Queues any type of 'update' message to be displayed. (Ex. last updated date/time or if the documet is moved/renamed.)
-- (void)_queueUpdateMessage:(NSString *)message;
+///  A block that is envoked on the main thread that returns any type of 'update' message to be displayed. (Ex. last updated date/time or if the documet is moved/renamed.)
+typedef NSString * (^MessageProvider)(void);
+
+/// Enqueues an MessageProvider onto the main queue.
+- (void)_queueUpdateMessageProvider:(MessageProvider)messageProvider;
 {
-    OBPRECONDITION(![NSString isEmptyString:message]);
+    OBPRECONDITION(messageProvider != nil);
     OBPRECONDITION(!_accommodatingDeletion);
     
-    if (message == nil || self.forPreviewGeneration) {
+    if (messageProvider == nil || self.forPreviewGeneration) {
         // No point in doing any of thise if we don't acutally have a message to show or if we aren't a user-visible open document
         return;
     }
     
-    
-    if ([self shouldShowUpdateMessage] == NO) {
-        return;
-    }
+    messageProvider = [messageProvider copy];
     
     // See commentary in -_willBeRenamedLocally about this hack.
     if (CFAbsoluteTimeGetCurrent() - _lastLocalRenameTime < 5) {
         return;
     }
     
+    __weak typeof(self) weakSelf = self;
     [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if ([strongSelf shouldShowUpdateMessage] == NO) {
+            return;
+        }
+
         // Cancel any current alert.
         self.lastQueuedUpdateMessage = nil;
         [self dismissUpdateMessage];
+        
+        // We verify that messageBlock is non-nil above, so we don't need to check here before calling.
+        NSString *message = messageProvider();
 
         // Queue up new message.
         self.lastQueuedUpdateMessage = message;
@@ -1612,7 +1694,123 @@ static OFPreference *LastEditsPreference;
     [self dismissUpdateMessage];
 }
 
+#pragma mark OFDocumentEncryption (OFCMSKeySource)
+
+- (NSString *)promptForPasswordWithCount:(NSInteger)previousFailureCount hint:(NSString *)passwordHint error:(NSError * _Nullable __autoreleasing *)outError;
+{
+    if ([NSThread isMainThread]) {
+        OBFinishPortingWithNote("<bug:///147831> (iOS-OmniOutliner Bug: OUIDocument.m:1692: Show prompt in promptForPasswordWithCount:hint:error: when in main thread)");
+    }
+    
+    OUIDocumentEncryptionPassphrasePromptOperation *prompt = [[OUIDocumentEncryptionPassphrasePromptOperation alloc] init];
+    prompt.document = self;
+    // TOOD: Password hint.
+    
+    [[[OUIAppController controller] backgroundPromptQueue] addOperation:prompt];
+    
+    [prompt waitUntilFinished];
+    
+    NSString *result = prompt.password;
+    if (result) {
+        return result;
+    } else {
+        if (outError)
+            *outError = prompt.error;
+        return nil;
+    }
+}
+
+- (BOOL)isUserInteractionAllowed;
+{
+    return !self.forPreviewGeneration;
+}
+
 @end
+
+@implementation OUIDocumentEncryptionPassphrasePromptOperation
+{
+    OUIDocument * __weak document;
+    NSString *enteredPassword;
+    NSError *enteredError;
+}
+
+@synthesize document = document,
+error = enteredError,
+password = enteredPassword;
+
+- (void)start;
+{
+    [super start];
+    
+    dispatch_async(dispatch_get_main_queue(), ^{
+        ODSItem *fileItem;
+        UIViewController *presenter;
+        
+        {
+            OUIDocument *strongDoc = self.document;
+
+            if (!strongDoc || self.cancelled) {
+                enteredError = [NSError errorWithDomain:NSCocoaErrorDomain code:NSUserCancelledError userInfo:nil];
+                [self finish];
+                return;
+            }
+            
+            fileItem = strongDoc.fileItem;
+            presenter = strongDoc.documentViewController;
+
+        }
+
+        BOOL needToChangeUserInteractionEnabled = NO;
+        UINavigationController *navController = nil;
+        if (!presenter) {
+            UIWindow *window = [[[UIApplication sharedApplication] delegate] window];
+            presenter = [window rootViewController];
+            BOOL userinteractionEnabled = window.userInteractionEnabled;
+            UIViewController *presentedViewController = [presenter presentedViewController];
+            if (presentedViewController) {
+                if ([presentedViewController isKindOfClass:UINavigationController.class]) {
+                    navController = (UINavigationController *)presentedViewController;
+                    presenter = navController.topViewController;
+                } else {
+                    presenter = presentedViewController;
+                }
+                if (!userinteractionEnabled) {
+                    window.userInteractionEnabled = YES;
+                    needToChangeUserInteractionEnabled = YES;
+                }
+            }
+        }
+
+        NSString *promptMessage = [NSString stringWithFormat:NSLocalizedStringFromTableInBundle(@"The document \"%@\" requires a password to open.", @"OmniUIDocument", OMNI_BUNDLE, @"dialog box title when prompting for the password/passphrase for an encrypted document - parameter is the display-name of the file being opened"),
+                                   fileItem.name];
+        
+        OUIPasswordAlert *dialog = [[OUIPasswordAlert alloc] initWithTitle:promptMessage options:0];
+
+        dialog.finished = ^(OUIPasswordAlert *a, OUIPasswordAlertAction action){
+            switch (action) {
+                default:
+                case OUIPasswordAlertActionCancel:
+                    enteredError = [NSError errorWithDomain:NSCocoaErrorDomain code:NSUserCancelledError userInfo:nil];
+                    break;
+                case OUIPasswordAlertActionLogIn:
+                    enteredPassword = a.password;
+                    break;
+            }
+            if (needToChangeUserInteractionEnabled) {
+                UIWindow *window = [[[UIApplication sharedApplication] delegate] window];
+                window.userInteractionEnabled = NO;
+            }
+            [self finish];
+        };
+
+        [self.document.applicationLock unlock];
+        self.document.applicationLock = nil;
+        [dialog showFromController:presenter];
+    });
+}
+
+@end
+
 
 // A helper function to centralize the check for -openWithCompletionHandler: leaving the document 'open-ish' when it fails.
 // Radar 10694414: If UIDocument -openWithCompletionHandler: fails, it is still a presenter

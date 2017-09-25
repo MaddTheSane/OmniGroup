@@ -1,4 +1,4 @@
-// Copyright 2010-2015 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -227,7 +227,7 @@ static CGRect _nonautoscrollBounds(UIScrollView *self, NSUInteger allowedDirecti
     }
 }
 
-- (void)animateAlongsideKeyboardHiding:(void (^)())animations;
+- (void)animateAlongsideKeyboardHiding:(void (^)(void))animations;
 {
     if (animations){
         OUIKeyboardNotifier *sharedNotifier = [OUIKeyboardNotifier sharedNotifier];

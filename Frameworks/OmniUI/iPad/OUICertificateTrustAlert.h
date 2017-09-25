@@ -1,4 +1,4 @@
-// Copyright 2010-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -20,6 +20,8 @@
 
 /* Tells OUICertificateTrustAlert what view controller to present the alert from. This block will be invoked on the main thread right before the alert is to be shown. */
 - (void)findViewController:(UIViewController *(^)(void))finder;
+
+@property (readonly) SecTrustRef serverTrust;
 
 @property (copy, nonatomic) void (^cancelBlock)(void);
 @property (copy, nonatomic) void (^trustBlock)(OFCertificateTrustDuration duration);

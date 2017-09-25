@@ -1,4 +1,4 @@
-// Copyright 2008-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2008-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -16,14 +16,25 @@
 
 #import "ODOEntity-Internal.h"
 
+NS_ASSUME_NONNULL_BEGIN
+
+@interface ODOObject () // Internal initializers
+- (instancetype)initWithEditingContext:(ODOEditingContext *)context objectID:(ODOObjectID *)objectID isFault:(BOOL)isFault NS_DESIGNATED_INITIALIZER;
+- (instancetype)initWithEditingContext:(ODOEditingContext *)context objectID:(ODOObjectID *)objectID snapshot:(CFArrayRef)snapshot NS_DESIGNATED_INITIALIZER;
+@end
+
 @interface ODOObject (Internal)
-- (id)initWithEditingContext:(ODOEditingContext *)context objectID:(ODOObjectID *)objectID isFault:(BOOL)isFault;
-- (id)initWithEditingContext:(ODOEditingContext *)context objectID:(ODOObjectID *)objectID snapshot:(CFArrayRef)snapshot;
+
 - (BOOL)_isAwakingFromInsert;
 - (void)_setIsAwakingFromInsert:(BOOL)isAwakingFromInsert;
+- (void)_setIsAwakingFromReinsertionAfterUndoneDeletion:(BOOL)isAwakingFromReinsertionAfterUndoneDeletion;
 - (void)_setIsFault:(BOOL)isFault;
 - (void)_turnIntoFault:(BOOL)deleting;
 - (void)_invalidate;
+
+- (BOOL)_isCalculatingValueForKey:(NSString *)key;
+- (void)_setIsCalculatingValueForKey:(NSString *)key;
+- (void)_clearIsCalculatingValueForKey:(NSString *)key;
 
 #ifdef OMNI_ASSERTIONS_ON
 - (BOOL)_odo_checkInvariants;
@@ -141,7 +152,6 @@ static inline void _ODOObjectSetValueAtIndex(ODOObject *self, NSUInteger snapsho
     if (value == self->_valueStorage[snapshotIndex])
         return;
     
-    // Not doing -copy since this might be a mutable to-many set.  Higher level code should copy attribute values?  Maybe we should have a setter that passes in a retained value.
     [self->_valueStorage[snapshotIndex] release];
     self->_valueStorage[snapshotIndex] = [value retain];
 }
@@ -164,10 +174,12 @@ void ODOObjectAwakeSingleObjectFromFetch(ODOObject *object) OB_HIDDEN;
 void ODOObjectAwakeObjectsFromFetch(NSArray *objects) OB_HIDDEN;
 
 BOOL ODOObjectToManyRelationshipIsFault(ODOObject *self, ODORelationship *rel) OB_HIDDEN;
-NSMutableSet *ODOObjectToManyRelationshipIfNotFault(ODOObject *self, ODORelationship *rel) OB_HIDDEN;
+NSMutableSet * _Nullable ODOObjectToManyRelationshipIfNotFault(ODOObject *self, ODORelationship *rel) OB_HIDDEN;
 
 void ODOObjectSetChangeProcessingEnabled(ODOObject *self, BOOL enabled) OB_HIDDEN;
 BOOL ODOObjectChangeProcessingEnabled(ODOObject *self) OB_HIDDEN;
 
-CFArrayRef ODOObjectCreateDifferenceRecordFromSnapshot(ODOObject *self, CFArrayRef snapshot) OB_HIDDEN;
+_Nullable CFArrayRef ODOObjectCreateDifferenceRecordFromSnapshot(ODOObject *self, CFArrayRef snapshot) OB_HIDDEN;
 void ODOObjectApplyDifferenceRecord(ODOObject *self, CFArrayRef diff) OB_HIDDEN;
+
+NS_ASSUME_NONNULL_END

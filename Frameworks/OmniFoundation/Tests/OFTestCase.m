@@ -1,4 +1,4 @@
-// Copyright 2008-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2008-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -7,15 +7,14 @@
 
 #import "OFTestCase.h"
 
-#import <OmniBase/rcsid.h>
-#import <OmniBase/NSError-OBExtensions.h>
-
-// This import isn't needed for this file, but serves as a test of whether the headers are properly #ifdef in OmniFoundation.h
-#import <OmniFoundation/OmniFoundation.h>
+@import OmniBase;
+@import OmniFoundation;
 
 RCS_ID("$Id$")
 
 OB_REQUIRE_ARC
+
+NS_ASSUME_NONNULL_BEGIN
 
 @implementation OFTestCase
 
@@ -99,9 +98,6 @@ OB_REQUIRE_ARC
 
 #if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
 
-#import <OmniFoundation/NSFileManager-OFExtensions.h>
-#import <OmniBase/NSError-OBExtensions.h>
-
 void OFDiffData(XCTestCase *testCase, NSData *expected, NSData *actual)
 {
     NSString *name = [testCase name];
@@ -163,7 +159,7 @@ static BOOL _addRelativePaths(NSMutableSet *relativePaths, NSString *base, OFDif
     return YES;
 }
 
-static BOOL _OFCheckFilesSame(XCTestCase *self, NSString *path1, NSString *path2, BOOL requireSame, OFDiffFileOperations *operations)
+static BOOL _OFCheckFilesSame(XCTestCase *self, NSString *path1, NSString *path2, BOOL requireSame, OFDiffFileOperations * _Nullable operations)
 {
     __autoreleasing NSError *error = nil;
 
@@ -299,7 +295,7 @@ static BOOL _OFCheckFilesSame(XCTestCase *self, NSString *path1, NSString *path2
     return YES;
 }
 
-static BOOL OFCheckFilesSame(XCTestCase *self, NSString *path1, NSString *path2, BOOL requireSame, OFDiffFileOperations *operations)
+static BOOL OFCheckFilesSame(XCTestCase *self, NSString *path1, NSString *path2, BOOL requireSame, OFDiffFileOperations * _Nullable operations)
 {
     OBPRECONDITION(path1);
     OBPRECONDITION(path2);
@@ -334,16 +330,19 @@ static BOOL OFCheckFilesSame(XCTestCase *self, NSString *path1, NSString *path2,
     return success;
 }
 
-BOOL OFSameFiles(XCTestCase *self, NSString *path1, NSString *path2, OFDiffFileOperations *operations)
+BOOL OFSameFiles(XCTestCase *self, NSString *path1, NSString *path2, OFDiffFileOperations * _Nullable operations)
 {
     return OFCheckFilesSame(self, path1, path2, NO/*requireSame*/, operations);
 }
 
 
-void OFDiffFiles(XCTestCase *self, NSString *path1, NSString *path2, OFDiffFileOperations *operations)
+void OFDiffFiles(XCTestCase *self, NSString *path1, NSString *path2, OFDiffFileOperations * _Nullable operations)
 {
     OFCheckFilesSame(self, path1, path2, YES/*requireSame*/, operations);
 }
 
 @implementation OFDiffFileOperations
 @end
+
+NS_ASSUME_NONNULL_END
+

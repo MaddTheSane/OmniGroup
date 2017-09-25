@@ -1,4 +1,4 @@
-// Copyright 2010-2015 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -8,6 +8,8 @@
 #import <OmniUI/OUIDetailInspectorSlice.h>
 
 #import <OmniUI/OUIInspector.h>
+#import <OmniUI/OUIInspectorAppearance.h>
+#import <OmniUI/OUIThemedTableViewCell.h>
 #import <OmniUI/OUIInspectorPane.h>
 #import <OmniUI/OUIInspectorSlice.h>
 #import <OmniUI/OUIInspectorTextWell.h>
@@ -18,7 +20,7 @@ RCS_ID("$Id$");
 @implementation OUIDetailInspectorSliceItem
 @end
 
-@interface OUIDetailInspectorSliceTableViewCell : UITableViewCell
+@interface OUIDetailInspectorSliceTableViewCell : OUIThemedTableViewCell
 @property(nonatomic,assign) BOOL enabled;
 @property(nonatomic,strong) UIImage *valueImage;
 @property(nonatomic,strong) UIImageView *valueImageView;
@@ -53,12 +55,29 @@ RCS_ID("$Id$");
     } else {
         self.valueImageView.hidden = YES;
     }
+    
+    CGRect detailFrame = self.detailTextLabel.frame;
+    detailFrame.size = self.detailTextLabel.intrinsicContentSize;
+    // The detail label should start where it will fit the whole label in front of the arrow
+    detailFrame.origin.x = CGRectGetMaxX(self.contentView.frame) - detailFrame.size.width;
+    self.detailTextLabel.frame = detailFrame;
+    CGRect textFrame = self.textLabel.frame;
+    CGSize contentSize = self.textLabel.intrinsicContentSize;
+    if (textFrame.origin.x + contentSize.width > self.detailTextLabel.frame.origin.x) {
+        textFrame.size.width = self.detailTextLabel.frame.origin.x - textFrame.origin.x;
+        self.textLabel.frame = textFrame;
+    }
 }
 
-@end
+#pragma mark OUIInspectorAppearance
+- (void)themedAppearanceDidChange:(OUIThemedAppearance *)changedAppearance;
+{
+    [super themedAppearanceDidChange:changedAppearance];
 
-@interface OUIDetailInspectorSlice()
-@property(nonatomic,strong) UITableView *tableView;
+    OUIInspectorAppearance *appearance = OB_CHECKED_CAST_OR_NIL(OUIInspectorAppearance, changedAppearance);
+    self.valueImageView.backgroundColor = appearance.TableCellBackgroundColor;
+}
+
 @end
 
 @implementation OUIDetailInspectorSlice
@@ -77,14 +96,6 @@ RCS_ID("$Id$");
     
     return self;
 }
-
-- (void)dealloc;
-{
-    _tableView.delegate = nil;
-    _tableView.dataSource = nil;
-}
-
-@synthesize tableView = _tableView;
 
 // The most common case is that there is only one, but subclasses might have a whole group of related options.
 - (NSUInteger)itemCount;
@@ -113,6 +124,22 @@ RCS_ID("$Id$");
     return nil;
 }
 
+@synthesize placeholderTextColor = _placeholderTextColor;
+- (UIColor *)placeholderTextColor;
+{
+    if (_placeholderTextColor)
+        return _placeholderTextColor;
+    
+    return [OUIInspector disabledLabelTextColor];
+}
+
+- (void)setPlaceholderTextColor:(UIColor *)placeholderTextColor;
+{
+    if (_placeholderTextColor == placeholderTextColor)
+        return;
+    _placeholderTextColor = placeholderTextColor;
+}
+
 - (NSString *)groupTitle;
 {
     return nil;
@@ -122,15 +149,14 @@ RCS_ID("$Id$");
 
 - (void)showDetails:(id)sender;
 {
-    OBFinishPorting;
+    OBFinishPortingWithNote("<bug:///147849> (iOS-OmniOutliner Bug: Implement -[OUIDetailInspectorSlice showDetails:])");
 }
 
 - (void)updateInterfaceFromInspectedObjects:(OUIInspectorUpdateReason)reason;
 {
     [super updateInterfaceFromInspectedObjects:reason];
     
-    [_tableView reloadData];
-    OUITableViewAdjustHeightToFitContents(_tableView);
+    [self reloadTableAndResize];
 }
 
 #pragma mark - UIViewController subclass
@@ -138,31 +164,25 @@ RCS_ID("$Id$");
 - (void)loadView;
 {
     [super loadView];
-    self.tableView = (UITableView *)[self viewIfLoaded];
     // iOS 7 GM bug: separators are not reliably drawn. This doesn't actually fix the color after the first display, but at least it gets the separators to show up.
-    _tableView.separatorColor = [OUIInspectorSlice sliceSeparatorColor];
+    self.tableView.separatorColor = [OUIInspectorSlice sliceSeparatorColor];
 }
 
 - (void)viewDidLoad;
 {
     [super viewDidLoad];
     
-    [self configureTableViewBackground:_tableView];
+    [self configureTableViewBackground:self.tableView];
 }
 
 - (void)viewWillAppear:(BOOL)animated;
 {
     [super viewWillAppear:animated];
 
-    [self updateInterfaceFromInspectedObjects:OUIInspectorUpdateReasonDefault];
-
-    // Might be coming back from a detail pane that edited a displayed value
-    [_tableView reloadData];
-    OUITableViewAdjustHeightToFitContents(_tableView);
-    CGFloat currentHeight = _tableView.contentSize.height;
+    CGFloat currentHeight = self.tableView.contentSize.height;
     OBASSERT(currentHeight > 0.0);
     if (self.heightConstraint == nil) {
-        self.heightConstraint = [_tableView.heightAnchor constraintEqualToConstant:currentHeight];
+        self.heightConstraint = [self.tableView.heightAnchor constraintEqualToConstant:currentHeight];
         self.heightConstraint.active = YES;
     } else {
         self.heightConstraint.constant = currentHeight;
@@ -185,10 +205,10 @@ RCS_ID("$Id$");
     if (!cell) {
         cell = [[OUIDetailInspectorSliceTableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:reuseIdentifier];
         
-        cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
         cell.selectionStyle = UITableViewCellSelectionStyleBlue;
     }
-    
+    cell.hasTintableDisclosureIndicator = YES;
+
     NSUInteger itemIndex = (NSUInteger)indexPath.row;
     OUIDetailInspectorSliceItem *item = [[OUIDetailInspectorSliceItem alloc] init];
     item.title = self.title;
@@ -207,8 +227,10 @@ RCS_ID("$Id$");
         title = [self placeholderTitleForItemAtIndex:itemIndex];
     }
     cell.textLabel.text = title;
-    cell.textLabel.textColor = placeholder ? [OUIInspector disabledLabelTextColor] : nil;
+    if (placeholder)
+        cell.textLabel.textColor = self.placeholderTextColor;
     cell.textLabel.font = [OUIInspectorTextWell defaultLabelFont];
+    cell.textLabel.lineBreakMode = NSLineBreakByTruncatingTail;
 
     NSString *value = item.value;
     UIImage *valueImage = item.valueImage;
@@ -239,7 +261,7 @@ RCS_ID("$Id$");
     
     cell.detailTextLabel.text = value;
     if (placeholder) {
-        cell.detailTextLabel.textColor = [OUIInspector disabledLabelTextColor];
+        cell.detailTextLabel.textColor = self.placeholderTextColor;
     } else if (cell.accessoryType == UITableViewCellAccessoryDisclosureIndicator) {
         cell.detailTextLabel.textColor = [OUIInspector indirectValueTextColor];
     } else {
@@ -289,18 +311,20 @@ RCS_ID("$Id$");
     NSUInteger itemIndex = (NSUInteger)indexPath.row;
     
     OUIInspectorPane *details = [self makeDetailsPaneForItemAtIndex:itemIndex];
+    if (details != nil) {
+        
+        OBASSERT(details.parentSlice == nil); // The implementation shouldn't bother to set this up, we just pass it in case the detail needs to get some info from the parent
+        details.parentSlice = self;
+        
+        // Maybe just call -updateItemAtIndex:with: again rather than grunging it back out of the UI...
+        OUIDetailInspectorSliceTableViewCell *selectedCell = (OUIDetailInspectorSliceTableViewCell *)[tableView cellForRowAtIndexPath:indexPath];
+        OBASSERT(selectedCell); // just got tapped, so it should be around!
+        details.title = selectedCell.textLabel.text;
+        
+        [self.inspector pushPane:details inspectingObjects:[self inspectedObjectsForItemAtIndex:itemIndex]];
+    }
     
-    OBASSERT(details.parentSlice == nil); // The implementation shouldn't bother to set this up, we just pass it in case the detail needs to get some info from the parent
-    details.parentSlice = self;
-    
-    // Maybe just call -updateItemAtIndex:with: again rather than grunging it back out of the UI...
-    OUIDetailInspectorSliceTableViewCell *selectedCell = (OUIDetailInspectorSliceTableViewCell *)[tableView cellForRowAtIndexPath:indexPath];
-    OBASSERT(selectedCell); // just got tapped, so it should be around!
-    details.title = selectedCell.textLabel.text;
-    
-    [self.inspector pushPane:details inspectingObjects:[self inspectedObjectsForItemAtIndex:itemIndex]];
-    
-    [_tableView deselectRowAtIndexPath:indexPath animated:YES];
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
 }
 
 - (UITableViewStyle)tableViewStyle; // The style to use when creating the table view
@@ -308,8 +332,18 @@ RCS_ID("$Id$");
     return UITableViewStylePlain;
 }
 
-- (CGFloat)tableView:(UITableView *)tableView heightForFooterInSection:(NSInteger)section;
+- (CGFloat)tableView:(UITableView *)tableView estimatedHeightForFooterInSection:(NSInteger)section;
 {
     return 0;
 }
+
+-(CGFloat)tableView:(UITableView *)tableView estimatedHeightForHeaderInSection:(NSInteger)section;
+{
+    return 0;
+}
+
+- (BOOL)shouldPushDetailsPaneForItemAtIndex:(NSUInteger)itemIndex {
+    return YES;
+}
 @end
+

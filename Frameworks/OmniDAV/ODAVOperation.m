@@ -1,4 +1,4 @@
-// Copyright 2008-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2008-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -45,7 +45,7 @@ NSString * const ODAVContentTypeHeader = @"Content-Type";
     BOOL _authChallengeCancelled;
     NSMutableData *_errorData;
     NSError *_error;
-    NSMutableArray *_redirects;
+    NSMutableArray <ODAVRedirect *> *_redirects;
 }
 
 static BOOL _isRead(ODAVOperation *self)
@@ -374,17 +374,19 @@ static OFCharacterSet *TokenDelimiterSet = nil;
 
 - (void)_didReceiveResponse:(NSURLResponse *)response;
 {
-#ifdef OMNI_ASSERTIONS_ON
     // We'll already have a _response set for credential errors, via -_credentialsNotFoundForChallenge:.
     if (_response) {
+        // The NSURL machinery handles redirects without even showing them to us; the only expected situation for us to get multiple responses is during authentication requests.
+        // If this assertion fails it's probably fine to extend it with additional status codes.
         OBASSERT([_response statusCode] == ODAV_HTTP_UNAUTHORIZED);
-        OBASSERT([(NSHTTPURLResponse *)response statusCode] == [_response statusCode]);
-        
-        // In the past we fell through, discarding the old response and keeping the new one. We'll keep doing that, but the two responses should be nearly identical.
     }
-#endif
     
+    // Discard information we may have collected from a previous response.
     _response = nil;
+    _resultData = nil;
+    _bytesReceived = 0;
+    _shouldCollectDetailsForError = NO;
+    _errorData = nil;
     
     if (![response isKindOfClass:[NSHTTPURLResponse class]]) {
         // This will mean we treat it as success in that we'll try to decode the response data.
@@ -409,7 +411,6 @@ static OFCharacterSet *TokenDelimiterSet = nil;
         NSLog(@"  statusCode: %ld", [_response statusCode]);
         NSLog(@"  allHeaderFields: %@", [_response allHeaderFields]);
     }
-    
     
     NSInteger statusCode = [_response statusCode];
     if (statusCode >= 200 && statusCode < 300) {
@@ -537,7 +538,7 @@ static OFCharacterSet *TokenDelimiterSet = nil;
             continuation = request;
         } else if ([method isEqualToString:@"MOVE"] || [method isEqualToString:@"COPY"]) {
             // MOVE/COPY is a bit dubious. If the source URL gets rewritten by the server, do we know that the destination URL we're sending is still what it should be?
-            // In theory we wouldn't get this, as long as we paid attention to the response to the PUT/MKCOL/PROPFIND request used to create/find the resource we're operating on.po m
+            // In theory we wouldn't get this, as long as we paid attention to the response to the PUT/MKCOL/PROPFIND request used to create/find the resource we're operating on.
             // Exception: When replacing a remote database with the local version, if the user-entered URL incurs a redirect (e.g. http->https), we will still get a redirect on MOVE when moving the old database aside before replacing it with the new one.  TODO: Figure out how to avoid this.
             // OBASSERT_NOT_REACHED("In theory, we shouldn't get redirected on MOVE?");
             
@@ -668,7 +669,7 @@ static OFCharacterSet *TokenDelimiterSet = nil;
     
     OBASSERT(_response != nil);
     if (_response != nil) {
-        [info setObject:[_response URL] forKey:ODAVURLErrorFailingURLErrorKey];
+        [info setObject:[_response URL] forKey:NSURLErrorFailingURLErrorKey];
     } else {
         NSLog(@"_response is nil in %s", __func__);
     }
@@ -686,6 +687,9 @@ static OFCharacterSet *TokenDelimiterSet = nil;
     if (locationHeader) {
         [info setObject:locationHeader forKey:ODAVResponseLocationErrorKey];
     }
+    NSArray <ODAVRedirect *> *preFailureRedirects = self.redirects;
+    if (preFailureRedirects && preFailureRedirects.count)
+        [info setObject:preFailureRedirects forKey:ODAVPreviousRedirectsErrorKey];
     
     // Add the error content.  Need to obey the charset specified in the Content-Type header.  And the content type.
     if (_errorData != nil) {
@@ -887,7 +891,7 @@ static BOOL _emptyPath(NSURL *url)
 
 @end
 
-void ODAVAddRedirectEntry(NSMutableArray *entries, NSString *type, NSURL *from, NSURL *to, NSDictionary *responseHeaders)
+void ODAVAddRedirectEntry(NSMutableArray <ODAVRedirect *> *entries, NSString *type, NSURL *from, NSURL *to, NSDictionary *responseHeaders)
 {
     OBPRECONDITION(entries != nil);
     OBPRECONDITION(type != nil);

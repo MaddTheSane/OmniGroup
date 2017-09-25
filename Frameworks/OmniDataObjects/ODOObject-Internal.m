@@ -1,4 +1,4 @@
-// Copyright 2008-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2008-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -16,6 +16,8 @@
 #import "ODOEditingContext-Internal.h"
 
 RCS_ID("$Id$")
+
+NS_ASSUME_NONNULL_BEGIN
 
 @implementation ODOObject (Internal)
 
@@ -49,42 +51,6 @@ BOOL _ODOAssertSnapshotIsValidForObject(ODOObject *self, CFArrayRef snapshot)
 }
 #endif
 
-- (id)initWithEditingContext:(ODOEditingContext *)context objectID:(ODOObjectID *)objectID isFault:(BOOL)isFault;
-{
-    OBPRECONDITION(context);
-    OBPRECONDITION(objectID);
-    OBPRECONDITION(ODO_OBJECT_LAZY_TO_MANY_FAULT_MARKER == nil); // since we use calloc to start our _values
-    
-    _editingContext = [context retain];
-    _objectID = [objectID copy];
-    _flags.isFault = isFault;
-    _flags.undeletable = [[self class] objectIDShouldBeUndeletable:objectID];
-    
-    // Only create values up front if we aren't a fault
-    if (_flags.isFault == NO)
-        _ODOObjectCreateNullValues(self);
-    
-    return self;
-}
-
-- (id)initWithEditingContext:(ODOEditingContext *)context objectID:(ODOObjectID *)objectID snapshot:(CFArrayRef)snapshot;
-{
-    OBPRECONDITION(context);
-    OBPRECONDITION(objectID);
-    OBPRECONDITION(ODO_OBJECT_LAZY_TO_MANY_FAULT_MARKER == nil); // since we use calloc to start our _values
-    OBPRECONDITION(snapshot);
-    OBPRECONDITION((CFIndex)[[[objectID entity] snapshotProperties] count] == CFArrayGetCount(snapshot));
-    
-    _editingContext = [context retain];
-    _objectID = [objectID copy];
-    _flags.isFault = NO;
-    _flags.undeletable = [[self class] objectIDShouldBeUndeletable:objectID];
-
-    _ODOObjectCreateValuesFromSnapshot(self, snapshot);
-    
-    return self;
-}
-
 - (BOOL)_isAwakingFromInsert;
 {
     return _flags.isAwakingFromInsert;
@@ -93,6 +59,11 @@ BOOL _ODOAssertSnapshotIsValidForObject(ODOObject *self, CFArrayRef snapshot)
 - (void)_setIsAwakingFromInsert:(BOOL)isAwakingFromInsert;
 {
     _flags.isAwakingFromInsert = isAwakingFromInsert;
+}
+
+- (void)_setIsAwakingFromReinsertionAfterUndoneDeletion:(BOOL)isAwakingFromReinsertionAfterUndoneDeletion;
+{
+    _flags.isAwakingFromReinsertionAfterUndoneDeletion = isAwakingFromReinsertionAfterUndoneDeletion;
 }
 
 - (void)_setIsFault:(BOOL)isFault;
@@ -106,8 +77,10 @@ BOOL _ODOAssertSnapshotIsValidForObject(ODOObject *self, CFArrayRef snapshot)
     OBPRECONDITION(!_flags.isFault);
     OBPRECONDITION(!_flags.invalid);
     
-    if (_flags.isFault) // check at runtime anyway
+    if (_flags.isFault) {
+        // check at runtime anyway
         return;
+    }
     
     OBASSERT(_ODOObjectHasValues(self));
     [self willTurnIntoFault];
@@ -115,13 +88,16 @@ BOOL _ODOAssertSnapshotIsValidForObject(ODOObject *self, CFArrayRef snapshot)
     _ODOObjectReleaseValues(self);
 
     _flags.isFault = YES;
+    
+    [self didTurnIntoFault];
 }
 
 - (void)_invalidate;
 {
     // First, become a fault
-    if (!_flags.isFault)
+    if (!_flags.isFault) {
         [self _turnIntoFault:NO/*deleting*/];
+    }
     
     // Cleared in _turnIntoFault: and we have no way of ever becoming valid again.
     _ODOObjectReleaseValuesIfPresent(self);
@@ -134,6 +110,28 @@ BOOL _ODOAssertSnapshotIsValidForObject(ODOObject *self, CFArrayRef snapshot)
     _editingContext = nil;
     
     // We leave _objectID; notification observers need to be able to get the entity/pk of deleted objects.
+}
+
+- (BOOL)_isCalculatingValueForKey:(NSString *)key;
+{
+    return [_keysForPropertiesBeingCalculated containsObject:key];
+}
+
+- (void)_setIsCalculatingValueForKey:(NSString *)key;
+{
+    if (_keysForPropertiesBeingCalculated == nil) {
+        _keysForPropertiesBeingCalculated = [[NSMutableSet alloc] init];
+        [_keysForPropertiesBeingCalculated addObject:key];
+    }
+}
+
+- (void)_clearIsCalculatingValueForKey:(NSString *)key;
+{
+    [_keysForPropertiesBeingCalculated removeObject:key];
+    if (_keysForPropertiesBeingCalculated.count == 0) {
+        [_keysForPropertiesBeingCalculated release];
+        _keysForPropertiesBeingCalculated = nil;
+    }
 }
 
 NSArray *_ODOObjectCreatePropertySnapshot(ODOObject *self)
@@ -151,6 +149,7 @@ NSArray *_ODOObjectCreatePropertySnapshot(ODOObject *self)
     
     // We do store the full array for snapshots, one slot per snapshot property, even though we don't really need the slots for to-manys.  One optimization would be to pack/unpack them as needed.
     CFMutableArrayRef snapshot = CFArrayCreateMutable(kCFAllocatorDefault, propCount, &OFNSObjectArrayCallbacks);
+    Class instanceClass = [self class];
 
     for (propIndex = 0; propIndex < propCount; propIndex++) {
         ODOProperty *prop = [snapshotProperties objectAtIndex:propIndex];
@@ -168,7 +167,13 @@ NSArray *_ODOObjectCreatePropertySnapshot(ODOObject *self)
                     value = [[(ODOObject *)value objectID] primaryKey];
             }
         }
-                             
+
+        // Classes can opt out of including transient calcuated properties in snapshots.
+        // This is necessary in the case that the transient calculated property is holding pointers to ODOObject instances.
+        if (flags.calculated && flags.transient && ![instanceClass shouldIncludeSnapshotForTransientCalculatedProperty:prop]) {
+            value = nil;
+        }
+
         CFArrayAppendValue(snapshot, value);
     }
     
@@ -207,8 +212,9 @@ static void _validateRelationshipDestination(const void *value, void *context)
     OBASSERT(![dest isDeleted]);
                                          
     // This destination object might still be a fault.  In that case, it has no reference back to the owner will be around.
-    if ([dest isFault])
+    if ([dest isFault]) {
         return;
+    }
     
     // Can't call -primitiveValueForKey: since that would cause lazy fault creation to fire.
     OBASSERT([[[dest entity] snapshotProperties] containsObject:ctx->toOne]);
@@ -257,12 +263,18 @@ static void _validateRelationshipDestination(const void *value, void *context)
             OBASSERT(deleted == NO); // deleted objects are turned into faults first
             
             NSUInteger mods = 0;
-            if (inserted)
+            if (inserted) {
                 mods++;
-            if (updated)
+            }
+
+            if (updated) {
                 mods++;
-            if (deleted)
+            }
+
+            if (deleted) {
                 mods++;
+            }
+            
             OBASSERT(mods <= 1);
             
             // All our values should be reasonable
@@ -290,13 +302,13 @@ static void _validateRelationshipDestination(const void *value, void *context)
                                 .toOne = (ODORelationship *)prop,
                             };
                             _validateRelationshipDestination(self, &ctx);
-                        } else if (value) {
+                        } else if (value != nil) {
                             // At least do the class check on the lazy fault primary key
                             OBASSERT([value isKindOfClass:[[[(ODORelationship *)prop destinationEntity] primaryKeyAttribute] valueClass]]);
                         }
                     }
                 } else {
-                    OBASSERT(!value || [value isKindOfClass:[(ODOAttribute *)prop valueClass]]); // OK to temporarily violate the nullity, but not the type
+                    OBASSERT(value == nil || [value isKindOfClass:[(ODOAttribute *)prop valueClass]]); // OK to temporarily violate the nullity, but not the type
                 }
             }
         }
@@ -381,17 +393,20 @@ void ODOObjectAwakeObjectsFromFetch(NSArray *objects)
     NSUInteger fetchedObjectIndex, fetchedObjectCount = [objects count];
     
     // Let all the objects know that they still need awaking.
-    for (fetchedObjectIndex = 0; fetchedObjectIndex < fetchedObjectCount; fetchedObjectIndex++)
+    for (fetchedObjectIndex = 0; fetchedObjectIndex < fetchedObjectCount; fetchedObjectIndex++) {
         ODOObjectPrepareForAwakeFromFetch([objects objectAtIndex:fetchedObjectIndex]);
+    }
     
     // TODO: If we get an exception here, we could leave an object fetched w/o having ever gotten -awakeFromFetch.
     // Wake up each objects.  Some objects might wake peers.
-    for (fetchedObjectIndex = 0; fetchedObjectIndex < fetchedObjectCount; fetchedObjectIndex++)
+    for (fetchedObjectIndex = 0; fetchedObjectIndex < fetchedObjectCount; fetchedObjectIndex++) {
         ODOObjectPerformAwakeFromFetchWithoutRegisteringEdits([objects objectAtIndex:fetchedObjectIndex]);
+    }
     
     // Finally, let them all know they are done.
-    for (fetchedObjectIndex = 0; fetchedObjectIndex < fetchedObjectCount; fetchedObjectIndex++)
+    for (fetchedObjectIndex = 0; fetchedObjectIndex < fetchedObjectCount; fetchedObjectIndex++) {
         ODOObjectFinalizeAwakeFromFetch([objects objectAtIndex:fetchedObjectIndex]);
+    }
 }
 
 BOOL ODOObjectToManyRelationshipIsFault(ODOObject *self, ODORelationship *rel)
@@ -406,21 +421,24 @@ BOOL ODOObjectToManyRelationshipIsFault(ODOObject *self, ODORelationship *rel)
     return ODOObjectValueIsLazyToManyFault(value);
 }
 
-NSMutableSet *ODOObjectToManyRelationshipIfNotFault(ODOObject *self, ODORelationship *rel)
+NSMutableSet * _Nullable ODOObjectToManyRelationshipIfNotFault(ODOObject *self, ODORelationship *rel)
 {
     OBPRECONDITION([self isKindOfClass:[ODOObject class]]);
     OBPRECONDITION([rel isKindOfClass:[ODORelationship class]]);
     OBPRECONDITION([rel entity] == [self entity]);
     OBPRECONDITION([rel isToMany]);
     
-    if (self->_flags.isFault)
+    if (self->_flags.isFault) {
         return nil;
+    }
     
     NSUInteger offset = ODOPropertySnapshotIndex(rel);
     NSMutableSet *set = _ODOObjectValueAtIndex(self, offset);
 
-    if (ODOObjectValueIsLazyToManyFault(set))
+    if (ODOObjectValueIsLazyToManyFault(set)) {
         return nil;
+    }
+    
     return set;
 }
 
@@ -439,7 +457,7 @@ BOOL ODOObjectChangeProcessingEnabled(ODOObject *self)
 
 // Used in ODOEditingContext udno support.  We expect that typically only a few properties will change on each update and that undo will be relatively rare compared to 'do'ing stuff.  So, we'll try to pack this down smaller than just passing along the old snapshots.  Instead, for each update we'll build an array of <editedObjectID, prop0, oldValue0, ..., propN, oldValueN>.  We will not record differences for to-many relationships.  Those are implicit in the inverse to-one relationships.  When recording the to-one properties, we'll record only the foreign key value.  We might want to record the objectID at some point, but on undo, setting the slot to the foreign key makes it into a lazy to-one fault.
 // Later optimization might include building one big array for all the updates with some marker inbetween to delimit change sets.  Probably not worth it.
-CFArrayRef ODOObjectCreateDifferenceRecordFromSnapshot(ODOObject *self, CFArrayRef snapshot)
+_Nullable CFArrayRef ODOObjectCreateDifferenceRecordFromSnapshot(ODOObject *self, CFArrayRef snapshot)
 {
     OBPRECONDITION([self isKindOfClass:[ODOObject class]]);
     OBPRECONDITION(self->_objectID);
@@ -460,8 +478,9 @@ CFArrayRef ODOObjectCreateDifferenceRecordFromSnapshot(ODOObject *self, CFArrayR
         ODOProperty *prop = [snapshotProperties objectAtIndex:propertyIndex];
         struct _ODOPropertyFlags flags = ODOPropertyFlags(prop);
         
-        if (flags.relationship && flags.toMany)
+        if (flags.relationship && flags.toMany) {
             continue;
+        }
         
         id oldValue = (id)CFArrayGetValueAtIndex(snapshot, propertyIndex);
         id newValue = _ODOObjectValueAtIndex(self, propertyIndex);
@@ -478,8 +497,9 @@ CFArrayRef ODOObjectCreateDifferenceRecordFromSnapshot(ODOObject *self, CFArrayR
         
         if (OFNOTEQUAL(oldValue, newValue)) {
             // encode nil as NSNull so that we can 'po' these.  Foundation blows up otherwise.
-            if (!oldValue)
+            if (oldValue == nil) {
                 oldValue = [NSNull null];
+            }
             
             CFArrayAppendValue(changeSet, [prop name]);
             CFArrayAppendValue(changeSet, oldValue);
@@ -514,8 +534,10 @@ void ODOObjectApplyDifferenceRecord(ODOObject *self, CFArrayRef diff)
     for (diffIndex = 1; diffIndex < diffCount; diffIndex += 2) {
         NSString *key = (NSString *)CFArrayGetValueAtIndex(diff, diffIndex+0);
         id value = (id)CFArrayGetValueAtIndex(diff, diffIndex+1);
-        if (OFISNULL(value))
-            value = nil; // undo mapping from above
+        if (OFISNULL(value)) {
+            // undo mapping from above
+            value = nil;
+        }
         
         ODOProperty *prop = [[self->_objectID entity] propertyNamed:key];
         OBASSERT(prop);
@@ -525,9 +547,9 @@ void ODOObjectApplyDifferenceRecord(ODOObject *self, CFArrayRef diff)
         // We have to undo the mapping of object->primary key here so that we can use -setPrimitiveValue:forKey:.
         if (flags.relationship && !flags.toMany) {
             ODORelationship *rel = (ODORelationship *)prop;
-            OBASSERT(!value || [value isKindOfClass:[[[rel destinationEntity] primaryKeyAttribute] valueClass]]);
+            OBASSERT(value == nil || [value isKindOfClass:[[[rel destinationEntity] primaryKeyAttribute] valueClass]]);
             
-            if (value) {
+            if (value != nil) {
                 ODOObjectID *objectID = [[ODOObjectID alloc] initWithEntity:[rel destinationEntity] primaryKey:value];
                 ODOObject *object = ODOEditingContextLookupObjectOrRegisterFaultForObjectID(self->_editingContext, objectID);
                 [objectID release];
@@ -547,3 +569,55 @@ void ODOObjectApplyDifferenceRecord(ODOObject *self, CFArrayRef diff)
 
 @end
 
+#pragma mark -
+
+static inline void _ODOObjectAwakeSingleObjectFromUnarchive(ODOObject *self, SEL sel, id _Nullable arg, BOOL sendWithArg)
+{
+    OBPRECONDITION([self isKindOfClass:[ODOObject class]]);
+    
+    if ([self isDeleted] || [self isInvalid]) {
+        return;
+    }
+    
+    OBASSERT(!self->_flags.isAwakingFromUnarchive);
+    self->_flags.isAwakingFromUnarchive = YES;
+    
+    // Could possibly raise
+    @try {
+        if (sendWithArg) {
+            OBSendVoidMessageWithObject(self, sel, arg);
+        } else {
+            OBSendVoidMessage(self, sel);
+        }
+    } @finally {
+        self->_flags.isAwakingFromUnarchive = NO;
+    }
+}
+
+void ODOObjectAwakeSingleObjectFromUnarchive(ODOObject *object)
+{
+    _ODOObjectAwakeSingleObjectFromUnarchive(object, @selector(awakeFromUnarchive), nil, NO);
+}
+
+void ODOObjectAwakeSingleObjectFromUnarchiveWithMessage(ODOObject *object, SEL sel, id arg)
+{
+    _ODOObjectAwakeSingleObjectFromUnarchive(object, sel, arg, YES);
+}
+
+void ODOObjectAwakeObjectsFromUnarchive(id <NSFastEnumeration> objects)
+{
+    for (ODOObject *object in objects) @autoreleasepool {
+        OBPRECONDITION([object isKindOfClass:[ODOObject class]]);
+        _ODOObjectAwakeSingleObjectFromUnarchive(object, @selector(awakeFromUnarchive), nil, NO);
+    }
+}
+
+void ODOObjectAwakeObjectsFromUnarchiveWithMessage(id <NSFastEnumeration> objects, SEL sel, id arg)
+{
+    for (ODOObject *object in objects) @autoreleasepool {
+        OBPRECONDITION([object isKindOfClass:[ODOObject class]]);
+        _ODOObjectAwakeSingleObjectFromUnarchive(object, sel, arg, YES);
+    }
+}
+
+NS_ASSUME_NONNULL_END

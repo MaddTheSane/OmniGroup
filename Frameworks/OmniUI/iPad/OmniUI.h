@@ -1,4 +1,4 @@
-// Copyright 2015-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2015-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -9,14 +9,13 @@
 
 #import <OmniUI/NSTextStorage-OUIExtensions.h>
 #import <OmniUI/NSUndoManager-OUIExtensions.h>
+#import <OmniUI/NSURL-OUIExtensions.h>
 #import <OmniUI/OUIAbstractColorInspectorSlice.h>
 #import <OmniUI/OUIAbstractTableViewInspectorSlice.h>
 #import <OmniUI/OUIActionInspectorSlice.h>
 #import <OmniUI/OUIActionViewController.h>
 #import <OmniUI/OUIActivityIndicator.h>
 #import <OmniUI/OUIAnimationSequence.h>
-#import <OmniUI/OUIAppController+InAppStore.h>
-#import <OmniUI/OUIAppController+SpecialURLHandling.h>
 #import <OmniUI/OUIAppController.h>
 #import <OmniUI/OUIAttentionSeekingButton.h>
 #import <OmniUI/OUIBarButtonItem.h>
@@ -68,9 +67,8 @@
 #import <OmniUI/OUIGradientView.h>
 #import <OmniUI/OUIHoldOnesHorsesIndicator.h>
 #import <OmniUI/OUIImages.h>
-#import <OmniUI/OUIInAppStoreObserver.h>
-#import <OmniUI/OUIInAppStoreViewController.h>
 #import <OmniUI/OUIInspector.h>
+#import <OmniUI/OUIInspectorAppearance.h>
 #import <OmniUI/OUIInspectorButton.h>
 #import <OmniUI/OUIInspectorDelegate.h>
 #import <OmniUI/OUIInspectorDividerLine.h>
@@ -97,8 +95,8 @@
 #import <OmniUI/OUIMenuController.h>
 #import <OmniUI/OUIMenuOption.h>
 #import <OmniUI/OUIMinimalScrollNotifierImplementation.h>
+#import <OmniUI/OUIMultiPaneNotifications.h>
 #import <OmniUI/OUIMultiSegmentStackedSlicesInspectorPane.h>
-#import <OmniUI/OUINavigationBar.h>
 #import <OmniUI/OUINavigationBarTextField.h>
 #import <OmniUI/OUINavigationController.h>
 #import <OmniUI/OUINoteInspectorPane.h>
@@ -124,6 +122,7 @@
 #import <OmniUI/OUISegmentedControlButton.h>
 #import <OmniUI/OUISegmentedControlInspectorSlice.h>
 #import <OmniUI/OUISegmentedViewController.h>
+#import <OmniUI/OUISendFeedbackURLCommand.h>
 #import <OmniUI/OUIShieldView.h>
 #import <OmniUI/OUISingleViewInspectorPane.h>
 #import <OmniUI/OUISplitViewController.h>
@@ -135,6 +134,8 @@
 #import <OmniUI/OUITextExampleInspectorSlice.h>
 #import <OmniUI/OUITextLayout.h>
 #import <OmniUI/OUITextSelectionSpan.h>
+#import <OmniUI/OUIThemedAppearance.h>
+#import <OmniUI/OUIThemedTableViewCell.h>
 #import <OmniUI/OUITextView.h>
 #import <OmniUI/OUITileDebug.h>
 #import <OmniUI/OUITiledScalingView.h>

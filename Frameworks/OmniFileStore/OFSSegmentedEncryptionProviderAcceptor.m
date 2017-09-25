@@ -1,4 +1,4 @@
-// Copyright 2014-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2014-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -92,18 +92,28 @@ static NSError *unsupportedError_(int lineno, NSString *detail) __attribute__((c
 
 - (BOOL)unwrapKey:(NSRange)wrappedBlob using:(OFSDocumentKey *)unwrapper error:(NSError **)outError;
 {
-    return withBackingRange(_backingStore, wrappedBlob, ^(const uint8_t *buffer){
+    __block NSError *strongError = nil;
+    BOOL success = withBackingRange(_backingStore, wrappedBlob, ^(const uint8_t *buffer){
         NSData *wrappedKey = [NSData dataWithBytes:buffer length:wrappedBlob.length];
-        ssize_t len = [unwrapper unwrapFileKey:wrappedKey into:_keyMaterial length:sizeof(_keyMaterial) error:outError];
-        if (len < 0)
+        __autoreleasing NSError *error = nil;
+        ssize_t len = [unwrapper.keySlots unwrapFileKey:wrappedKey into:_keyMaterial length:sizeof(_keyMaterial) error:&error];
+        if (len < 0) {
+            strongError = error;
             return NO;
+        }
         else if (len == sizeof(_keyMaterial)) {
             return YES;
         } else {
-            unsupportedError(outError, @"Incorrect inner key version");
+            unsupportedError(&error, @"Incorrect inner key version");
+            strongError = error;
             return NO;
         }
     });
+
+    if (!success && outError) {
+        *outError = strongError;
+    }
+    return success;
 }
 
 - (NSUInteger)length;
@@ -319,6 +329,11 @@ static const CFArrayCallBacks pageCacheArrayCallbacks = {
     }
     CFRelease(_pageCache);
     _pageCache = NULL;
+}
+
+- (NSUInteger)length;
+{
+    return _length;
 }
 
 - (void)setLength:(NSUInteger)length;

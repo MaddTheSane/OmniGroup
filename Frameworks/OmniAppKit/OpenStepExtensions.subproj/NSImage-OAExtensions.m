@@ -1,4 +1,4 @@
-// Copyright 1997-2016 Omni Development, Inc. All rights reserved.
+// Copyright 1997-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -40,15 +40,15 @@ static id (*original_initWithSize)(id __attribute((ns_consumed)) self, SEL _cmd,
 static id (*original_setSize)(id __attribute((ns_consumed)) self, SEL _cmd, NSSize size);
 #endif
 
-+ (void)performPosing;
-{
+OBPerformPosing(^{
+    Class self = objc_getClass("NSImage");
     original_initByReferencingFile = (typeof(original_initWithContentsOfFile))OBReplaceMethodImplementationWithSelector(self, @selector(initByReferencingFile:), @selector(_initByReferencingFile_replacement:));
     original_initWithContentsOfFile = (typeof(original_initWithContentsOfFile))OBReplaceMethodImplementationWithSelector(self, @selector(initWithContentsOfFile:), @selector(_initWithContentsOfFile_replacement:));
 #ifdef DEBUG_NONINTEGRAL_IMAGE_SIZE
     original_initWithSize = (typeof(original_initWithSize))OBReplaceMethodImplementationWithSelector(self, @selector(initWithSize:), @selector(replacement_initWithSize:));
     original_setSize = (typeof(original_setSize))OBReplaceMethodImplementationWithSelector(self, @selector(setSize:), @selector(replacement_setSize:));
 #endif
-}
+});
 
 // If you run into these assertions, consider running the OAMakeImageSizeIntegral command line tool in your image (probably only reasonable for TIFF right now).
 
@@ -231,25 +231,32 @@ static id (*original_setSize)(id __attribute((ns_consumed)) self, SEL _cmd, NSSi
 + (NSImage *)imageForFileType:(NSString *)fileType;
     // It turns out that -[NSWorkspace iconForFileType:] doesn't cache previously returned values, so we cache them here.
 {
-    static NSMutableDictionary *imageDictionary = nil;
-    id image;
-
-    ASSERT_IN_MAIN_THREAD(@"+imageForFileType: is not thread-safe; must be called from the main thread");
-    // We could fix this by adding locks around imageDictionary
-
-    if (!fileType)
+    if (fileType == nil)
         return nil;
-        
-    if (imageDictionary == nil)
-        imageDictionary = [[NSMutableDictionary alloc] init];
 
-    image = [imageDictionary objectForKey:fileType];
-    if (image == nil) {
-        image = [[NSWorkspace sharedWorkspace] iconForFileType:fileType];
-        if (image == nil)
-            image = [NSNull null];
-        [imageDictionary setObject:image forKey:fileType];
+    static NSMutableDictionary *imageDictionary;
+    static NSLock *imageDictionaryLock;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        imageDictionary = [[NSMutableDictionary alloc] init];
+        imageDictionaryLock = [[NSLock alloc] init];
+    });
+
+    id image; // NSImage or NSNull
+
+    @try {
+        [imageDictionaryLock lock];
+        image = [imageDictionary objectForKey:fileType];
+        if (image == nil) {
+            image = [[NSWorkspace sharedWorkspace] iconForFileType:fileType];
+            if (image == nil)
+                image = [NSNull null];
+            [imageDictionary setObject:image forKey:fileType];
+        }
+    } @finally {
+        [imageDictionaryLock unlock];
     }
+
     return image != [NSNull null] ? image : nil;
 }
 
@@ -808,37 +815,21 @@ static void setupTintTable(void)
 @end
 
 @implementation _OATintedImage
-{
-    id _tintObserver;
-}
 
-- (id)initWithSize:(NSSize)aSize;
+- (instancetype)initWithSize:(NSSize)aSize;
 {
     self = [super initWithSize:aSize];
-    if (self == nil)
+    if (self == nil) {
         return nil;
+    }
 
-    [self _subscribeToTintNotifications];
-
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(_updateTintedImage) name:NSControlTintDidChangeNotification object:nil];
     return self;
 }
 
 - (void)dealloc;
 {
-    if (_tintObserver != nil)
-        [[NSNotificationCenter defaultCenter] removeObserver:_tintObserver];
-}
-
-- (void)_subscribeToTintNotifications;
-{
-    if (_tintObserver != nil)
-        return;
-
-    __weak _OATintedImage *weakSelf = self;
-    _tintObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSControlTintDidChangeNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
-        _OATintedImage *strongSelf = weakSelf;
-        [strongSelf _updateTintedImage];
-    }];
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 - (void)_updateTintedImage;

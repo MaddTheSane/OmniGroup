@@ -1,4 +1,4 @@
-// Copyright 1997-2016 Omni Development, Inc. All rights reserved.
+// Copyright 1997-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -13,15 +13,18 @@
 #import <OmniBase/macros.h>
 #import <OmniBase/rcsid.h>
 #import <OmniBase/OBBacktraceBuffer.h>
+
+#if !defined(TARGET_OS_WATCH) || !TARGET_OS_WATCH
 #import <OmniBase/OBBundle.h>
 #import <OmniBase/OBCasting.h>
+#endif
+
 #import <OmniBase/OBUtilities.h>
 #import <OmniBase/OBExpectedDeallocation.h>
 
 #import <OmniBase/OBObject.h>
-#if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
-#import <OmniBase/OBPostLoader.h>
-#endif
+#import <OmniBase/OBLoadAction.h>
+
 #import <OmniBase/OBUtilities.h>
 #import <OmniBase/OBLogger.h>
 

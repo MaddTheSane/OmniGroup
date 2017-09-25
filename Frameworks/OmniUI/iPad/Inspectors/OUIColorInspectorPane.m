@@ -1,4 +1,4 @@
-// Copyright 2010-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -11,6 +11,7 @@
 #import <OmniUI/OUIColorPicker.h>
 #import <OmniUI/OUIColorValue.h>
 #import <OmniUI/OUIInspector.h>
+#import <OmniUI/OUIInspectorAppearance.h>
 #import <OmniUI/OUIInspectorSlice.h>
 #import <OmniUI/OUINavigationController.h>
 #import <OmniUI/OUISegmentedControl.h>
@@ -23,12 +24,11 @@ RCS_ID("$Id$");
 
 - (instancetype)initWithNibName:(NSString *)nibNameOrNil bundle:(NSBundle *)nibBundleOrNil;
 {
-    if ((self = [super initWithNibName:nibNameOrNil bundle:nibBundleOrNil]) == nil) {
-        return nil;
+    self = [super initWithNibName:nibNameOrNil bundle:nibBundleOrNil];
+    if (self) {
+        self.automaticallyAdjustsScrollViewInsets = NO;
+        self.title = NSLocalizedStringFromTableInBundle(@"Color", @"OUIInspectors", OMNI_BUNDLE, @"color inspector title");
     }
-    
-    self.automaticallyAdjustsScrollViewInsets = NO;
-    
     return self;
 }
 
@@ -170,10 +170,6 @@ RCS_ID("$Id$");
 {
     [super viewDidLoad];
     
-    // Let callers assign their own title
-    if ([NSString isEmptyString:self.title])
-        self.title = NSLocalizedStringFromTableInBundle(@"Color", @"OUIInspectors", OMNI_BUNDLE, @"color inspector title");
-    
     OUIInspectorSlice <OUIColorInspectorPaneParentSlice> *slice = (OUIInspectorSlice <OUIColorInspectorPaneParentSlice> *)self.parentSlice;
     OBASSERT(slice);
     if (slice.allowsNone)
@@ -201,11 +197,6 @@ RCS_ID("$Id$");
 {
     UIView *pickerView = _currentColorPicker.view;
     if ([pickerView isKindOfClass:[UIScrollView class]]) {
-        UIScrollView *scrollview = OB_CHECKED_CAST(UIScrollView, pickerView);
-        CGFloat topOffset = self.topLayoutGuide.length + CGRectGetHeight(_colorTypeSegmentedControl.frame) + BOTTOM_SPACING_BELOW_ACCESSORY + 8.0f;
-        scrollview.contentInset = UIEdgeInsetsMake(topOffset, 0.0f, 0.0f, 0.0f);
-        scrollview.contentOffset = (CGPoint){0.0f, -topOffset};
-
         // After updating our inset, we want to give our picker the opportunity to scroll back to its selected value
         [_currentColorPicker scrollToSelectionValueAnimated:NO];
     }
@@ -233,6 +224,9 @@ RCS_ID("$Id$");
         
         [self _setSelectedColorTypeIndex:bestPickerIndex];
     }
+    
+    if (OUIInspectorAppearance.inspectorAppearanceEnabled)
+        [self notifyChildrenThatAppearanceDidChange:OUIInspectorAppearance.appearance];
 
     // Do this after possibly swapping child view controllers. This allows us to remove the old before it gets send -viewWillAppear:, which would hit an assertion (rightly).
     [super viewWillAppear:animated];
@@ -272,5 +266,23 @@ RCS_ID("$Id$");
 {
     [self.parentSlice endChangingColor];
 }
+
+#pragma mark - OUIInspectorAppearance
+
+- (void)themedAppearanceDidChange:(OUIThemedAppearance *)changedAppearance;
+{
+    [super themedAppearanceDidChange:changedAppearance];
+    
+    OUIInspectorAppearance *appearance = OB_CHECKED_CAST_OR_NIL(OUIInspectorAppearance, changedAppearance);
+    
+    OUINavigationController *navigationController = OB_CHECKED_CAST(OUINavigationController, self.navigationController);
+    navigationController.navigationBar.barStyle = appearance.InspectorBarStyle;
+    navigationController.navigationBar.backgroundColor = appearance.InspectorBackgroundColor;
+    navigationController.accessoryAndBackgroundBar.barStyle = appearance.InspectorBarStyle;
+    navigationController.accessoryAndBackgroundBar.backgroundColor = appearance.InspectorBackgroundColor;
+    navigationController.accessoryAndBackgroundBar.barTintColor = appearance.InspectorBackgroundColor;
+    navigationController.accessoryAndBackgroundBar.translucent = NO;
+}
+
 
 @end

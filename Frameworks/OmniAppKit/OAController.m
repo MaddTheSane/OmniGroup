@@ -1,4 +1,4 @@
-// Copyright 2004-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2004-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -16,10 +16,15 @@
 #import <OmniAppKit/OAAboutPanelController.h>
 #import <OmniAppKit/OAInternetConfig.h>
 #import <OmniAppKit/OAWebPageViewer.h>
+#import <OmniAppKit/OAStrings.h>
 
 RCS_ID("$Id$")
 
 @implementation OAController
+{
+@private
+    OAAboutPanelController *aboutPanelController;
+}
 
 #pragma mark -
 #pragma mark OFController subclass
@@ -47,21 +52,6 @@ RCS_ID("$Id$")
         if ([stringValue isNull])
             stringValue = nil;
         id oldValue = [preferences valueForKey:key];
-
-        if ([key isEqualToString:@"AppleLanguages"] && (stringValue != nil)) {
-            NSString *canonicalLocaleIdentifier = [NSLocale canonicalLocaleIdentifierFromString:stringValue];
-            NSArray *availableLanguages = NSLocale.availableLocaleIdentifiers;
-            if (![availableLanguages containsObject:canonicalLocaleIdentifier]) {
-                // The given string is not a known localeIdentifier. INVALID!!!
-                NSAlert *alert = [[NSAlert alloc] init];
-                alert.messageText = NSLocalizedStringFromTableInBundle(@"Preference change error", @"OmniAppKit", OMNI_BUNDLE, @"preference change error alert title");
-                alert.informativeText = [NSString stringWithFormat:NSLocalizedStringFromTableInBundle(@"Cannot change the '%@' preference from '%@' to '%@' because '%@' is not a valid locale identifier.", @"OmniAppKit", OMNI_BUNDLE, @"alert message"), key, oldValue, stringValue, stringValue];
-                [alert addButtonWithTitle:NSLocalizedStringFromTableInBundle(@"OK", @"OmniAppKit", OMNI_BUNDLE, @"button title")];
-                (void)[alert runModal];
-                return NO;
-            }
-        }
-        
         id defaultValue = [[preferences preferenceForKey:key] defaultObjectValue];
         id coercedValue = [OFPreference coerceStringValue:stringValue toTypeOfPropertyListValue:defaultValue];
         if (coercedValue == nil) {
@@ -80,7 +70,7 @@ RCS_ID("$Id$")
         NSAlert *alert = [[NSAlert alloc] init];
         alert.messageText = NSLocalizedStringFromTableInBundle(@"Preference changed", @"OmniAppKit", OMNI_BUNDLE, @"alert title");
         alert.informativeText = [NSString stringWithFormat:NSLocalizedStringFromTableInBundle(@"Changed the '%@' preference from '%@' to '%@'", @"OmniAppKit", OMNI_BUNDLE, @"alert message"), key, oldValue, updatedValue];
-        [alert addButtonWithTitle:NSLocalizedStringFromTableInBundle(@"OK", @"OmniAppKit", OMNI_BUNDLE, @"button title")];
+        [alert addButtonWithTitle:OAOK()];
         (void)[alert runModal];
     }
     return YES;
@@ -113,7 +103,7 @@ RCS_ID("$Id$")
     return [NSBundle mainBundle].displayName.stringByDeletingPathExtension;
 }
 
-- (void)getFeedbackAddress:(NSString **)feedbackAddress andSubject:(NSString **)subjectLine;
+- (NSString *)fullReleaseString;
 {
     NSDictionary *infoDictionary = [[NSBundle mainBundle] infoDictionary];
     NSString *appName = [infoDictionary objectForKey:@"CFBundleName"];
@@ -124,13 +114,19 @@ RCS_ID("$Id$")
     
     if (![NSString isEmptyString:buildRevision])
         buildVersion = [NSString stringWithFormat:@"%@ r%@", buildVersion, buildRevision];
-
+    
 #if defined(MAC_APP_STORE) && MAC_APP_STORE
     buildVersionSuffix = @" Mac App Store";
 #endif
     
+    NSString *fullVersionString = [NSString stringWithFormat:@"%@ %@ (v%@%@)", appName, appVersion, buildVersion, buildVersionSuffix];
+    return fullVersionString;
+}
+
+- (void)getFeedbackAddress:(NSString **)feedbackAddress andSubject:(NSString **)subjectLine;
+{
     *feedbackAddress = [[NSUserDefaults standardUserDefaults] stringForKey:@"FeedbackAddress"];
-    *subjectLine = [NSString stringWithFormat:@"%@ %@ (v%@%@) Feedback", appName, appVersion, buildVersion, buildVersionSuffix];
+    *subjectLine = [NSString stringWithFormat:@"%@ Feedback", [self fullReleaseString]];
 }
 
 - (void)sendFeedbackEmailTo:(NSString *)feedbackAddress subject:(NSString *)subjectLine body:(NSString *)body;
@@ -138,9 +134,9 @@ RCS_ID("$Id$")
     // Application developers should enter the feedback address in their main bundle's info dictionary.
     if (!feedbackAddress) {
         NSAlert *alert = [[NSAlert alloc] init];
-        alert.messageText = @"Unable to send feedback email.";
-        alert.informativeText = @"No support email address configured in this application.";
-        [alert addButtonWithTitle:@"Cancel"];
+        alert.messageText = NSLocalizedStringFromTableInBundle(@"Unable to send feedback email.", @"OmniAppKit", OMNI_BUNDLE, @"Alert title when sending feedback email fails");
+        alert.informativeText = NSLocalizedStringFromTableInBundle(@"No support email address configured in this application.", @"OmniAppKit", OMNI_BUNDLE, @"Alert message when sending feedback email fails");
+        [alert addButtonWithTitle:OACancel()];
         [alert runModal];
     } else {
         OAInternetConfig *internetConfig = [[OAInternetConfig alloc] init];

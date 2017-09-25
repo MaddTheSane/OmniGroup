@@ -1,0 +1,150 @@
+/* OUITabBar N of M accessibility value */
+"%@ of %@" = "%1$@/%2$@";
+
+/* Default title for the About menu item
+   title for in app purchase - placeholder is product title */
+"About %@" = "%@ 정보";
+
+/* MultiPane Back button title, when system is compact */
+"Back" = "뒤로";
+
+/* Bold button accessibility label */
+"Bold" = "볼드체";
+
+/* button title
+   button title - password/passphrase prompt
+   cancel button title
+   Cancel button title
+   toolbar item title */
+
+
+
+
+"Cancel" = "취소";
+
+/* Center Text Align button accessibility label. */
+"Center text align" = "텍스트 가운데 정렬";
+
+/* Certificate trust alert title */
+"Certificate Trust" = "인증서 신뢰";
+
+/* alert message */
+"Changed the '%@' preference from '%@' to '%@'" = "'%1$@' 환경설정을 '%2$@'에서 '%3$@'(으)로 변경했습니다.";
+
+/* placeholder text - password/passphrase confirmation field in prompt */
+"confirm" = "확인";
+
+/* Certificate trust alert button title */
+"Continue" = "계속";
+
+/* increment button accessibility label */
+"Decrement" = "감소";
+
+/* Done
+   toolbar item title */
+
+"Done" = "완료";
+
+/* toolbar item title */
+"Edit" = "편집";
+
+/* disabled for demo */
+"Feature not enabled for this demo" = "이 데모에 대해 활성회되지 않은 기능";
+
+/* Overlay text when zoomed to fit screen */
+"Fit" = "맞추기";
+
+/* Help and Settings toolbar item accessibility label. */
+"Help and Settings" = "도움말 및 설정";
+
+/* increment button accessibility label */
+"Increment" = "증가";
+
+/* default special URL confirm button title */
+"Invoke" = "호출";
+
+/* button title */
+"Invoke and Quit" = "호출 및 종료";
+
+/* Italic button accessibility label */
+"Italic" = "이탤릭체";
+
+/* Justified Text Align button accessibility label. */
+"Justified text align" = "텍스트 양쪽 정렬";
+
+/* Left Text Align button accessibility label. */
+"Left text align" = "텍스트 왼쪽 정렬";
+
+/* Web view error opening URL title. */
+"Link could not be opened. Please check Safari restrictions in Settings." = "링크를 열 수 없습니다. 설정에서 Safari 제한 사항을 확인하십시오.";
+
+/* News menu item
+   News view title */
+
+"News" = "뉴스";
+
+/* empty value cell placeholder */
+"None" = "없음";
+
+/* Full screen note editor title */
+"Note" = "메모";
+
+/* Text letting the user know why nothing is showing in the inspector */
+"Nothing to Inspect" = "조사할 항목 없음";
+
+/* button title
+   button title - password/passphrase prompt
+   Dismiss alert
+   Dismiss failed purchase alert
+   Dismiss failed restore alert
+   Web view error opening URL cancel button. */
+
+
+"OK" = "양호";
+
+/* placeholder text - password/passphrase field of login/password prompt */
+"password" = "암호";
+
+/* alert title */
+"Preference changed" = "환경설정 변경";
+
+/* Redo button title */
+"Redo" = "다시 실행";
+
+/* App menu item title
+   release notes html screen title */
+
+"Release Notes" = "릴리스 노트";
+
+/* Right Text Align button accessibility label. */
+"Right text align" = "텍스트 오른쪽 정렬";
+
+/* Search field placeholder text */
+"Search" = "검색";
+
+/* Strike Through button accessibility label */
+"Strike Through" = "취소선";
+
+/* Certificate trust alert button title */
+"Trust Always" = "항상 신뢰";
+
+/* Underline button accessibility label */
+"Underline" = "밑줄";
+
+/* Undo button title */
+"Undo" = "실행 취소";
+
+/* placeholder text - username field of login/password prompt */
+"username" = "사용자 이름";
+
+/* alert message */
+"You have tapped on a link which will change the following preferences:\n\n\"%@\"\n\nDo you wish to accept these changes?" = "다음 환경설정을 변경하는 링크를 눌렀습니다.\n\n\"%@\"\n\n이러한 변경 사항을 수락하시겠습니까?";
+
+/* debug setting alert message */
+"You have tapped on a link which will run the following debugging command:\n\n\"%@\"\n\nIf you weren’t instructed to do this by Omni Support Humans, please don’t.\nDo you wish to run this command?" = "다음 디버깅 명령을 실행하는 링크를 눌렀습니다.\n\n\"%@\"\n\nOmni 지원 센터에서 이 작업에 대한 안내가 없을 경우, 작업을 수행하지 마십시오.\n이 명령일 실행하시겠습니까?";
+
+/* default special URL alert message */
+"You have tapped on an Omni special URL:\n\n\"%@\"\n\nRun this command?" = "Omni 특수 URL을 눌렀습니다.\n\n\"%@\"\n\n이 명령을 실행하시겠습니까?";
+
+/* zoom label */
+"Zoom" = "확대/축소";

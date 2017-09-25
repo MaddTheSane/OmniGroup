@@ -1,4 +1,4 @@
-// Copyright 2005-2015 Omni Development, Inc. All rights reserved.
+// Copyright 2005-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -12,22 +12,25 @@
 // This header was split out; import for backwards compatibility
 #import <OmniBase/NSError-OBUtilities.h>
 
+NS_ASSUME_NONNULL_BEGIN
+
 @interface NSError (OBExtensions)
 
-- (NSError *)underlyingErrorWithDomain:(NSString *)domain;
-- (NSError *)underlyingErrorWithDomain:(NSString *)domain code:(NSInteger)code;
+- (nullable NSError *)underlyingErrorWithDomain:(NSString *)domain;
+- (nullable NSError *)underlyingErrorWithDomain:(NSString *)domain code:(NSInteger)code;
 - (BOOL)hasUnderlyingErrorDomain:(NSString *)domain code:(NSInteger)code;
 
-- (BOOL)causedByUserCancelling;
-- (BOOL)causedByMissingFile;
-- (BOOL)causedByUnreachableHost;
+@property(nonatomic,readonly) BOOL causedByUserCancelling;
+@property(nonatomic,readonly) BOOL causedByMissingFile;
+@property(nonatomic,readonly) BOOL causedByExistingFile;
+@property(nonatomic,readonly) BOOL causedByUnreachableHost;
 
 #if !defined(TARGET_OS_WATCH) || !TARGET_OS_WATCH
-- (BOOL)causedByNetworkConnectionLost;
+@property(nonatomic,readonly) BOOL causedByNetworkConnectionLost;
 #endif
 
-- initWithPropertyList:(NSDictionary *)propertyList;
-- (NSDictionary *)toPropertyList;
+- (id)initWithPropertyList:(NSDictionary *)propertyList;
+- (NSDictionary<NSString *, id> *)toPropertyList;
 
 // Useful for test cases that intentionally provoke errors that might be logged to the console as well as being reported to the user via other means (if UI was hooked up). Only suppresses the error for the duration of the given action, and only on the calling thread.
 + (void)suppressingLogsWithUnderlyingDomain:(NSString *)domain code:(NSInteger)code action:(void (^)(void))action;
@@ -38,3 +41,5 @@
 - (void)logWithReason:(NSString *)reason;
 
 @end
+
+NS_ASSUME_NONNULL_END

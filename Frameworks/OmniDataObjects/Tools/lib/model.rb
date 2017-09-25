@@ -60,8 +60,13 @@ module OmniDataObjects
       # Nothing
     end
     
+    def emitSwiftDefinition(fp)
+      # Nothing
+    end
+    
     def entity_pair(e,fs,fp)
-      SourceFilePair.new(e.header_file(fs), fp.m) # Direct the interface for each entity to its own file, but the constants to the global model source file.
+      # Direct the interface for each entity to its own file, but the constants to the global model source file.
+      SourceFilePair.new(e.header_file(fs), fp.m, e.swift_extension_file(fs)) 
     end
     
     def emit
@@ -80,54 +85,70 @@ module OmniDataObjects
       fp.m << "#import <Foundation/NSValue.h>\n"
       fp.m << "#import <Foundation/NSString.h>\n"
       fp.m << "#import <Foundation/NSData.h>\n"
-      fp.m << "#import <Foundation/NSDate.h>\n\n"
+      fp.m << "#import <Foundation/NSDate.h>\n"
       fp.m.br
 
       @imports.each {|i|
         fp.m << "#import #{i}\n"
       }
+
+      fp.m.br
+      fp.m << "NS_ASSUME_NONNULL_BEGIN\n"
+
       super(fp)
-      fp.br
+      fp.m.br
       
       # Emit variables and property definitions for the inherited entities.  These only have property names (which are shared across all entities inheriting from them).  There is no entity name variable.
       @ordered_inherits.each {|e|
         efp = entity_pair(e,fs,fp)
+        efp.h << "NS_ASSUME_NONNULL_BEGIN\n\n"
         e.emit(efp)
-        efp.br
         e.properties.each {|p|
           next if p.inherited_from
           p.emit(efp)
         }
+        efp.h << "\nNS_ASSUME_NONNULL_END\n"
       }
       
       # Emit variables for the real entities; skipping those that are from the inherited entities
       entities.each {|e|
         efp = entity_pair(e,fs,fp)
-        efp.br
+        efp.h << "NS_ASSUME_NONNULL_BEGIN\n"
         e.emit(efp)
-        efp.br
-        e.properties.each {|p|
+        e.properties.each_with_index {|p, index|
           next if p.inherited_from
           p.emit(efp)
+          efp.m.br if index == e.properties.count - 1
         }
+        efp.h << "\nNS_ASSUME_NONNULL_END\n"
       }
       
+      create_func = "#{name}CreateModel"
       func = "#{name}Model"
-      fp.br
 
-      fp.h << "@class ODOModel;\n"
-      fp.h << "extern ODOModel *#{func}(void);\n"
+      fp.h << "NS_ASSUME_NONNULL_BEGIN\n\n"
+      fp.h << "@class ODOModel;\n\n"
+      fp.h << "extern ODOModel * #{func}(void);\n\n"
+      fp.h << "NS_ASSUME_NONNULL_END\n"
 
       # Disable clang scan-build in the model creation function.  We allocate a bunch of stuff and don't bother releasing it since we intend for it to stick around anyway.
       fp.m << "#ifdef __clang__\n"
       fp.m << "static void DisableAnalysis(void) __attribute__((analyzer_noreturn));\n"
       fp.m << "#endif\n"
       fp.m << "static void DisableAnalysis(void) {}\n\n"
+
+      fp.m << "#pragma clang diagnostic push\n"
+      fp.m << "#pragma clang diagnostic ignored \"-Wundeclared-selector\"\n\n"
       
-      fp.m << "ODOModel * #{func}(void)\n{\n"
+      entities.each {|e|
+        fp.m << "@class #{name}#{e.name};\n"
+      }
+      
+      fp.m << "\n"
+
+      fp.m << "static ODOModel * #{create_func}(void)\n{\n"
       fp.m << "    DisableAnalysis();\n\n"
-      fp.m << "    static ODOModel *model = nil;\n"
-      fp.m << "    if (model) return model;\n\n"
+      fp.m << "    ODOModel *model = nil;\n\n"
       
       begin
         entities.each {|e|
@@ -152,7 +173,19 @@ module OmniDataObjects
         fp.m << "    #{@on_load}();\n" if @on_load
       end
       fp.m << "    return model;\n"
-      fp.m << "}\n"
+      fp.m << "}\n\n"
+
+      fp.m << "#pragma clang diagnostic pop\n\n"
+      
+      fp.m << "ODOModel * #{func}(void)\n{\n"
+      fp.m << "    static ODOModel *model = nil;\n"
+      fp.m << "    static dispatch_once_t onceToken;\n"
+      fp.m << "    dispatch_once(&onceToken, ^{\n"
+      fp.m << "        model = #{create_func}();\n"
+      fp.m << "    });\n"
+      fp.m << "    return model;\n"
+      fp.m << "}\n\n"
+      fp.m << "NS_ASSUME_NONNULL_END\n"
       
       fs.write
     end

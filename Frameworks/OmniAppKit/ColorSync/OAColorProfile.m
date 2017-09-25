@@ -1,4 +1,4 @@
-// Copyright 2002-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2002-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -523,7 +523,7 @@ static BOOL loadProfileData(ColorSyncProfileRef *cmProfilePointer, NSData *data,
     NSColor *newColor;
 
     if ([NSGraphicsContext currentContextDrawingToScreen]) {
-        NSColor *aColorInRGBColorSpace = [aColor colorUsingColorSpaceName:([[aColor colorSpaceName] isEqualToString:@"NSDeviceCMYKColorSpace"]) ? @"NSDeviceRGBColorSpace":@"NSCalibratedRGBColorSpace"];
+        NSColor *aColorInRGBColorSpace = [aColor colorUsingColorSpaceName:([[aColor colorSpaceName] isEqualToString:NSDeviceCMYKColorSpace]) ? NSDeviceRGBColorSpace : NSCalibratedRGBColorSpace];
         [self _setRGBColor:aColorInRGBColorSpace];
         return;
     }
@@ -724,7 +724,6 @@ static BOOL loadProfileData(ColorSyncProfileRef *cmProfilePointer, NSData *data,
 
 - initDefaultProofProfile;
 {
-	//TODO: update for new ColorSync APIs!
 #if OA_USE_COLOR_MANAGER
     if (!(self = [super init]))
         return nil;
@@ -757,7 +756,7 @@ static BOOL loadProfileData(ColorSyncProfileRef *cmProfilePointer, NSData *data,
     isMutable = YES;
     return self;
 #else
-    OBFinishPorting;
+    OBFinishPortingWithNote("<bug:///147881> (iOS-OmniOutliner Engineering: -[OAColorProfile initDefaultProofProfile] - update for new ColorSync APIs)");
 #endif
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2003-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2003-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -14,16 +14,12 @@
 #import <OmniFoundation/NSString-OFSimpleMatching.h>
 #import <OmniFoundation/OFPreference.h>
 
-#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
-#define USE_UIKIT 1
-#else
-#define USE_UIKIT 0
-#endif
-
-#if USE_UIKIT
+#if OMNI_BUILDING_FOR_IOS
 #import <UIKit/UIColor.h>
 #import <UIKit/UIImage.h>
-#else
+#endif
+
+#if OMNI_BUILDING_FOR_MAC
 #import <AppKit/NSColor.h>
 #import <OmniAppKit/NSColor-OAExtensions.h>
 #import <OmniAppKit/NSUserDefaults-OAExtensions.h>
@@ -38,17 +34,19 @@ NS_ASSUME_NONNULL_BEGIN
  */
 
 
-#if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_MAC
 OALinearRGBA OAGetColorComponents(NSColor *c)
 {
     OALinearRGBA l;
     if (c)
-        [[c colorUsingColorSpaceName:NSCalibratedRGBColorSpace] getRed:&l.r green:&l.g blue:&l.b alpha:&l.a];
+        [[c colorUsingColorSpace:[NSColorSpace sRGBColorSpace]] getRed:&l.r green:&l.g blue:&l.b alpha:&l.a];
     else
         memset(&l, 0, sizeof(l)); // Treat nil as clear.
     return l;
 }
-#else
+#endif
+
+#if OMNI_BUILDING_FOR_IOS
 OALinearRGBA OAGetColorComponents(OAColor *c)
 {
     if (c)
@@ -69,6 +67,7 @@ BOOL OAColorComponentsEqual(OALinearRGBA x, OALinearRGBA y)
     x.a == y.a;
 }
 
+#if OMNI_BUILDING_FOR_MAC || OMNI_BUILDING_FOR_IOS
 OALinearRGBA OAGetColorRefComponents(CGColorRef c)
 {
     OBPRECONDITION(!c || CFGetTypeID(c) == CGColorGetTypeID());
@@ -91,20 +90,21 @@ OALinearRGBA OAGetColorRefComponents(CGColorRef c)
                 OBASSERT(CGColorGetNumberOfComponents(c) == 4);
                 return (OALinearRGBA){components[0], components[1], components[2], components[3]};
             default:
-                OBFinishPortingLater("Unknown color space model!");
+                OBFinishPortingLater("<bug:///147856> (Frameworks-iOS Engineering: Handle unknown color space model in OAGetColorRefComponents)");
                 return (OALinearRGBA){1, 0, 0, 1};
         }
     } else
         memset(&l, 0, sizeof(l)); // Treat nil as clear.
     return l;
 }
+#endif
 
 CGFloat OAGetRGBAColorLuma(OALinearRGBA c)
 {
     return (CGFloat)(0.3*c.r + 0.59*c.g + 0.11*c.b);
 }
 
-#if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_MAC
 CGFloat OAGetColorLuma(NSColor *c, CGFloat *outAlpha)
 {
     OALinearRGBA components = OAGetColorComponents(c);
@@ -185,12 +185,13 @@ OALinearRGBA OACompositeLinearRGBA(OALinearRGBA T, OALinearRGBA B)
     return R;
 }
 
-// Composites *ioTop on bottom and puts it back in *ioTop, using the calibrated RGB color space. Return YES if the output is opaque.  A nil input is interpreted as clear.
-#if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
-NSColor *OACompositeColors(NSColor *topColor, NSColor *bottomColor, BOOL * _Nullable isOpaque)
-#else
-OAColor *OACompositeColors(OAColor *topColor, OAColor *bottomColor, BOOL * _Nullable isOpaque)
+// Composites *ioTop on bottom and puts it back in *ioTop, using the sRGB color space. Return YES if the output is opaque.  A nil input is interpreted as clear.
+#if OMNI_BUILDING_FOR_MAC
+NSColor * _Nullable OACompositeColors(NSColor * _Nullable topColor, NSColor * _Nullable bottomColor, BOOL * _Nullable isOpaque)
+#elif OMNI_BUILDING_FOR_IOS
+OAColor * _Nullable OACompositeColors(OAColor * _Nullable topColor, OAColor * _Nullable bottomColor, BOOL * _Nullable isOpaque)
 #endif
+#if OMNI_BUILDING_FOR_MAC || OMNI_BUILDING_FOR_IOS
 {
     OALinearRGBA T = OAGetColorComponents(topColor);
     if (T.a >= 1.0) {
@@ -218,14 +219,15 @@ OAColor *OACompositeColors(OAColor *topColor, OAColor *bottomColor, BOOL * _Null
     if (isOpaque)
         *isOpaque = R.a >= 1.0; // Might be fully opaque now if T was translucent and B was opaque.
 
-#if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
-    return [NSColor colorWithCalibratedRed:R.r green:R.g blue:R.b alpha:R.a];
-#else
-    return [OAColor colorWithCalibratedRed:R.r green:R.g blue:R.b alpha:R.a];
+#if OMNI_BUILDING_FOR_MAC
+    return [NSColor colorWithRed:R.r green:R.g blue:R.b alpha:R.a];
+#elif OMNI_BUILDING_FOR_IOS
+    return [OAColor colorWithRed:R.r green:R.g blue:R.b alpha:R.a];
 #endif
 }
+#endif
 
-#if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_MAC || OMNI_BUILDING_FOR_IOS
 CGColorRef OACreateCompositeColorRef(CGColorRef topColor, CGColorRef bottomColor, BOOL * _Nullable isOpaque)
 {
     OALinearRGBA T = OAGetColorRefComponents(topColor);
@@ -259,21 +261,26 @@ CGColorRef OACreateCompositeColorRef(CGColorRef topColor, CGColorRef bottomColor
     if (isOpaque)
         *isOpaque = R.a >= 1.0; // Might be fully opaque now if T was translucent and B was opaque.
     
-#if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
-    return CGColorCreateGenericRGB(R.r, R.g, R.b, R.a);
-#else
-    // Seriously, there are no calibrated color spaces at all? Nice.
-    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
     CGColorRef result = CGColorCreate(colorSpace, &R.r);
     CFRelease(colorSpace);
     return result;
-#endif
 }
-#endif
 
 CGColorRef OACreateCompositeColorFromColors(CGColorSpaceRef destinationColorSpace, NSArray *colors)
 {
     OBPRECONDITION(CGColorGetAlpha((CGColorRef)[colors objectAtIndex:0]) == 1.0f);
+
+    // A common case is that the 'top' (last) color is opaque.
+    CGColorRef lastColor = (__bridge CGColorRef)colors.lastObject;
+    if (CGColorGetAlpha(lastColor) >= 1.0)  {
+        if (CGColorGetColorSpace(lastColor) == destinationColorSpace) {
+            CGColorRetain(lastColor);
+            return lastColor;
+        } else {
+            // Wrong colorspace -- need to convert it.
+        }
+    }
 
     // We calculate the composite color by rendering into a 1x1px 8888RGBA bitmap.
     unsigned char bitmapData[4] = {0, 0, 0, 0};
@@ -301,8 +308,9 @@ CGColorRef OACreateCompositeColorFromColors(CGColorSpaceRef destinationColorSpac
     CGContextRelease(ctx);
     return color;
 }
+#endif
 
-#if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_MAC
 CGColorRef __nullable OACreateColorRefFromColor(CGColorSpaceRef destinationColorSpace, NSColor *c)
 {
     // <bug:///98617> (Exception nil colorspace argument in initWithColorSpace:components:count)
@@ -449,7 +457,7 @@ OALinearRGBA OAHSVToRGB(OAHSV c)
     }
 }
 
-#if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_MAC
 static void _addComponent(NSAppleEventDescriptor *record, FourCharCode code, CGFloat component)
 {
     // Cast up to double always for now.
@@ -618,17 +626,21 @@ static OALinearRGBA interpRGBA(OALinearRGBA c0, OALinearRGBA c1, CGFloat t)
     return [NSString stringWithFormat:@"<RGBA: %f %f %f %f>", _rgba.r, _rgba.g, _rgba.b, _rgba.a];
 }
 
-#if USE_UIKIT
-- (UIColor *)toColor;
+#if OMNI_BUILDING_FOR_IOS
+- (UIColor *)makePlatformColor;
 {
     return [UIColor colorWithRed:_rgba.r green:_rgba.g blue:_rgba.b alpha:_rgba.a];
 }
-#else
-- (NSColor *)toColor;
-{
-    return [NSColor colorWithCalibratedRed:_rgba.r green:_rgba.g blue:_rgba.b alpha:_rgba.a];
-}
+#endif
 
+#if OMNI_BUILDING_FOR_MAC
+- (NSColor *)makePlatformColor;
+{
+    return [NSColor colorWithRed:_rgba.r green:_rgba.g blue:_rgba.b alpha:_rgba.a];
+}
+#endif
+
+#if OMNI_BUILDING_FOR_MAC
 - (NSAppleEventDescriptor *)scriptingColorDescriptor;
 {
     NSAppleEventDescriptor *result = [[NSAppleEventDescriptor alloc] initRecordDescriptor];
@@ -774,18 +786,20 @@ static OAColor *OAHSVAColorCreate(OAHSV hsva)
     return [NSString stringWithFormat:@"<HSVA: %f %f %f %f>", _hsva.h, _hsva.s, _hsva.v, _hsva.a];
 }
 
-#if USE_UIKIT
-- (UIColor *)toColor;
+#if OMNI_BUILDING_FOR_IOS
+- (UIColor *)makePlatformColor;
 {
     // There is a HSV initializer on UIColor, but it'll convert to RGBA too. Let's be consistent about how we do that.
     OALinearRGBA rgba = OAHSVToRGB(_hsva);
     return [UIColor colorWithRed:rgba.r green:rgba.g blue:rgba.b alpha:rgba.a];
 }
-#else
-- (NSColor *)toColor;
+#endif
+
+#if OMNI_BUILDING_FOR_MAC
+- (NSColor *)makePlatformColor;
 {
     OALinearRGBA rgba = OAHSVToRGB(_hsva);
-    return [NSColor colorWithCalibratedRed:rgba.r green:rgba.g blue:rgba.b alpha:rgba.a];
+    return [NSColor colorWithRed:rgba.r green:rgba.g blue:rgba.b alpha:rgba.a];
 }
 - (NSAppleEventDescriptor *)scriptingColorDescriptor;
 {
@@ -929,15 +943,17 @@ static OAColor *OAWhiteColorCreate(CGFloat white, CGFloat alpha)
     return [NSString stringWithFormat:@"<WHITE: %f %f>", _white, _alpha];
 }
 
-#if USE_UIKIT
-- (UIColor *)toColor;
+#if OMNI_BUILDING_FOR_IOS
+- (UIColor *)makePlatformColor;
 {
     return [UIColor colorWithWhite:_white alpha:_alpha];
 }
-#else
-- (NSColor *)toColor;
+#endif
+
+#if OMNI_BUILDING_FOR_MAC
+- (NSColor *)makePlatformColor;
 {
-    return [NSColor colorWithCalibratedWhite:_white alpha:_alpha];
+    return [NSColor colorWithWhite:_white alpha:_alpha];
 }
 
 - (NSAppleEventDescriptor *)scriptingColorDescriptor;
@@ -955,9 +971,114 @@ static OAColor *OAWhiteColorCreate(CGFloat white, CGFloat alpha)
 
 @end
 
+#if OA_SUPPORT_PATTERN_COLOR
+@interface OAPatternColor : OAColor <OAColor>
+{
+    NSData *_imageData;
+}
+
+@end
+
+@implementation OAPatternColor
+
+static OAColor *OAPatternColorCreate(NSData *imageData)
+{
+    OAPatternColor *color = [[OAPatternColor alloc] init];
+    color->_imageData = [imageData copy];
+    OAColorInitPlatformColor(color);
+    return color;
+}
+
+- (OAColorSpace)colorSpace;
+{
+    return OAColorSpacePattern;
+}
+
+- (CGFloat)whiteComponent;
+{
+    OBRejectInvalidCall(self, _cmd, @"Pattern colors don't have components.");
+}
+
+- (CGFloat)redComponent;
+{
+    OBRejectInvalidCall(self, _cmd, @"Pattern colors don't have components.");
+}
+
+- (CGFloat)greenComponent;
+{
+    OBRejectInvalidCall(self, _cmd, @"Pattern colors don't have components.");
+}
+
+- (CGFloat)blueComponent;
+{
+    OBRejectInvalidCall(self, _cmd, @"Pattern colors don't have components.");
+}
+
+- (OALinearRGBA)toRGBA;
+{
+    OBRejectInvalidCall(self, _cmd, @"Pattern colors don't have components.");
+}
+
+- (CGFloat)hueComponent;
+{
+    OBRejectInvalidCall(self, _cmd, @"Pattern colors don't have components.");
+}
+
+- (CGFloat)saturationComponent;
+{
+    OBRejectInvalidCall(self, _cmd, @"Pattern colors don't have components.");
+}
+
+- (CGFloat)brightnessComponent;
+{
+    OBRejectInvalidCall(self, _cmd, @"Pattern colors don't have components.");
+}
+
+- (CGFloat)alphaComponent;
+{
+    OBRejectInvalidCall(self, _cmd, @"Pattern colors don't have components.");
+}
+
+#if USE_UIKIT
+- (UIColor *)makePlatformColor;
+{
+    UIImage *image = [[UIImage alloc] initWithData:_imageData];
+    CGSize imageSize = image.size;
+    if (image == nil || CGSizeEqualToSize(imageSize, CGSizeZero)) {
+        NSLog(@"Warning, could not rebuild pattern color from image %@, data %@", image, _imageData);
+        return [UIColor blackColor];
+    } else {
+        return [UIColor colorWithPatternImage:image];
+    }
+}
+#else
+- (NSColor *)makePlatformColor;
+{
+    NSBitmapImageRep *bitmapImageRep = (id)[NSBitmapImageRep imageRepWithData:_imageData];
+    CGSize imageSize = [bitmapImageRep size];
+    if (bitmapImageRep == nil || CGSizeEqualToSize(imageSize, CGSizeZero)) {
+        NSLog(@"Warning, could not rebuild pattern color from image rep %@, data %@", bitmapImageRep, _imageData);
+        return [NSColor blackColor];
+    } else {
+        NSImage *patternImage = [[NSImage alloc] initWithSize:imageSize];
+        [patternImage addRepresentation:bitmapImageRep];
+        return [NSColor colorWithPatternImage:patternImage];
+    }
+}
+#endif
+
+@end
+#endif
+
 
 @implementation OAColor
+{
+#ifdef OA_PLATFORM_COLOR_CLASS
+    OA_PLATFORM_COLOR_CLASS *_platformColor;
+#endif
+}
 
+#if OMNI_BUILDING_FOR_MAC || OMNI_BUILDING_FOR_IOS
 static OAColor *_colorWithCGColorRef(CGColorRef cgColor)
 {
     if (!cgColor)
@@ -976,9 +1097,10 @@ static OAColor *_colorWithCGColorRef(CGColorRef cgColor)
             OBASSERT(CGColorGetNumberOfComponents(cgColor) == 4);
             return [OAColor colorWithRed:components[0] green:components[1] blue:components[2] alpha:components[3]];
         case kCGColorSpaceModelPattern:
-            // Graffle uses color patterns that are generated in MacOS documents
+            OBASSERT_NOT_REACHED("Graffle uses color patterns that are generated in MacOS documents");
             return [OAColor purpleColor];
         default:
+            OBASSERT_NOT_REACHED("Graffle uses color patterns that are generated in MacOS documents");
             NSLog(@"color = %@", cgColor);
             NSLog(@"colorSpace %@", colorSpace);
             return [OAColor redColor];
@@ -989,30 +1111,41 @@ static OAColor *_colorWithCGColorRef(CGColorRef cgColor)
 {
     return _colorWithCGColorRef(cgColor);
 }
+#endif
 
-#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_IOS
 
 + (OAColor *)colorWithPlatformColor:(UIColor *)color;
 {
     return _colorWithCGColorRef([color CGColor]);
 }
 
-#else
+#endif
+
+#if OMNI_BUILDING_FOR_MAC
+
+static NSColorSpace *_grayscaleColorSpace(void)
+{
+    static NSColorSpace *colorSpace = nil;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        colorSpace = [[NSColor colorWithWhite:0.5f alpha:1.0f] colorSpace];
+    });
+    return colorSpace;
+}
+
 + (OAColor *)colorWithPlatformColor:(NSColor *)color;
 {
-    if (!color)
-        return nil;
-
     // Can't call colorSpace on a named color; it will throw.
     if ([color.colorSpaceName isEqual:NSNamedColorSpace]) {
-        color = [color colorUsingColorSpaceName:NSCalibratedRGBColorSpace];
+        color = [color colorUsingColorSpace:[NSColorSpace sRGBColorSpace]];
     }
 
     NSColorSpace *colorSpace = color.colorSpace;
     NSColorSpaceModel colorSpaceModel = colorSpace.colorSpaceModel;
 
     if (colorSpaceModel == NSRGBColorSpaceModel) {
-        NSColor *toConvert = [color colorUsingColorSpaceName:NSCalibratedRGBColorSpace];
+        NSColor *toConvert = [color colorUsingColorSpace:[NSColorSpace sRGBColorSpace]];
 
         OALinearRGBA rgba;
         [toConvert getRed:&rgba.r green:&rgba.g blue:&rgba.b alpha:&rgba.a];
@@ -1020,7 +1153,7 @@ static OAColor *_colorWithCGColorRef(CGColorRef cgColor)
     }
 
     if (colorSpaceModel == NSGrayColorSpaceModel) {
-        NSColor *toConvert = [color colorUsingColorSpaceName:NSCalibratedWhiteColorSpace];
+        NSColor *toConvert = [color colorUsingColorSpace:_grayscaleColorSpace()];
 
         CGFloat white, alpha;
         [toConvert getWhite:&white alpha:&alpha];
@@ -1032,16 +1165,12 @@ static OAColor *_colorWithCGColorRef(CGColorRef cgColor)
 }
 #endif
 
+#if OA_SUPPORT_PATTERN_COLOR
 + (OAColor *)colorWithPatternImageData:(NSData *)imageData
 {
-#if USE_UIKIT
-    UIImage *image = [UIImage imageWithData:imageData];
-    return [OAColor colorWithPlatformColor:[UIColor colorWithPatternImage:image]];
-#else
-    NSImage *image = [[NSImage alloc] initWithData:imageData];
-    return [OAColor colorWithPlatformColor:[NSColor colorWithPatternImage:image]];
-#endif
+    return OAPatternColorCreate(imageData);
 }
+#endif
 
 // Always returns RGBA. This code is adapted from OmniAppKit so that the preferences are compatible.
 static BOOL parseRGBAString(NSString *value, OALinearRGBA *rgba)
@@ -1069,9 +1198,11 @@ static NSString *rgbaStringFromRGBAColor(OALinearRGBA rgba)
 
 static void OAColorInitPlatformColor(OAColor *self)
 {
+#ifdef OA_PLATFORM_COLOR_CLASS
     OBPRECONDITION(self->_platformColor == nil);
-    self->_platformColor = self.toColor; // UIColor isn't copyable. -retain is good enough since all colors are immutable anyway.
+    self->_platformColor = [self makePlatformColor]; // UIColor isn't copyable. -retain is good enough since all colors are immutable anyway.
     OBPOSTCONDITION(self->_platformColor != nil);
+#endif
 }
 
 + (nullable OAColor *)colorFromRGBAString:(NSString *)rgbaString;
@@ -1127,21 +1258,6 @@ static void OAColorInitPlatformColor(OAColor *self)
 {
     // Use +blackColor or +whiteColor for 0/1?
     return OAWhiteColorCreate(white, alpha);
-}
-
-+ (OAColor *)colorWithCalibratedRed:(CGFloat)red green:(CGFloat)green blue:(CGFloat)blue alpha:(CGFloat)alpha;
-{
-    return [self colorWithRed:red green:green blue:blue alpha:alpha];
-}
-
-+ (OAColor *)colorWithCalibratedHue:(CGFloat)hue saturation:(CGFloat)saturation brightness:(CGFloat)brightness alpha:(CGFloat)alpha;
-{
-    return [self colorWithHue:hue saturation:saturation brightness:brightness alpha:alpha];
-}
-
-+ (OAColor *)colorWithCalibratedWhite:(CGFloat)white alpha:(CGFloat)alpha;
-{
-    return [self colorWithWhite:white alpha:alpha];
 }
 
 + (OAColor *)blackColor;
@@ -1267,25 +1383,32 @@ static void OAColorInitPlatformColor(OAColor *self)
 
 + (OAColor *)keyboardFocusIndicatorColor;
 {
-#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
-    OBRequestConcreteImplementation(self, _cmd);
-#else
+#if OMNI_BUILDING_FOR_MAC
     // TODO: We immediately flatten to a concrete color, while named system colors are dynamic.  Matters?
     return [self colorWithPlatformColor:[NSColor keyboardFocusIndicatorColor]];
+#else
+    OBRequestConcreteImplementation(self, _cmd);
 #endif
 }
 
 + (OAColor *)selectedTextBackgroundColor;
 {
-#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_MAC
+    // TODO: We immediately flatten to a concrete color, while named system colors are dynamic.  Matters?
+    return [self colorWithPlatformColor:[NSColor selectedTextBackgroundColor]];
+#else
     static OAColor *c = nil;
     if (!c)
         c = OARGBAColorCreate((OALinearRGBA){0.6055, 0.7539, 0.9453, 1});
     return c;
-#else
-    // TODO: We immediately flatten to a concrete color, while named system colors are dynamic.  Matters?
-    return [self colorWithPlatformColor:[NSColor selectedTextBackgroundColor]];
 #endif
+}
+
+#ifdef OA_PLATFORM_COLOR_CLASS
+- (OA_PLATFORM_COLOR_CLASS *)toColor;
+{
+    OBPRECONDITION(_platformColor);
+    return _platformColor;
 }
 
 - (void)set;
@@ -1293,6 +1416,7 @@ static void OAColorInitPlatformColor(OAColor *self)
     OBPRECONDITION(_platformColor);
     [_platformColor set];
 }
+#endif
 
 - (BOOL)isEqual:(nullable id)otherObject;
 {
@@ -1320,7 +1444,7 @@ static void OAColorInitPlatformColor(OAColor *self)
 
 @end
 
-#if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_MAC
 
 void OAFillRGBAColorPair(OARGBAColorPair *pair, NSColor *color1, NSColor *color2)
 {

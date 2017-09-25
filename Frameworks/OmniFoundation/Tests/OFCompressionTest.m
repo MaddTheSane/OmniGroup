@@ -1,4 +1,4 @@
-// Copyright 2004-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2004-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -37,11 +37,11 @@ static NSData *utf8(NSString *str)
 
 + (XCTestSuite *)defaultTestSuite;
 {
-    // This abstract class doesn't have a test suite.
-    if (self == [OFCompressionTest class])
-        return nil;
-    else
+    if (self == [OFCompressionTest class]) {
+        return [[XCTestSuite alloc] initWithName:@"OFCompressionTest"];
+    } else {
         return [super defaultTestSuite];
+    }
 }
 
 - (void)doTestWithData:(NSData *)d;
@@ -138,15 +138,21 @@ static NSData *utf8(NSString *str)
         for (levelIndex = 0; levelIndex < (sizeof(levels) / sizeof(*levels)); levelIndex++) {
             NSError *error = nil;
             NSData *gzData = [data compressedDataWithGzipHeader:YES compressionLevel:levels[levelIndex] error:&error];
-            OBShouldNotError(gzData != nil);
+            XCTAssertNotNil(gzData, @"Error: %@", error);
+            if (!gzData)
+                break;
 
             NSData *gzipDecompressed = [gzData filterDataThroughCommandAtPath:@"/usr/bin/gzip" withArguments:[NSArray arrayWithObjects:@"--decompress", @"--to-stdout", nil] error:&error];
-            OBShouldNotError(gzipDecompressed != nil);
+            XCTAssertNotNil(gzipDecompressed, @"Error: %@", error);
+            if (!gzipDecompressed)
+                break;
 
             XCTAssertEqualObjects(data, gzipDecompressed);
 
             NSData *decompressed = [gzData decompressedData:&error];
-            OBShouldNotError(decompressed != nil);
+            XCTAssertNotNil(decompressed, @"Error: %@", error);
+            if (!decompressed)
+                break;
 
             XCTAssertEqualObjects(data, decompressed);
         }

@@ -1,4 +1,4 @@
-// Copyright 2010-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -578,7 +578,6 @@ static NSURL *urlIfExists(NSURL *url)
         if (components.count > 1) {
             // We don't have a great way to check the expected type of keyPath with this architecture. For now, check that we can at least get some value. If this becomes a problem in practice, we may need to pass in an expected type somehow.
             // For example, the coder, which calls us, could use a known good codeable plus an instance of the thing to be validated. The known good codeable could be queried for a value, then the type of that value could be passed in to this method on the object to be validated.
-            OBASSERT_NOT_REACHED(@"Attempting to validate non-trivial keyPath “%@”. This part of the validation algorithm is weak sauce.", keyPath);
             id value = [self _valueForPlistKeyPathComponents:components error:error];
             BOOL result = (value != nil);
             return result;
@@ -701,7 +700,12 @@ static NSURL *urlIfExists(NSURL *url)
 
 - (OA_SYSTEM_COLOR_CLASS *)colorForKeyPath:(NSString *)keyPath;
 {
-    return [OA_SYSTEM_COLOR_CLASS colorFromPropertyListRepresentation:[self _objectOfClass:[NSDictionary class] forPlistKeyPath:keyPath]];
+    NSDictionary *archiveDictionary = [self _objectOfClass:[NSDictionary class] forPlistKeyPath:keyPath];
+#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
+    return [UIColor colorFromPropertyListRepresentation:archiveDictionary];
+#else
+    return [NSColor colorFromPropertyListRepresentation:archiveDictionary withColorSpaceManager:nil shouldDefaultToGenericSpace:NO];
+#endif
 }
 
 - (OAColor *)OAColorForKeyPath:(NSString *)keyPath;

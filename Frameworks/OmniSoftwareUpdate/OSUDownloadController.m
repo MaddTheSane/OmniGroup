@@ -1,4 +1,4 @@
-// Copyright 2007-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2007-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -154,7 +154,8 @@ static void _FillOutDownloadInProgressError(NSError **outError)
     [self showWindow:nil];
     
     void (^startDownload)(void) = ^{
-        // This starts the download
+        // This starts the download and retains its delegate (us).
+        [_session invalidateAndCancel];
         _session = [NSURLSession sessionWithConfiguration:[NSURLSessionConfiguration defaultSessionConfiguration] delegate:self delegateQueue:[NSOperationQueue mainQueue]];
 
         _downloadTask = [_session downloadTaskWithRequest:_request];
@@ -214,7 +215,7 @@ static void _FillOutDownloadInProgressError(NSError **outError)
     NSString *name = [[[_request URL] path] lastPathComponent];
     [self setStatus:[NSString stringWithFormat:NSLocalizedStringFromTableInBundle(@"Downloading %@ \\U2026", @"OmniSoftwareUpdate", OMNI_BUNDLE, @"Download status - text is filename of update package being downloaded"), name]];
     
-    [self.installViewCautionText setStringValue:@"---"];
+    [self.installViewCautionText setStringValue:OBUnlocalized(@"---")];
     [self _setDisplayedView:self.downloadProgressView];
     [self.window layoutIfNeeded];
     
@@ -507,6 +508,13 @@ totalBytesExpectedToWrite:(int64_t)totalBytesExpectedToWrite;
 
 - (void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task didCompleteWithError:(nullable NSError *)error;
 {
+    OBPRECONDITION(session == _session);
+    OBExpectDeallocation(session);
+
+    OBRetainAutorelease(self);
+    [_session invalidateAndCancel]; // Releases its delegate (us).
+    _session = nil;
+
     if (!error) {
         OBASSERT(_downloadedURL);
 

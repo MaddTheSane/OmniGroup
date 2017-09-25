@@ -1,4 +1,4 @@
-// Copyright 2004-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2004-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -83,27 +83,25 @@ static BOOL isOperatingSystemAtLeastVersionString(NSString *versionString)
 
 #if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
 
-// We require iOS 9.0 currently
-
-+ (BOOL)isOperatingSystemiOS93OrLater;
-{
-    static BOOL isEarlier;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        isEarlier = isOperatingSystemAtLeastVersionString(@"9.3");
-    });
-    
-    return isEarlier;
-}
-
-#else
-
-+ (BOOL)isOperatingSystemElCapitanOrLater; // 10.11
++ (BOOL)isOperatingSystem110OrLater;
 {
     static BOOL isLater;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        isLater = isOperatingSystemAtLeastVersionString(@"10.11");
+        isLater = isOperatingSystemAtLeastVersionString(@"11.0");
+    });
+
+    return isLater;
+}
+
+#else
+
++ (BOOL)isOperatingSystemHighSierraOrLater; // 10.13
+{
+    static BOOL isLater;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        isLater = isOperatingSystemAtLeastVersionString(@"10.13");
     });
 
     return isLater;
@@ -115,6 +113,17 @@ static BOOL isOperatingSystemAtLeastVersionString(NSString *versionString)
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         isLater = isOperatingSystemAtLeastVersionString(@"10.12");
+    });
+
+    return isLater;
+}
+
++ (BOOL)isOperatingSystemSierraWithTouchBarOrLater; // 10.12.1 with Touch Bar support (build 12B2657 or later)
+{
+    static BOOL isLater;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        isLater = NSClassFromString(@"NSTouchBar") != nil; // Apple's ToolbarSample app tests for NSClassFromString(@"NSTouchBar"), so that's what we do too. (We can't just test for 10.12.1, because the first App Store update that called itself 10.12.1 didn't include Touch Bar support.)
     });
 
     return isLater;
@@ -367,12 +376,11 @@ NSString * const OFVersionNumberTransformerName = @"OFVersionNumberTransformer";
 
 @implementation OFVersionNumberTransformer
 
-+ (void)didLoad;
-{
-    OFVersionNumberTransformer *instance = [[self alloc] init];
+OBDidLoad(^{
+    OFVersionNumberTransformer *instance = [[OFVersionNumberTransformer alloc] init];
     [NSValueTransformer setValueTransformer:instance forName:@"OFVersionNumberTransformer"];
     [instance release];
-}
+});
 
 + (Class)transformedValueClass;
 {

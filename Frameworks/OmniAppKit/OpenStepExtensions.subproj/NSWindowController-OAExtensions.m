@@ -1,4 +1,4 @@
-// Copyright 2006-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2006-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -220,8 +220,8 @@ static BOOL LongOperationIndicatorEnabledForWindow(NSWindow * _Nullable window)
             CGContextClosePath(ctx);
         }
         
-        [[NSColor colorWithCalibratedWhite:1.0f alpha:0.9f] setFill];
-        [[NSColor colorWithCalibratedWhite:0.0f alpha:0.9f] setStroke];
+        [[NSColor colorWithWhite:1.0f alpha:0.9f] setFill];
+        [[NSColor colorWithWhite:0.0f alpha:0.9f] setStroke];
         
         CGContextDrawPath(ctx, kCGPathFillStroke);
     }
@@ -315,6 +315,13 @@ static NSWindow * _Nullable RootlessProgressWindow = nil;
     if (!indicatorThreadStarted) {
         indicatorThreadStarted = YES;
         indicatorLock = [[NSConditionLock alloc] initWithCondition:IndicatorStarting];
+        if (![OFVersionNumber isOperatingSystemSierraOrLater]) {
+            // 10.11 can hang in MTLCopyAllDevices() when -[NSProgressIndicator startAnimation:] is first called from a background thread, so on 10.11 let's start and stop it from the main thread before spinning off our background thread to avoid that hang
+            NSProgressIndicator *progressIndicator = [indicatorView progressIndicator];
+            [progressIndicator startAnimation:nil];
+            [progressIndicator stopAnimation:nil];
+
+        }
         [NSThread detachNewThreadSelector:@selector(_longIndicatorThread:) toTarget:self withObject:nil];
     } else {
         // Reset the state on the indicator lock to wake up the background thread.

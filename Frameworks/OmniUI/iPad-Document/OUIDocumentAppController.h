@@ -1,4 +1,4 @@
-// Copyright 2010-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -17,14 +17,13 @@
 @class OFXAgentActivity, OFXServerAccount;
 @class OUIDocument, OUIDocumentPicker, OUIDocumentPickerViewController, OUIDocumentOpenAnimator, OUIBarButtonItem, UIViewController;
 
-@interface OUIDocumentAppController : OUIAppController <OUIUndoBarButtonItemTarget, ODSStoreDelegate, ODSStoreDelegate>
+@interface OUIDocumentAppController : OUIAppController <OUIUndoBarButtonItemTarget, ODSStoreDelegate>
 
 @property(nonatomic,retain) IBOutlet UIWindow *window;
 - (UIWindow *)makeMainWindow; // Called at app startup if the main xib didn't have a window outlet hooked up.
 
 @property(nonatomic,retain) OUIDocumentPicker *documentPicker;
 
-@property(nonatomic,readonly) BOOL useCompactBarButtonItemsIfApplicable; // will allow for possible compact versions of navbar items
 @property(nonatomic,readonly) UIBarButtonItem *closeDocumentBarButtonItem;
 @property(nonatomic,readonly) UIBarButtonItem *compactCloseDocumentBarButtonItem;
 @property(nonatomic,readonly) UIBarButtonItem *infoBarButtonItem;
@@ -37,7 +36,11 @@
 - (NSArray *)editableFileTypes;
 - (BOOL)canViewFileTypeWithIdentifier:(NSString *)uti;
 
+// these types can be read and will be saved to a different fileType (presumably our native format). Defaults to @[]
+- (NSArray *)importableFileTypes;
+
 - (IBAction)makeNewDocument:(id)sender;
+- (void)makeNewDocumentWithTemplateFileItem:(ODSFileItem *)templateFileItem;
 - (IBAction)closeDocument:(id)sender;
 - (void)closeAndDismissDocumentWithCompletionHandler:(void(^)(void))completionHandler;
 - (void)closeDocumentWithCompletionHandler:(void(^)(void))completionHandler;
@@ -46,6 +49,7 @@
 - (void)documentDidDisableEnditing:(OUIDocument *)document;
 - (void)documentWillRebuildViewController:(OUIDocument *)document;
 - (void)documentDidRebuildViewController:(OUIDocument *)document;
+- (void)documentDidFailToRebuildViewController:(OUIDocument *)document;
 
 - (void)openDocument:(ODSFileItem *)fileItem;
 - (void)openDocument:(ODSFileItem *)fileItem fromPeekWithWillPresentHandler:(void (^)(OUIDocumentOpenAnimator *openAnimator))willPresentHandler completionHandler:(void (^)(void))completionHandler;
@@ -75,7 +79,7 @@
 
 // UIApplicationDelegate methods we implement (see OUIAppController too)
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions;
-- (BOOL)application:(UIApplication *)application openURL:(NSURL *)url sourceApplication:(NSString *)sourceApplication annotation:(id)annotation;
+- (BOOL)application:(UIApplication *)app openURL:(NSURL *)url options:(NSDictionary<UIApplicationOpenURLOptionsKey, id> *)options;
 - (void)applicationWillEnterForeground:(UIApplication *)application;
 - (void)applicationDidEnterBackground:(UIApplication *)application;
 
@@ -98,6 +102,7 @@
 - (NSString *)recentDocumentShortcutIconImageName;
 - (NSString *)newDocumentShortcutIconImageName;
 - (UIImage *)documentPickerBackgroundImage;
+- (UIColor *)emptyOverlayViewTextColor;
 - (Class)documentClassForURL:(NSURL *)url;
 - (UIView *)pickerAnimationViewForTarget:(OUIDocument *)document;
 - (NSArray *)toolbarItemsForDocument:(OUIDocument *)document;
@@ -106,6 +111,10 @@
 - (BOOL)shouldOpenOnlineHelpOnFirstLaunch; //defaults YES, implemented this way so you can special-case demo builds.
 // Optional ODSStoreDelegate that we implement
 - (NSArray *)documentStoreEditableDocumentTypes:(ODSStore *)store;
+/// Default is _window.tintColor.
+- (UIColor *)launchActivityIndicatorColor;
+
+- (BOOL)shouldEnableCopyFromWebDAV; // default YES
 
 // Helpful dialogs
 - (void)presentSyncError:(NSError *)syncError forAccount:(OFXServerAccount *)account inViewController:(UIViewController *)viewController retryBlock:(void (^)(void))retryBlock;

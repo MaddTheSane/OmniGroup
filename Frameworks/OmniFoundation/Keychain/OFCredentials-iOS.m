@@ -1,4 +1,4 @@
-// Copyright 2010-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -23,6 +23,10 @@ RCS_ID("$Id$")
 // Instead, we'll store a service-based SecItem directly and return a per-session credential here (which they can't store).
 
 static const UInt8 kKeychainIdentifier[] = "com.omnigroup.frameworks.OmniFoundation.OFCredentials";
+
+// In the Security framework sources, this is defined, but not exported. When running iOS tests from Xcode against an iOS 10.2 simulator, this is returned if the test tries to access the keychain.
+// Some old threads (from before automatic codesigning) mention that signing fixes it http://stackoverflow.com/questions/20344255/secitemadd-and-secitemcopymatching-returns-error-code-34018-errsecmissingentit/22305193#22305193 but so far attempts have failed in Xcode 8.2
+#define errSecMissingEntitlement (-34018)  /* Internal error when a required entitlement isn't present. */
 
 static NSMutableDictionary *BasicQuery(void)
 {
@@ -259,7 +263,7 @@ void OFDeleteAllCredentials(void)
         OFSecError("SecItemDelete", err, NULL);
 }
 
-BOOL OFDeleteCredentialsForServiceIdentifier(NSString *serviceIdentifier, NSError **outError)
+BOOL OFDeleteCredentialsForServiceIdentifier(NSString *serviceIdentifier, NSError * __autoreleasing *outError)
 {
     OBPRECONDITION(![NSString isEmptyString:serviceIdentifier]);
     
@@ -302,7 +306,7 @@ BOOL OFDeleteCredentialsForServiceIdentifier(NSString *serviceIdentifier, NSErro
     
     OBASSERT(OFReadCredentialsForServiceIdentifier(serviceIdentifier, NULL) == nil);
     
-    OBFinishPortingLater("Store trusted certificates for the same service identifier so we can remove them here");
+    OBFinishPortingLater("<bug:///147855> (Frameworks-iOS Bug: Store trusted certificates for the same service identifier so we can remove them in OFDeleteCredentialsForServiceIdentifier)");
 #if 0
     // TODO: This could be more targetted. Might have multiple accounts on the same host.
     NSString *host = protectionSpace.host;

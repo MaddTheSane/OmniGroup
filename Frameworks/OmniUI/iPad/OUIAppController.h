@@ -1,4 +1,4 @@
-// Copyright 2010-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -28,15 +28,23 @@ extern NSString *OUIAttentionSeekingNotification;
 /// The key for when attention is sought for new "News" from Omni.
 extern NSString *OUIAttentionSeekingForNewsKey;
 
+@protocol OUIDisabledDemoFeatureAlerter
+- (NSString *)featureDisabledForDemoAlertTitle;
+@optional
+- (NSString *)featureDisabledForDemoAlertMessage;
+@end
+
 @interface OUIAppController : UIResponder <UIApplicationDelegate, MFMailComposeViewControllerDelegate, OUIWebViewControllerDelegate>
 
-+ (instancetype)controller NS_EXTENSION_UNAVAILABLE_IOS("Use view controller based solutions where available instead.");
++ (nonnull instancetype)controller NS_EXTENSION_UNAVAILABLE_IOS("Use view controller based solutions where available instead.");
 
 // +sharedController is a synonym for +controller.
 // The Swift bridge allows us to use +sharedController, but generates a compile error on +controller, suggesting we use a constructor instead.
-+ (instancetype)sharedController NS_EXTENSION_UNAVAILABLE_IOS("Use view controller based solutions where available instead.");
++ (nonnull instancetype)sharedController NS_EXTENSION_UNAVAILABLE_IOS("Use view controller based solutions where available instead.");
 
 + (NSString *)applicationName;
++ (nullable NSString *)applicationEdition;
++ (BOOL)inSandboxStore;
 
 + (BOOL)canHandleURLScheme:(NSString *)urlScheme;
 
@@ -44,6 +52,7 @@ extern NSString *OUIAttentionSeekingForNewsKey;
 + (void)presentError:(NSError *)error fromViewController:(UIViewController *)viewController;
 + (void)presentError:(NSError *)error fromViewController:(UIViewController *)viewController file:(const char * _Nullable)file line:(int)line;
 + (void)presentError:(NSError *)error fromViewController:(UIViewController *)viewController file:(const char * _Nullable)file line:(int)line optionalActionTitle:(NSString *)optionalActionTitle optionalAction:(void (^ __nullable)(UIAlertAction *action))optionalAction;
++ (void)presentError:(NSError *)error fromViewController:(UIViewController *)viewController cancelButtonTitle:(NSString *)cancelButtonTitle optionalActionTitle:(NSString *)optionalActionTitle optionalAction:(void (^ __nullable)(UIAlertAction *action))optionalAction;
 
 + (void)presentAlert:(NSError *)error file:(const char * _Nullable)file line:(int)line NS_EXTENSION_UNAVAILABLE_IOS("Use +presentAlert:fromViewController:file:line: instead.");  // 'OK' instead of 'Cancel' for the button title
 
@@ -55,8 +64,9 @@ extern NSString *OUIAttentionSeekingForNewsKey;
 @property(nonatomic,assign) BOOL shouldPostponeLaunchActions;
 - (void)addLaunchAction:(void (^)(void))launchAction;
 
-- (void)showAboutScreenInNavigationController:(UINavigationController * _Nullable)navigationController;
-- (void)showOnlineHelp:(nullable id)sender;
+- (void)showAboutScreenInNavigationController:(UINavigationController * _Nullable)navigationController NS_EXTENSION_UNAVAILABLE_IOS("");
+@property(nonatomic,readonly) BOOL hasOnlineHelp;
+- (void)showOnlineHelp:(nullable id)sender NS_EXTENSION_UNAVAILABLE_IOS("");
 
 // UIApplicationDelegate methods that we implement
 - (void)applicationWillTerminate:(UIApplication *)application;
@@ -80,7 +90,7 @@ extern NSString *OUIAttentionSeekingForNewsKey;
 // App menu support
 @property (nonatomic, strong, nullable) NSString *newsURLStringToShowWhenReady;
 @property (nonatomic, strong, nullable) NSString *newsURLCurrentlyShowing;
-@property (nonatomic, weak) OUIWebViewController *newsViewController;
+@property (nonatomic, weak) OUIWebViewController *newsViewController NS_EXTENSION_UNAVAILABLE_IOS("OUIWebViewController not available in app extensions.");
 - (void)dismissAppMenuIfVisible:(UINavigationController *)navigationController;
 
 @property (nonatomic, readonly) BOOL hasUnreadNews;
@@ -89,9 +99,10 @@ extern NSString *OUIAttentionSeekingForNewsKey;
 /// The most recent news URL, which could be an unread one or just the most recently shown one. Will be nil if there is no unread news and no already-read news stored in preferences.
 - (NSString *)mostRecentNewsURLString;
 
-- (OUIWebViewController * _Nullable)showNewsURLString:(NSString *)urlString evenIfShownAlready:(BOOL)showNoMatterWhat;
+- (OUIWebViewController * _Nullable)showNewsURLString:(NSString *)urlString evenIfShownAlready:(BOOL)showNoMatterWhat NS_EXTENSION_UNAVAILABLE_IOS("OUIWebViewController not available in app extensions.");
 
 typedef NS_ENUM(NSInteger, OUIAppMenuOptionPosition) {
+    OUIAppMenuOptionPositionBeforeReleaseNotes,
     OUIAppMenuOptionPositionAfterReleaseNotes,
     OUIAppMenuOptionPositionAtEnd
 };
@@ -107,15 +118,28 @@ extern NSString *const OUIAboutScreenBindingsDictionaryCopyrightStringKey; // @"
 extern NSString *const OUIAboutScreenBindingsDictionaryFeedbackAddressKey; // @"feedbackAddress"
 
 - (NSString *)feedbackMenuTitle;
+- (NSString *)appSpecificDebugInfo;
 - (UIBarButtonItem *)newAppMenuBarButtonItem; // insert this into your view controllers; see -additionalAppMenuOptionsAtPosition: for customization
 - (NSArray *)additionalAppMenuOptionsAtPosition:(OUIAppMenuOptionPosition)position; // override to supplement super's return value with additional OUIMenuOptions
-- (void)sendFeedbackWithSubject:(NSString *)subject body:(NSString * _Nullable)body NS_EXTENSION_UNAVAILABLE_IOS("Feedback cannot be sent from extensions.");
+- (void)sendFeedbackWithSubject:(NSString * _Nullable)subject body:(NSString * _Nullable)body NS_EXTENSION_UNAVAILABLE_IOS("Feedback cannot be sent from extensions.");
+- (IBAction)sendFeedback:(id)sender NS_EXTENSION_UNAVAILABLE_IOS("");
+- (MFMailComposeViewController * _Nullable)mailComposeController;
+- (void)sendMailTo:(NSArray<NSString *> *)recipients withComposeController:(MFMailComposeViewController *)mailComposeController;
 
 /// Presents a view controller displaying the contents of the given URL in an in-app web view. The view controller is wrapped in a UINavigationController instance; if non-nil, the given title is shown in the navigation bar of this controller. Returns the web view controller being used to show the URL's content.
-- (OUIWebViewController *)showWebViewWithURL:(NSURL *)url title:(NSString * _Nullable)title;
+- (nullable OUIWebViewController *)showWebViewWithURL:(NSURL *)url title:(nullable NSString *)title NS_EXTENSION_UNAVAILABLE_IOS("OUIWebViewController not available in app extensions.");
+- (nullable OUIWebViewController *)showWebViewWithURL:(NSURL *)url title:(nullable NSString *)title modalPresentationStyle:(UIModalPresentationStyle)presentationStyle modalTransitionStyle:(UIModalTransitionStyle)transitionStyle animated:(BOOL)animated NS_EXTENSION_UNAVAILABLE_IOS("OUIWebViewController not available in app extensions.");
+- (nullable OUIWebViewController *)showWebViewWithURL:(NSURL *)url title:(nullable NSString *)title modalPresentationStyle:(UIModalPresentationStyle)presentationStyle modalTransitionStyle:(UIModalTransitionStyle)transitionStyle  animated:(BOOL)animated navigationController:(UINavigationController * _Nullable)navigationController NS_EXTENSION_UNAVAILABLE_IOS("OUIWebViewController not available in app extensions.");
 
 @property(nonatomic,readonly) UIImage *settingsMenuImage;
 @property(nonatomic,readonly) UIImage *inAppPurchasesMenuImage;
+@property(nonatomic,readonly) UIImage *quickStartMenuImage;
+@property(nonatomic,readonly) UIImage *trialModeMenuImage;
+@property(nonatomic,readonly) UIImage *introVideoMenuImage;
+
+@property(nonatomic,readonly) BOOL useCompactBarButtonItemsIfApplicable; // will allow for possible compact versions of navbar items
+
+- (UIImage *)exportBarButtonItemImageInHostViewController:(UIViewController *)hostViewController;
 
 - (void)willWaitForSnapshots;
 - (void)didFinishWaitingForSnapshots;
@@ -123,11 +147,17 @@ extern NSString *const OUIAboutScreenBindingsDictionaryFeedbackAddressKey; // @"
 - (void)destroyCurrentSnapshotTimer;
 extern NSString * const OUISystemIsSnapshottingNotification;
 
+@property (readonly) BOOL canCreateNewDocument;
+
 @end
 
 extern BOOL OUIShouldLogPerformanceMetrics;
 extern NSTimeInterval OUIElapsedTimeSinceProcessCreation(void); // For timing startup work before main() is entered
 extern NSTimeInterval OUIElapsedTimeSinceApplicationStarted(void); // Time since the beginning of -[OUIApplication initialize]
+
+@interface UIViewController (OUIDisabledDemoFeatureAlerter) <OUIDisabledDemoFeatureAlerter>
+- (NSString *)featureDisabledForDemoAlertTitle;
+@end
 
 #define OUILogPerformanceMetric(format, ...) if (OUIShouldLogPerformanceMetrics) NSLog((format), ## __VA_ARGS__)
 

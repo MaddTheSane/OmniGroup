@@ -1,4 +1,4 @@
-// Copyright 1997-2016 Omni Development, Inc. All rights reserved.
+// Copyright 1997-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -123,14 +123,19 @@
 
 // We don't want to use the main-bundle related macros when building other bundle types.  This is sometimes what you want to do, but you shouldn't use the macros since it'll make genstrings emit those strings into your bundle as well.  We can't do this from the .xcconfig files since NSBundle's #define wins vs. command line flags.
 #import <Foundation/NSBundle.h> // Make sure this is imported first so that it doesn't get imported afterwards, clobbering our attempted clobbering.
-#if defined(OMNI_BUILDING_FRAMEWORK_OR_BUNDLE)
+#if defined(OMNI_BUILDING_FRAMEWORK_OR_BUNDLE) && (!defined(TARGET_OS_WATCH) || !TARGET_OS_WATCH)
     #undef NSLocalizedString
     #define NSLocalizedString Use_NSBundle_methods_if_you_really_want_to_look_up_strings_in_the_main_bundle
     #undef NSLocalizedStringFromTable
     #define NSLocalizedStringFromTable Use_NSBundle_methods_if_you_really_want_to_look_up_strings_in_the_main_bundle
 #endif
 
-// Hack to define a protocol for OBPerformRuntimeChecks() to check for deprecated dataSource/delegate methods where _implementing_ a method with a given name is considered wrong (likely the method has been removed from the protocol or renamed). The inline is enough to trick the compiler into emitting the protocol into the .o file, though this seems fragile.  OBPostLoader will use this macro itself once and will assert that at least one such deprecated protocol is found, just to make sure this hack keeps working. This macro is intended to be used in a .m file; otherwise the hack function defined would get multiple definitions.
+// A wrapper to avoid unlocalized string warnings (in debugging interfaces or messages).
+static inline NSString *OBUnlocalized(NSString *value) __attribute__((annotate("returns_localized_nsstring"))) {
+    return value;
+}
+
+// Hack to define a protocol for OBPerformRuntimeChecks() to check for deprecated dataSource/delegate methods where _implementing_ a method with a given name is considered wrong (likely the method has been removed from the protocol or renamed). The inline is enough to trick the compiler into emitting the protocol into the .o file, though this seems fragile.  OBRuntimeCheck will use this macro itself once and will assert that at least one such deprecated protocol is found, just to make sure this hack keeps working. This macro is intended to be used in a .m file; otherwise the hack function defined would get multiple definitions.
 // Since these protocols are only examied when assertions are enabled, this should be wrapped in a OMNI_ASSERTIONS_ON check.
 #import <OmniBase/assertions.h> // Since we want you to use OMNI_ASSERTIONS_ON, make sure it is imported
 #ifdef OMNI_ASSERTIONS_ON

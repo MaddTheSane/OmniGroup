@@ -1,4 +1,4 @@
-// Copyright 2005-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2005-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -11,6 +11,7 @@
 #import <OmniBase/assertions.h>
 #import <OmniBase/OBUtilities.h>
 #import <OmniBase/OBObject.h>
+#import <OmniBase/OBLoadAction.h>
 
 #import <Foundation/NSUserDefaults.h>
 #import <Foundation/FoundationErrors.h>
@@ -18,6 +19,7 @@
 #if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
 #import <Security/Authorization.h> // for errAuthorizationCanceled
 #endif
+#import <Security/SecBase.h> // for errSecUserCanceled
 
 RCS_ID("$Id$");
 
@@ -69,12 +71,12 @@ static id _replacement_initWithDomain_code_userInfo(NSError *self, SEL _cmd, NSS
     return self;
 }
 
-+ (void)performPosing;
-{
+OBPerformPosing(^{
     OBLogErrorCreations = [[NSUserDefaults standardUserDefaults] boolForKey:@"OBLogErrorCreations"];
     
+    Class self = objc_getClass("NSError");
     original_initWithDomainCodeUserInfo = (typeof(original_initWithDomainCodeUserInfo))OBReplaceMethodImplementation(self, @selector(initWithDomain:code:userInfo:), (IMP)_replacement_initWithDomain_code_userInfo);
-}
+});
 
 - (NSError *)underlyingErrorWithDomain:(NSString *)domain;
 {
@@ -125,6 +127,9 @@ static id _replacement_initWithDomain_code_userInfo(NSError *self, SEL _cmd, NSS
         return YES;
 #endif
     
+    if ([self hasUnderlyingErrorDomain:NSOSStatusErrorDomain code:errSecUserCanceled])
+        return YES;
+    
     return NO;
 }
 
@@ -136,6 +141,12 @@ static id _replacement_initWithDomain_code_userInfo(NSError *self, SEL _cmd, NSS
             || [self hasUnderlyingErrorDomain:NSOSStatusErrorDomain code:fnfErr]
 #endif
     ;
+}
+
+- (BOOL)causedByExistingFile;
+{
+    return [self hasUnderlyingErrorDomain:NSCocoaErrorDomain code:NSFileWriteFileExistsError]
+            || [self hasUnderlyingErrorDomain:NSPOSIXErrorDomain code:EEXIST];
 }
 
 - (BOOL)causedByUnreachableHost;
@@ -167,7 +178,7 @@ static id _replacement_initWithDomain_code_userInfo(NSError *self, SEL _cmd, NSS
 
 #endif
 
-- initWithPropertyList:(NSDictionary *)propertyList;
+- (id)initWithPropertyList:(NSDictionary *)propertyList;
 {
     NSString *domain = [propertyList objectForKey:@"domain"];
     NSNumber *code = [propertyList objectForKey:@"code"];

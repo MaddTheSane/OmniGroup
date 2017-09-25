@@ -1,4 +1,4 @@
-// Copyright 2014-2015 Omni Development, Inc. All rights reserved.
+// Copyright 2014-2016 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -90,7 +90,7 @@ RCS_ID("$Id$");
     switch (hardwareInfo.family) {
         case UIDeviceHardwareFamily_iPhoneSimulator: {
             // TODO: making a guess based on screen size
-            OBASSERT_NOT_REACHED("WYSIWYG does not work in simulator");
+            OBASSERT_NOT_REACHED("WYSIWYG does not work in simulator. bug:///137376");
 
             ppi = 326;
             break;

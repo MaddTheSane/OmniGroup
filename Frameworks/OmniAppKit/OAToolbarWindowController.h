@@ -1,4 +1,4 @@
-// Copyright 2002-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2002-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -12,9 +12,23 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@class OAToolbar;
-@class NSToolbarItem;
+@class OAToolbar, OAToolbarItem;
 @class NSBundle, NSDictionary;
+
+/**
+ Posted when we detect that an item will be added to or was removed from the toolbar and when the toolbar's visibility, display mode, or size mode have changed.
+ */
+extern NSString * const OAToolbarDidChangeNotification;
+extern NSString * const OAToolbarDidChangeKindKey;
+
+typedef NS_ENUM(NSUInteger, OAToolbarDidChangeKind) {
+    OAToolbarDidChangeKindAddItem,
+    OAToolbarDidChangeKindRemoveItem,
+    OAToolbarDidChangeKindSetVisible,
+    OAToolbarDidChangeKindSetDisplayMode,
+    OAToolbarDidChangeKindSetSizeMode,
+    OAToolbarDidChangeKindPresentCustomizationSheet,
+};
 
 @protocol OAToolbarHelper
 
@@ -27,7 +41,7 @@ NS_ASSUME_NONNULL_BEGIN
 // The list of item identifiers provided by this helper. The identifiers should be <name>.<extension>, where the name will be passed into the format strings in the template specified by templateItemIdentifier.
 - (NSArray<NSString *> *)allowedItems;
 
-- (nullable NSToolbarItem *)finishSetupForToolbarItem:(NSToolbarItem *)item toolbar:(NSToolbar *)toolbar willBeInsertedIntoToolbar:(BOOL)willInsert;
+- (nullable OAToolbarItem *)finishSetupForToolbarItem:(OAToolbarItem *)item toolbar:(NSToolbar *)toolbar willBeInsertedIntoToolbar:(BOOL)willInsert;
 
 @end
 
@@ -51,6 +65,14 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)shouldAutosaveToolbarConfiguration;
 - (NSToolbarDisplayMode)defaultToolbarDisplayMode;
 - (NSDictionary *)toolbarConfigurationDictionary; // Used when -shouldAutosaveConfiguration returns NO
+
+// declare that we implement these optional OAToolbarDelegate methods so subclasses that override them can (and must!) call super
+- (void)toolbarWillAddItem:(NSNotification *)notification NS_REQUIRES_SUPER;
+- (void)toolbarDidRemoveItem:(NSNotification *)notification NS_REQUIRES_SUPER;
+- (void)toolbar:(OAToolbar *)aToolbar didSetVisible:(BOOL)visible NS_REQUIRES_SUPER;
+- (void)toolbar:(OAToolbar *)aToolbar didSetDisplayMode:(NSToolbarDisplayMode)displayMode NS_REQUIRES_SUPER;
+- (void)toolbar:(OAToolbar *)aToolbar didSetSizeMode:(NSToolbarSizeMode)sizeMode NS_REQUIRES_SUPER;
+
 
 @end
 

@@ -1,4 +1,4 @@
-// Copyright 2008-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2008-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -9,6 +9,7 @@
 
 #import <OmniDataObjects/ODOProperty.h>
 #import <OmniDataObjects/ODORelationship.h>
+#import <OmniDataObjects/ODOSQLConnection.h>
 
 #import "ODOObject-Accessors.h"
 #import "ODOObject-Internal.h"
@@ -26,40 +27,48 @@
 
 RCS_ID("$Id$")
 
-@interface ODOSQLStatement (Private)
-- (id)_initSelectStatement:(NSMutableString *)mutableSQL fromEntity:(ODOEntity *)rootEntity database:(ODODatabase *)database predicate:(NSPredicate *)predicate error:(NSError **)outError;
+@interface ODOSQLStatement (/*Private*/)
+
+@property (nonatomic, strong, readwrite) ODOSQLConnection *connection;
+@property (nonatomic, copy) NSArray *bindingConstants;
+
+- (id)_initSelectStatement:(NSMutableString *)mutableSQL fromEntity:(ODOEntity *)rootEntity connection:(ODOSQLConnection *)connection predicate:(NSPredicate *)predicate error:(NSError **)outError;
+
 @end
 
 @implementation ODOSQLStatement
 
-- initWithDatabase:(ODODatabase *)database sql:(NSString *)sql error:(NSError **)outError;
++ (instancetype)preparedStatementWithConnection:(ODOSQLConnection *)connection SQLite:(struct sqlite3 *)sqlite sql:(NSString *)sql error:(NSError **)outError;
 {
-    OBPRECONDITION(database);
-    OBPRECONDITION([database connectedURL]);
-    OBPRECONDITION([sql length] > 0);
-    
-    _sql = [sql copy];
-    
-    sqlite3 *sqlite = [database _sqlite];
-
-    const char *sqlTail = NULL;
-    int rc = sqlite3_prepare(sqlite, [_sql UTF8String], -1/*length -> to NUL*/, &_statement, &sqlTail);
-    if (rc != SQLITE_OK) {
-        OBASSERT(_statement == NULL);
-        ODOSQLiteError(outError, rc, sqlite); // stack the underlying error
-        
-        NSString *description = NSLocalizedStringFromTableInBundle(@"Unable to create SQL statement.", @"OmniDataObjects", OMNI_BUNDLE, @"error description");
-        NSString *reason = [NSString stringWithFormat:NSLocalizedStringFromTableInBundle(@"Unable prepare statement for SQL '%@'.", @"OmniDataObjects", OMNI_BUNDLE, @"error reason"), _sql];
-        ODOError(outError, ODOUnableToCreateSQLStatement, description, reason);
-        [self release];
+    ODOSQLStatement *result = [[self alloc] initWithConnection:connection sql:sql error:outError];
+    if (result == nil) {
         return nil;
     }
     
-    TRACK_INSTANCES(@"STMT %p:INI on db %p with sql '%@'", self, database, sql);
+    if (![result prepareIfNeededWithSQLite:sqlite error:outError]) {
+        [result release];
+        return nil;
+    }
+    
+    return [result autorelease];
+}
+
+- (instancetype)initWithConnection:(ODOSQLConnection *)connection sql:(NSString *)sql error:(NSError **)outError;
+{
+    OBPRECONDITION(connection);
+    OBPRECONDITION([sql length] > 0);
+    
+    if (!(self = [super init])) {
+        return nil;
+    }
+    
+    _sql = [sql copy];
+    _connection = [connection retain];
+    
     return self;
 }
 
-- initSelectProperties:(NSArray *)properties fromEntity:(ODOEntity *)rootEntity database:(ODODatabase *)database predicate:(NSPredicate *)predicate error:(NSError **)outError;
+- (instancetype)initSelectProperties:(NSArray *)properties fromEntity:(ODOEntity *)rootEntity connection:(ODOSQLConnection *)connection predicate:(NSPredicate *)predicate error:(NSError **)outError;
 {
     OBPRECONDITION([properties count] > 0);
     
@@ -84,46 +93,21 @@ RCS_ID("$Id$")
 
     [sql appendFormat:@" FROM %@", [rootEntity name]];
     
-    return [self _initSelectStatement:sql fromEntity:rootEntity database:database predicate:predicate error:outError];
+    return [self _initSelectStatement:sql fromEntity:rootEntity connection:connection predicate:predicate error:outError];
 }
 
-- initRowCountFromEntity:(ODOEntity *)rootEntity database:(ODODatabase *)database predicate:(NSPredicate *)predicate error:(NSError **)outError;
+- (instancetype)initRowCountFromEntity:(ODOEntity *)rootEntity connection:(ODOSQLConnection *)connection predicate:(NSPredicate *)predicate error:(NSError **)outError;
 {
     OBPRECONDITION(rootEntity != nil);
 
     NSMutableString *sql = [NSMutableString stringWithFormat:@"SELECT COUNT(*) FROM %@", [rootEntity name]];
-    return [self _initSelectStatement:sql fromEntity:rootEntity database:database predicate:predicate error:outError];
+    return [self _initSelectStatement:sql fromEntity:rootEntity connection:connection predicate:predicate error:outError];
 }
 
-- (void)dealloc;
-{
-    if (_statement)
-        [self invalidate];
-    [_sql release];
-    [super dealloc];
-}
-
-- (void)invalidate;
-{
-    OBPRECONDITION(_statement);
-    
-    if (!_statement)
-        return;
-    
-    TRACK_INSTANCES(@"STMT %p:FIN", self);
-    sqlite3_finalize(_statement);
-    _statement = NULL;
-}
-
-@end
-
-@implementation ODOSQLStatement (Private)
-
-- (id)_initSelectStatement:(NSMutableString *)mutableSQL fromEntity:(ODOEntity *)rootEntity database:(ODODatabase *)database predicate:(NSPredicate *)predicate error:(NSError **)outError;
+- (instancetype)_initSelectStatement:(NSMutableString *)mutableSQL fromEntity:(ODOEntity *)rootEntity connection:(ODOSQLConnection *)connection predicate:(NSPredicate *)predicate error:(NSError **)outError;
 {
     OBPRECONDITION(rootEntity != nil);
-    OBPRECONDITION(database != nil);
-    OBPRECONDITION([rootEntity model] == [database model]);
+    OBPRECONDITION(connection != nil);
     
     // TODO: Not handling joins until we actually need them.
     
@@ -137,30 +121,86 @@ RCS_ID("$Id$")
         }
     }
     
-    if (!(self = [self initWithDatabase:database sql:mutableSQL error:outError]))
+    if (!(self = [self initWithConnection:connection sql:mutableSQL error:outError])) {
         return nil;
-    
-    if (constants) {
-        // Bind the constants we found.  We only know their manifest type here.  We *could* try to enforce type safety when we are doing key/comp/value.
-        sqlite3 *sqlite = [database _sqlite];
-        
-        NSUInteger constIndex, constCount = [constants count];
-        for (constIndex = 0; constIndex < constCount; constIndex++) {
-            id constant = [constants objectAtIndex:constIndex];
-            NSUInteger bindIndex = constIndex + 1; // one-based.
-            OBASSERT(bindIndex < INT_MAX);
-            if (!ODOSQLStatementBindConstant(self, sqlite, constant, (int)bindIndex, outError)) {
-                [self release];
-                return nil;
-            }
-        }
     }
+    
+    _bindingConstants = [constants copy];
     
 #if 0 && defined(DEBUG)
     NSLog(@"predicate:%@ -> sql:%@ constants:%@", predicate, _sql, constants);
 #endif
     
     return self;
+}
+
+- (void)dealloc;
+{
+    if (_statement) {
+        [self invalidate];
+    }
+    [_bindingConstants release];
+    [_connection release];
+    [_sql release];
+    [super dealloc];
+}
+
+- (void)invalidate;
+{
+    // N.B. We no longer have a precondition that _statement != NULL. Since we lazy evaluate the statement in -prepareIfNeededWithSQLite:error:, we can have a fully formed object which failed to ever create a statement. -invalidate should be a no-op in that case.
+    if (_statement == NULL) {
+        return;
+    }
+    
+    // We can't leave an ivar reference in the block below – in the case that we're called on the -dealloc path, referencing an ivar in the block would attempt to retain self, which is an error.
+    // Instead, copy the ivar to a local, then clear it right away. The finalization path is still synchronous, so everything will be accurate as of the end of this method.
+    TRACK_INSTANCES(@"STMT %p:FIN", self);
+    struct sqlite3_stmt *finalizingStatement = _statement;
+    _statement = NULL;
+    [_connection performSQLBlock:^(struct sqlite3 *sqlite) {
+        sqlite3_finalize(finalizingStatement);
+    }];
+}
+
+- (BOOL)isPrepared;
+{
+    return (_statement != NULL);
+}
+
+- (BOOL)prepareIfNeededWithSQLite:(struct sqlite3 *)sqlite error:(NSError **)outError;
+{
+    OBPRECONDITION([_connection checkExecutingOnDispatchQueue]);
+    OBPRECONDITION([_connection checkIsManagedSQLite:sqlite]);
+    
+    if ([self isPrepared]) {
+        return YES;
+    }
+    
+    const char *sqlTail = NULL;
+    int rc = sqlite3_prepare_v2(sqlite, [_sql UTF8String], -1/*length -> to NUL*/, &_statement, &sqlTail);
+    if (rc != SQLITE_OK) {
+        OBASSERT(_statement == NULL);
+        ODOSQLiteError(outError, rc, sqlite); // stack the underlying error
+        
+        NSString *description = NSLocalizedStringFromTableInBundle(@"Unable to create SQL statement.", @"OmniDataObjects", OMNI_BUNDLE, @"error description");
+        NSString *reason = [NSString stringWithFormat:NSLocalizedStringFromTableInBundle(@"Unable prepare statement for SQL '%@'.", @"OmniDataObjects", OMNI_BUNDLE, @"error reason"), _sql];
+        ODOError(outError, ODOUnableToCreateSQLStatement, description, reason);
+        return NO;
+    }
+    
+    // Bind the constants we found.  We only know their manifest type here.  We *could* try to enforce type safety when we are doing key/comp/value.
+    NSUInteger constIndex, constCount = [_bindingConstants count];
+    for (constIndex = 0; constIndex < constCount; constIndex++) {
+        id constant = [_bindingConstants objectAtIndex:constIndex];
+        NSUInteger bindIndex = constIndex + 1; // one-based.
+        OBASSERT(bindIndex < INT_MAX);
+        if (!ODOSQLStatementBindConstant(self, sqlite, constant, (int)bindIndex, outError)) {
+            return NO;
+        }
+    }
+    
+    TRACK_INSTANCES(@"STMT %p:INI on db %p with sql '%@'", self, database, sql);
+    return YES;
 }
 
 @end
@@ -362,21 +402,22 @@ BOOL ODOSQLStatementCreateValue(struct sqlite3 *sqlite, ODOSQLStatement *stateme
         
     switch (type) {
         case ODOAttributeTypeInt16:
-        case ODOAttributeTypeInt32:
-        {
+        case ODOAttributeTypeInt32: {
             // Could fetch as int64 and check the range.  Maybe in DEBUG builds?
             int intValue = sqlite3_column_int(statement->_statement, columnIndex);
             *value = [[valueClass alloc] initWithInt:intValue];
             return YES;
         }
+            
         case ODOAttributeTypeInt64: {
             int64_t intValue = sqlite3_column_int64(statement->_statement, columnIndex);
             *value = [[valueClass alloc] initWithLongLong:intValue];
             return YES;
         }
+
         case ODOAttributeTypeString: {
             const uint8_t *utf8 = sqlite3_column_text(statement->_statement, columnIndex);
-            if (!utf8) {
+            if (utf8 == NULL) {
                 OBASSERT_NOT_REACHED("Should have been caught by the SQLITE_NULL check");
                 *value = nil;
                 return YES;
@@ -387,6 +428,7 @@ BOOL ODOSQLStatementCreateValue(struct sqlite3 *sqlite, ODOSQLStatement *stateme
             *value = [[valueClass alloc] initWithBytes:utf8 length:byteCount encoding:NSUTF8StringEncoding];
             return YES;
         }
+
         case ODOAttributeTypeBoolean: {
             int intValue = sqlite3_column_int(statement->_statement, columnIndex);
             OBASSERT(intValue == 0 || intValue == 1);
@@ -398,27 +440,33 @@ BOOL ODOSQLStatementCreateValue(struct sqlite3 *sqlite, ODOSQLStatement *stateme
             *value = [[valueClass alloc] initWithTimeIntervalSinceReferenceDate:ti];
             return YES;
         }
+
         case ODOAttributeTypeFloat32: // No independent float32 value in sqlite3
         case ODOAttributeTypeFloat64: {
             double f = sqlite3_column_double(statement->_statement, columnIndex);
             *value = [[valueClass alloc] initWithDouble:f];
             return YES;
         }
+
         case ODOAttributeTypeData: {
             const void *bytes = sqlite3_column_blob(statement->_statement, columnIndex);
-            if (!bytes) {
-                OBASSERT_NOT_REACHED("Should have been caught by the SQLITE_NULL check");
-                *value = nil;
-                return YES;
+            int byteCount = sqlite3_column_bytes(statement->_statement, columnIndex);
+
+            if (valueClass == Nil) {
+                valueClass = [NSData class];
             }
 
-            if (!valueClass)
-                valueClass = [NSData class];
-
-            int byteCount = sqlite3_column_bytes(statement->_statement, columnIndex);
+            // sqlite will return SQLITE_NULL for the column type for a NULL blob, but returns SQLITE_BLOB and NULL bytes for a 0-length blog.
+            if (bytes == NULL) {
+                OBASSERT(byteCount == 0);
+                *value = [[valueClass alloc] initWithBytes:NULL length:0];
+                return YES;
+            }
+            
             *value = [[valueClass alloc] initWithBytes:bytes length:byteCount];
             return YES;
         }
+
         default: {
             NSString *description = NSLocalizedStringFromTableInBundle(@"Unable to execute SQL.", @"OmniDataObjects", OMNI_BUNDLE, @"error description");
             NSString *reason = [NSString stringWithFormat:NSLocalizedStringFromTableInBundle(@"Unable get value of type %d for result column %d of '%@'.", @"OmniDataObjects", OMNI_BUNDLE, @"error reason"), type, columnIndex, statement->_sql];
@@ -450,6 +498,13 @@ void ODOSQLStatementLogSQL(NSString *format, ...)
 
 BOOL ODOSQLStatementRun(struct sqlite3 *sqlite, ODOSQLStatement *statement, ODOSQLStatementCallbacks callbacks, void *context, NSError **outError)
 {
+    OBPRECONDITION([statement.connection checkExecutingOnDispatchQueue]);
+    OBPRECONDITION([statement.connection checkIsManagedSQLite:sqlite]);
+    
+    if (![statement prepareIfNeededWithSQLite:sqlite error:outError]) {
+        return NO;
+    }
+    
     static CFAbsoluteTime totalTime = 0;
     static unsigned int totalRowCount = 0;
     

@@ -1,4 +1,4 @@
-// Copyright 1997-2016 Omni Development, Inc. All rights reserved.
+// Copyright 1997-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -11,13 +11,13 @@
 #import <OmniBase/OmniBase.h>
 #import <OmniFoundation/OmniFoundation.h>
 #import <OmniAppKit/OATextStorage.h> // OAAttachmentCharacter
-#if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_MAC
 #import <AppKit/NSStringDrawing.h>
 #endif
 
 RCS_ID("$Id$")
 
-#if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_MAC
 @interface OAInlineImageTextAttachmentCell : NSImageCell /* <NSTextAttachmentCell> */
 @property (nonatomic,weak) OATextAttachment *attachment;
 @end
@@ -25,36 +25,14 @@ RCS_ID("$Id$")
 
 @implementation NSAttributedString (OAExtensions)
 
-#if 0
-static NSDictionary *keywordDictionary = nil;
-static NSFontTraitMask mask = NO;
-static BOOL underlineFlag = NO;
-static CGFloat size = 12.0;
-static NSString *linkString;
-static NSString *blackColorString;
-
-+ (void)didLoad;
-{
-    if (keywordDictionary)
-        return;
-
-    keywordDictionary = [[NSDictionary dictionaryWithObjectsAndKeys:
-            @"&quot", @"\"",
-	    @"&amp", @"&",
-	    @"&lt", @"<",
-	    @"&gt", @">",
-        nil] retain];
-    blackColorString = [[OAColorPalette stringForColor:[NSColor blackColor]] retain];
-}
-#endif
-
 + (NSString *)attachmentString;
 {
     static NSString *AttachmentString = nil;
-    if (!AttachmentString) {
-        unichar c = NSAttachmentCharacter;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        unichar c = OAAttachmentCharacter;
         AttachmentString = [[NSString alloc] initWithCharacters:&c length:1];
-    }
+    });
     return AttachmentString;
 }
 
@@ -79,35 +57,43 @@ static NSString *blackColorString;
 
 - (BOOL)containsAttachments;
 {
-    return [self containsAttribute:NSAttachmentAttributeName];
+    return [self containsAttribute:OAAttachmentAttributeName];
 }
 
 - (id)attachmentAtCharacterIndex:(NSUInteger)characterIndex;
 {
-    return [self attribute:NSAttachmentAttributeName atIndex:characterIndex effectiveRange:NULL];
+    return [self attribute:OAAttachmentAttributeName atIndex:characterIndex effectiveRange:NULL];
 }
 
-- (void)eachAttachment:(void (^)(OATextAttachment *, BOOL *stop))applier;
+- (void)eachAttachmentInRange:(NSRange)range action:(void (^ NS_NOESCAPE)(NSRange attachmentRange, __kindof OATextAttachment *attachment, BOOL *stop))applier;
 {
     NSString *string = [self string];
     NSString *attachmentString = [NSAttributedString attachmentString];
-    
-    NSUInteger location = 0, end = [self length];
+
+    NSUInteger location = range.location, end = NSMaxRange(range);
     BOOL stop = NO;
     while (location < end && !stop) {
-        NSRange attachmentRange = [string rangeOfString:attachmentString options:0 range:NSMakeRange(location,end-location)];
+        NSRange attachmentRange = [string rangeOfString:attachmentString options:NSLiteralSearch range:NSMakeRange(location,end-location)];
         if (attachmentRange.length == 0)
             break;
-        
-        OATextAttachment *attachment = [self attribute:NSAttachmentAttributeName atIndex:attachmentRange.location effectiveRange:NULL];
-        OBASSERT(attachment);
-        applier(attachment, &stop);
-        
+
+        OATextAttachment *attachment = [self attribute:OAAttachmentAttributeName atIndex:attachmentRange.location effectiveRange:NULL];
+
+        // It is possible to have stray attachment characters without an attachment.
+        if (attachment) {
+            applier(attachmentRange, attachment, &stop);
+        }
+
         location = NSMaxRange(attachmentRange);
     }
 }
 
-#if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
+- (void)eachAttachment:(void (^ NS_NOESCAPE)(NSRange attachmentRange, __kindof OATextAttachment *attachment, BOOL *stop))applier;
+{
+    [self eachAttachmentInRange:NSMakeRange(0, [self length]) action:applier];
+}
+
+#if OMNI_BUILDING_FOR_MAC
 + (NSAttributedString *)attributedStringWithImage:(NSImage *)anImage;
 {
     OAInlineImageTextAttachmentCell *imageCell = [[OAInlineImageTextAttachmentCell alloc] initImageCell:anImage];
@@ -119,351 +105,14 @@ static NSString *blackColorString;
 }
 #endif
 
-// Use -initWithHTML:options:documentAttributes:?
-#if 0
-- (void)resetAttributes;
-{
-    mask = 0;
-    underlineFlag = NO;
-    size = 12;
-}
-
-- (void)setBold:(BOOL)newBold;
-{
-    if (newBold)
-	mask |= NSBoldFontMask;
-    else
-	mask &= ~NSBoldFontMask;
-}
-
-- (void)setItalic:(BOOL)newItalic;
-{
-    if (newItalic)
-	mask |= NSItalicFontMask;
-    else
-	mask &= ~NSItalicFontMask;
-}
-
-- (void)setUnderline:(BOOL)newUnderline;
-{
-    underlineFlag = newUnderline;
-}
-
-- (void)setCurrentAttributes:(NSMutableAttributedString *)attrString;
-{
-    NSRange range;
-    NSFont *font;
-    NSFontManager *fontManager;
-    NSMutableDictionary *attrDict;
-
-    range.location = 0;
-    range.length = [attrString length];
-
-    fontManager = [NSFontManager sharedFontManager];
-    font = [fontManager fontWithFamily:@"Helvetica" traits:mask weight:5 size:size];
-
-    attrDict = [NSMutableDictionary dictionaryWithCapacity:0];
-    [attrDict setObject:font forKey:NSFontAttributeName];
-    [attrDict setObject:[NSNumber numberWithBool:underlineFlag] forKey:NSUnderlineStyleAttributeName];
-    if (linkString)
-	[attrDict setObject:linkString forKey:NSLinkAttributeName];
-
-    [attrString addAttributes:attrDict range:range];
-}
-
-- (NSAttributedString *)initWithHTML:(NSString *)htmlString;
-{
-    NSMutableAttributedString *attributedString;
-    NSRange range;
-    NSScanner *htmlScanner;
-    NSMutableString *strippedString;
-
-    [self resetAttributes];
-
-    strippedString = [NSMutableString stringWithCapacity:[htmlString length]];
-    htmlScanner = [NSScanner scannerWithString:htmlString];
-    while (![htmlScanner isAtEnd]) {
-        NSString *token;
-
-        [htmlScanner scanUpToCharactersFromSet:[NSCharacterSet whitespaceAndNewlineCharacterSet] intoString:&token];
-        [htmlScanner scanCharactersFromSet:[NSCharacterSet whitespaceAndNewlineCharacterSet] intoString:NULL];
-        [strippedString appendFormat:@"%@ ", token];
-    }
-
-    attributedString = [[[NSMutableAttributedString alloc] init] autorelease];
-
-    htmlScanner = [NSScanner scannerWithString:strippedString];
-    while (![htmlScanner isAtEnd]) {
-        NSString *firstPass, *tagString, *newString;
-        NSScanner *keywordScanner;
-        NSCharacterSet *openTagSet;
-        NSCharacterSet *closeTagSet;
-        NSMutableAttributedString *newAttributedString;
-
-        openTagSet = [NSCharacterSet characterSetWithCharactersInString:@"<"];
-        closeTagSet = [NSCharacterSet characterSetWithCharactersInString:@">"];
-        newAttributedString = [[[NSMutableAttributedString alloc] init] autorelease];
-
-        if ([htmlScanner scanUpToCharactersFromSet:openTagSet intoString:&firstPass]) {
-            keywordScanner = [NSScanner scannerWithString:firstPass];
-            while (![keywordScanner isAtEnd]) {
-                NSString *keyword = nil;
-                BOOL knownTag = NO;
-                NSCharacterSet *keywordTag;
-                NSEnumerator *keyEnum;
-
-                keywordTag = [NSCharacterSet characterSetWithCharactersInString:@"&"];
-                keyEnum = [[keywordDictionary allKeys] objectEnumerator];
-                [keywordScanner scanUpToCharactersFromSet:keywordTag intoString:&newString];
-                [newAttributedString appendAttributedString:[[[NSAttributedString alloc] initWithString:newString]autorelease]];
-
-                while (![keywordScanner isAtEnd] && (keyword = [keyEnum nextObject]))
-                    if ([keywordScanner scanString:keyword intoString:NULL]) {
-                        [newAttributedString appendAttributedString:[[[NSAttributedString alloc] initWithString:[keywordDictionary objectForKey:keyword]]autorelease]];
-                        knownTag = YES;
-                    }
-                if (!knownTag && [keywordScanner scanCharactersFromSet:keywordTag intoString:&newString])
-                    [newAttributedString appendAttributedString:[[[NSAttributedString alloc] initWithString:newString]autorelease]];
-            }
-
-            [self setCurrentAttributes:newAttributedString];
-            [attributedString appendAttributedString:newAttributedString];
-        }
-        
-        // Either we hit a '<' or we're at the end of the text.
-        if (![htmlScanner isAtEnd]) {
-            [htmlScanner scanCharactersFromSet:openTagSet intoString:NULL];
-            [htmlScanner scanUpToCharactersFromSet:closeTagSet intoString:&tagString];
-            [htmlScanner scanCharactersFromSet:closeTagSet intoString:NULL];
-	    
-	    if ([tagString hasPrefix:@"a "]) {
-		NSRange range = [tagString rangeOfString:@"\""];
-		
-		if (range.length) {
-		    tagString = [tagString substringFromIndex:NSMaxRange(range)];
-		    range = [tagString rangeOfString:@"\""];
-		    linkString = [tagString substringToIndex:range.location];
-		} else if ((range = [tagString rangeOfString:@"="]).length) {
-		    linkString = [tagString substringFromIndex:NSMaxRange(range)];
-		} else
-		    linkString = nil;
-		[linkString retain];
-	    } else if ([tagString isEqual:@"/a"]) {
-		[linkString release];
-		linkString = nil;
-            } else if ([tagString isEqual:@"b"])
-                [self setBold:YES];
-            else if ([tagString isEqual:@"/b"])
-                [self setBold:NO];
-            else if ([tagString isEqual:@"i"])
-                [self setItalic:YES];
-            else if ([tagString isEqual:@"/i"])
-                [self setItalic:NO];
-            else if ([tagString isEqual:@"u"])
-                [self setUnderline:YES];
-            else if ([tagString isEqual:@"/u"])
-                [self setUnderline:NO];
-            else if ([tagString isEqual:@"p"])
-                [attributedString appendAttributedString:[[[NSAttributedString alloc] initWithString:@"\n\n"]autorelease]];
-            else if ([tagString isEqual:@"br"])
-                [attributedString appendAttributedString:[[[NSAttributedString alloc] initWithString:@"\n"]autorelease]];
-            else if ([tagString isEqual:@"/font"])
-                size = 12.0;
-            else if ([tagString hasPrefix:@"font size="] || [tagString hasPrefix:@"font size ="]) {
-                float foo;
-                if (sscanf([tagString UTF8String], "font size = +%f", &foo) == 1)
-                    size += foo + 9;
-                else if (sscanf([tagString UTF8String], "font size = %f", &foo) == 1)
-                    size = foo + 9;
-            }
-        }
-    }
-
-    range.location = 0;
-    range.length = [attributedString length];
-
-    return [self initWithAttributedString:attributedString];
-}
-#endif
-
-// Use -dataFromRange:documentAttributes:error: with  NSDocumentTypeDocumentAttribute = NSHTMLTextDocumentType?
-#if 0
-// Generating HTML
-static NSMutableDictionary *cachedAttributes = nil;
-static NSMutableArray *fontDirectiveStack = nil;
-
-void resetAttributeTags()
-{
-    if (cachedAttributes)
-        [cachedAttributes release];
-    if (!fontDirectiveStack)
-        fontDirectiveStack = [[NSMutableArray alloc] initWithCapacity:0];
-    else
-        [fontDirectiveStack removeAllObjects];
-    cachedAttributes = nil;
-}
-
-- (void)pushFontDirective:(NSString *)aDirective;
-{
-    [fontDirectiveStack addObject:aDirective];
-}
-
-- (void)popFontDirective;
-{
-    if ([fontDirectiveStack count])
-        [fontDirectiveStack removeLastObject];
-}
-
-NSString *attributeTagString(NSDictionary *effectiveAttributes)
-{
-    NSFont *newFont, *oldFont;
-    NSColor *newColor, *oldColor;
-    NSString *newLink, *oldLink;
-    NSMutableString *tagString;
-    BOOL wasUnderlined = NO, underlined;
-
-    if ([cachedAttributes isEqualToDictionary:effectiveAttributes])
-        return nil;
-
-    tagString = [NSMutableString stringWithCapacity:0];
-    
-    newLink = [effectiveAttributes objectForKey:NSLinkAttributeName];
-    oldLink = [cachedAttributes objectForKey:NSLinkAttributeName];
-    if (newLink != oldLink) {
-	if (oldLink != nil)
-	    [tagString appendString:@"</a>"];
-	else if (newLink != nil)
-	    [tagString appendFormat:@"<a href=\"%@\">", newLink];
-    }
-
-    newFont = [effectiveAttributes objectForKey:NSFontAttributeName];
-    oldFont = [cachedAttributes objectForKey:NSFontAttributeName];
-    if (newFont != oldFont) {
-        NSFontTraitMask newTraits;
-        float oldSize, size;
-        BOOL wasBold, wasItalic, bold, italic;
-        NSFontManager *fontManager = [NSFontManager sharedFontManager];
-        size = [newFont pointSize];
-        newTraits = [fontManager traitsOfFont:newFont];
-        bold = newTraits & NSBoldFontMask;
-        italic = newTraits & NSItalicFontMask;
-
-        if (oldFont) {
-            NSFontTraitMask oldTraits;
-            oldTraits = [fontManager traitsOfFont:oldFont];
-            wasBold = oldTraits & NSBoldFontMask;
-            wasItalic = oldTraits & NSItalicFontMask;
-            oldSize = [oldFont pointSize];
-        } else {
-            wasBold = wasItalic = NO;
-            oldSize = 12.0;
-        }
-
-        if (bold && !wasBold)
-            [tagString appendString:@"<b>"];
-        else if (!bold && wasBold)
-            [tagString appendString:@"</b>"];
-
-        if (italic && !wasItalic)
-            [tagString appendString:@"<i>"];
-        else if (!italic && wasItalic)
-            [tagString appendString:@"</i>"];
-
-        if (size != oldSize) {
-            if (oldFont)
-                [tagString appendString:@"</font>"];
-            [tagString appendFormat:@"<font size=%d>", (int)size - 9];
-        }
-    }
-
-    underlined = [[effectiveAttributes objectForKey:NSUnderlineStyleAttributeName] boolValue];
-    wasUnderlined = [[cachedAttributes objectForKey:NSUnderlineStyleAttributeName] boolValue];
-    if (underlined && !wasUnderlined)
-        [tagString appendString:@"<u>"];
-    else if (!underlined && wasUnderlined)
-        [tagString appendString:@"</u>"];
-
-    oldColor = [cachedAttributes objectForKey:NSForegroundColorAttributeName];
-    newColor = [effectiveAttributes objectForKey:NSForegroundColorAttributeName];
-    if (oldColor != newColor) {
-        if (oldColor)
-            [tagString appendString:@"</font>"];
-        if (newColor) {
-            NSString *newColorString;
-        
-            newColorString = [OAColorPalette stringForColor:newColor];
-            if (![blackColorString isEqualToString:newColorString])
-                [tagString appendFormat:@"<font color=\"%@\">", newColorString];
-        }
-    }
-    
-    
-
-    if (cachedAttributes)
-        [cachedAttributes release];
-    cachedAttributes = [effectiveAttributes retain];
-
-    return tagString;
-}
-
-- (NSString *)closeTags;
-{
-    NSMutableString *closeTagsString;
-    NSFontTraitMask traits;
-    NSFontManager *fontManager;
-    NSFont *font;
-    NSColor *color;
-
-    closeTagsString = [NSMutableString stringWithCapacity:0];
-    if ([cachedAttributes objectForKey:NSLinkAttributeName])
-        [closeTagsString appendString:@"</a>"];	
-
-    fontManager = [NSFontManager sharedFontManager];
-    font = [cachedAttributes objectForKey:NSFontAttributeName];
-    color = [cachedAttributes objectForKey:NSForegroundColorAttributeName];
-    if (([font pointSize] != 12.0) || (color && ![blackColorString isEqual:[OAColorPalette stringForColor:color]]))
-        [closeTagsString appendString:@"</font>"];
-
-    traits = [fontManager traitsOfFont:font];
-    if ([[cachedAttributes objectForKey:NSUnderlineStyleAttributeName] boolValue])
-        [closeTagsString appendString:@"</u>"];
-    if (traits & NSItalicFontMask)
-        [closeTagsString appendString:@"</i>"];
-    if (traits & NSBoldFontMask)
-        [closeTagsString appendString:@"</b>"];	
-    return closeTagsString;
-}
-
-- (NSString *)htmlString;
-{
-    NSDictionary *effectiveAttributes;
-    NSRange range;
-    unsigned int pos = 0;
-    NSMutableString *storeString = [NSMutableString stringWithCapacity:[self length]];
-
-    resetAttributeTags();
-    while ((pos < [self length]) &&
-           (effectiveAttributes = [self attributesAtIndex:pos effectiveRange:&range])) {
-        NSString *markupString = attributeTagString(effectiveAttributes);
-        if (markupString)
-            [storeString appendString:markupString];
-        [storeString appendString:[[[self attributedSubstringFromRange:range] string] htmlString]];
-
-        pos = range.location + range.length;
-    }
-    [storeString appendString:[self closeTags]];
-    return storeString;
-}
-#endif
-
-#if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_MAC
 - (NSData *)rtf;
 {
     return [self RTFFromRange:NSMakeRange(0, [self length]) documentAttributes:@{}];
 }
 #endif
 
-#if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_MAC
 // ASSUMPTION: These are for one line
 - (void)drawInRectangle:(NSRect)rectangle verticallyCentered:(BOOL)verticallyCenter;
 {
@@ -533,7 +182,7 @@ NSString *attributeTagString(NSDictionary *effectiveAttributes)
 @end
 
 
-#if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
+#if OMNI_BUILDING_FOR_MAC
 @implementation OAInlineImageTextAttachmentCell
 
 // Many of the NSTextAttachmentCell protocol's methods are supplied by NSCell.

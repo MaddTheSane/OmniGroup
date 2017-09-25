@@ -1,4 +1,4 @@
-// Copyright 1998-2016 Omni Development, Inc. All rights reserved.
+// Copyright 1998-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -12,7 +12,6 @@
 #import <OmniBase/OBBacktraceBuffer.h>
 #import <OmniFoundation/NSData-OFExtensions.h>
 #import <OmniFoundation/NSString-OFExtensions.h>
-#import <OmniFoundation/NSThread-OFExtensions.h>
 #import <OmniFoundation/OFBacktrace.h>
 #import <OmniFoundation/OFInvocation.h>
 #import <OmniFoundation/OFObject-Queue.h>
@@ -45,14 +44,15 @@ typedef OFWeakReference <id <OFControllerStatusObserver>> *OFControllerStatusObs
 
 static OFController *sharedController = nil;
 static BOOL CrashOnAssertionOrUnhandledException = NO; // Cached so we can get this w/in the handler w/o calling into ObjC (since it might be unsafe)
-static BOOL IsRunningUnitTests;
+static int CrashShouldExitWithCode = 0; // If this is set, OFCrashImmediately will exit with this code.
+
 
 #ifdef OMNI_ASSERTIONS_ON
 static void _OFControllerCheckTerminated(void)
 {
     @autoreleasepool {
         // Make sure that applications that use OFController actually call its -willTerminate.
-        if (IsRunningUnitTests) {
+        if (OFIsRunningUnitTests()) {
             // We need to skip this check for xctest host apps since +[XCTestProbe runTests:] just calls exit() rather than -terminate:.
         } else {
             OBASSERT(!sharedController || sharedController->_status == OFControllerStatusTerminating || sharedController->_status == OFControllerStatusNotInitialized);
@@ -61,66 +61,15 @@ static void _OFControllerCheckTerminated(void)
 }
 #endif
 
-+ (void)initialize;
-{
-    OBINITIALIZE;
-
-    // Grabbing this up front so that OFCrashImmediately() can read it w/o fear of causing another exception.
-    NSString *pathExtension = [[[self controllingBundle] bundlePath] pathExtension];
-    IsRunningUnitTests = [pathExtension isEqual:@"xctest"];
-}
-
 // If we are running a bundled app, this will return the main bundle.  Otherwise, if we are running unit tests, this will return the unit test bundle.
 + (NSBundle *)controllingBundle;
 {
-    static NSBundle *controllingBundle = nil;
-    static dispatch_once_t onceToken;
-
-    dispatch_once(&onceToken, ^{
-        if (NSClassFromString(@"XCTestCase")) {
-            // There should be exactly one test bundle with an extension of either 'xctest'.
-            NSBundle *candidateBundle = nil;
-            for (NSBundle *bundle in [NSBundle allBundles]) {
-                NSString *extension = [[bundle bundlePath] pathExtension];
-                if ([extension isEqualToString:@"xctest"]) {
-                    if (candidateBundle) {
-                        NSLog(@"found extra possible unit test bundle %@", bundle);
-                    } else
-                        candidateBundle = bundle;
-                }
-            }
-            
-            if (candidateBundle)
-                controllingBundle = [candidateBundle retain];
-        }
-
-        if (!controllingBundle)
-            controllingBundle = [[NSBundle mainBundle] retain];
-        
-        // If the controlling bundle specifies a minimum OS revision, make sure it is at least 10.11 (since that is our global minimum on the trunk right now).  Only really applies for LaunchServices-started bundles (applications).
-#ifdef OMNI_ASSERTIONS_ON
-        {
-            NSString *requiredVersionString = [[controllingBundle infoDictionary] objectForKey:@"LSMinimumSystemVersion"];
-            if (requiredVersionString) {
-                OFVersionNumber *requiredVersion = [[OFVersionNumber alloc] initWithVersionString:requiredVersionString];
-                OBASSERT(requiredVersion);
-                
-                OFVersionNumber *globalRequiredVersion = [[OFVersionNumber alloc] initWithVersionString:@"10.11"];
-                OBASSERT([globalRequiredVersion compareToVersionNumber:requiredVersion] != NSOrderedDescending);
-                [requiredVersion release];
-                [globalRequiredVersion release];
-            }
-        }
-#endif
-    });
-    
-    OBPOSTCONDITION(controllingBundle);
-    return controllingBundle;
+    return OFControllingBundle();
 }
 
 + (BOOL)isRunningUnitTests;
 {
-    return IsRunningUnitTests;
+    return OFIsRunningUnitTests();
 }
 
 static NSString *ControllerClassName(NSBundle *bundle)
@@ -177,7 +126,6 @@ static NSString *ControllerClassName(NSBundle *bundle)
     return sharedController;
 }
 
-
 - (id)init;
 {
     OBPRECONDITION([NSThread isMainThread]);
@@ -205,7 +153,8 @@ static NSString *ControllerClassName(NSBundle *bundle)
 
     // We can't depend on the default being registered here since we are early in startup. Default to on, but then cache the actual value in -didInitialize, once things get registered.
     CrashOnAssertionOrUnhandledException = YES;
-    
+    CrashShouldExitWithCode = [[[NSProcessInfo processInfo] environment][@"OFCrashShouldExitWithCode"] intValue];
+
     NSExceptionHandler *handler = [NSExceptionHandler defaultExceptionHandler];
     [handler setDelegate:self];
     [handler setExceptionHandlingMask:[self exceptionHandlingMask]];
@@ -293,7 +242,7 @@ static void _replacement_userNotificationCenterSetDelegate(id self, SEL _cmd, id
     }];
 }
 
-/*" Subscribes the observer to a set of notifications based on the methods that it implements in the OFControllerStatusObserver informal protocol.  Classes can register for these notifications in their +didLoad methods (and those +didLoad methods probably shouldn't do much else, since defaults aren't yet registered during +didLoad). "*/
+/*" Subscribes the observer to a set of notifications based on the methods that it implements in the OFControllerStatusObserver informal protocol.  Classes can register for these notifications in their OBDidLoad actions (and those actions probably shouldn't do much else, since defaults aren't yet registered). "*/
 - (void)addStatusObserver:(id <OFControllerStatusObserver>)observer;
 {
     OBPRECONDITION(observer != nil);
@@ -409,7 +358,7 @@ static void _replacement_userNotificationCenterSetDelegate(id self, SEL _cmd, id
 - (OFControllerTerminateReply)requestTermination;
 {
     OBPRECONDITION([NSThread isMainThread]);
-    OBPRECONDITION(_status == OFControllerStatusRunning);
+    OBPRECONDITION(_status <= OFControllerStatusRunning);
     
     self.status = OFControllerStatusRequestingTerminate;
     
@@ -512,9 +461,12 @@ static void _replacement_userNotificationCenterSetDelegate(id self, SEL _cmd, id
 
 static void OFCrashImmediately(void)
 {
-    if (IsRunningUnitTests) {
+    if (OFIsRunningUnitTests()) {
         // When running unit tests on our build server, with a loopback ssh connection to allow opening keychains, xctest can hang on a crash of a unit test (it's trying to connect to Xcode it seems).
         exit(1);
+    }
+    if (CrashShouldExitWithCode != 0) {
+        exit(CrashShouldExitWithCode);
     }
 
     unsigned int *bad = (unsigned int *)sizeof(unsigned int);
@@ -639,11 +591,11 @@ static NSString *OFSymbolicBacktrace(NSException *exception) {
 	
 	NSLog(@"Assertion Failed:\n---------------------------\nObject: %@\nSelector: %@\nFile: %@\nLine: %d\nDescription: %@\nStack Trace:\n%@\n---------------------------",
 	      OBShortObjectDescription(object), NSStringFromSelector(selector), fileName, line, description, symbolicTrace);
+#if defined(OMNI_ASSERTIONS_ON)
+        OBAssertFailed([description UTF8String]); // In case there is a breakpoint in the debugger for assertion failures.
+#endif
 	[description release];
 	[symbolicTrace release];
-#if defined(OMNI_ASSERTIONS_ON)
-        OBAssertFailed(); // In case there is a breakpoint in the debugger for assertion failures.
-#endif
     } else {
         NSString *description = [[NSString alloc] initWithFormat:format arguments:args];
         NSString *report = [NSString stringWithFormat:@"Assertion Failed:\n---------------------------\nObject: %@\nSelector: %@\nFile: %@\nLine: %d\nDescription: %@\n---------------------------",
@@ -654,17 +606,38 @@ static NSString *OFSymbolicBacktrace(NSException *exception) {
         
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wundeclared-selector"
+
+#define IGNORE_CRASH(clsName, sel) if (selector == (sel) && [NSStringFromClass([object class]) isEqualToString:(clsName)]) crash = NO;
+        // On the WWDC beta of High Sierra, opening the print panel on a system with a Touch Bar raises an exception because PMPrintWindowController is returning an NSPopoverTouchBarItem with an identifier of "com.apple.print.touchbar.printerButtons" when asked to create an item with identifier "com.apple.print.touchbar.printerPopoverItem". See bug:///145271 (Frameworks-Mac Regression: [macOS High Sierra] Crash when opening the print dialog).
+        if ([OFVersionNumber isOperatingSystemHighSierraOrLater]) {
+            IGNORE_CRASH(@"NSTouchBar", @selector(itemForIdentifier:))
+        }
+
         // NSRemoteSavePanel sometimes fails an assertion when it turns on the "hide extension" checkbox on by itself. Seems harmless?
-        if (selector == @selector(connection:didReceiveRequest:) && [NSStringFromClass([object class]) isEqualToString:@"NSRemoteSavePanel"])
-            crash = NO;
+        IGNORE_CRASH(@"NSRemoteSavePanel", @selector(connection:didReceiveRequest:))
 
         // Save as PDF (maybe just when the suggested name has 'foo.ext' and you confirm the alert asking to switch to just '.pdf'.
-        if (selector == @selector(updateWindowEdgeResizingRegion) && [NSStringFromClass([object class]) isEqualToString:@"NSRemoteView"])
-            crash = NO;
+        IGNORE_CRASH(@"NSRemoteView", @selector(updateWindowEdgeResizingRegion))
 
         // Bringing up security options for print-to-pdf in a sandboxed app causes a harmless failure. <bug:///87161>
-        if (selector == @selector(sendEvent:) && [NSStringFromClass([object class]) isEqualToString:@"NSAccessoryWindow"])
-            crash = NO;
+        IGNORE_CRASH(@"NSAccessoryWindow", @selector(sendEvent:))
+
+        IGNORE_CRASH(@"NSVBSavePanel", @selector(_attachSandboxExtensions:toURL:orURLS:))
+        IGNORE_CRASH(@"NSVBSavePanel", @selector(_attachSandboxExtension:toURL:)) // saving a stencil? <bug:///135373>
+
+        IGNORE_CRASH(@"NSRemoteView", @selector(_evaluateKeyness:forWindow:))
+
+        // bug:///139696 (Mac-OmniOutliner Crasher: Crash typing multibyte characters into save panel name field on touch bar MBP)
+        IGNORE_CRASH(@"NSRemoteView", @selector(_showTouchBarPopover:fromItem:wthOverlayIdentifier:withCloseButton:withControlStrip:));
+
+        IGNORE_CRASH(@"NSLayerCentricRemoteView", @selector(maintainFirstResponder:inDirection:)) // unknown, <bug:///135373>
+
+
+        // The next two selectors are brought to you by bug:///130794 (Mac-OmniPlan Crasher: Force Click Related Crash: crash_info (AppKit): "Performing @selector(_forceClickMonitorDidChange:) from sender NSForceClickMonitor 0xdeaddead")
+        IGNORE_CRASH(@"LULookupDefinitionModule", @selector(_termWithOrigin:options:forRange:inString:withOptions:originProvider:inView:))
+        IGNORE_CRASH(@"LUTextAccessor", @selector(rangeOfTermInString:containingOffset:language:partOfSpeech:))
+
+#undef IGNORE_CRASH
 
         // XPC services (like the 'define' service) sometimes time out:
         // Object: <NSXPCSharedListener:0x7fff7a5e67a8>
@@ -672,8 +645,16 @@ static NSString *OFSymbolicBacktrace(NSException *exception) {
         // File: /SourceCache/ViewBridge/ViewBridge-99/NSXPCSharedListener.m
         // Line: 394
         // Description: NSXPCSharedListener unable to create endpoint for listener named com.apple.view-bridge
-        if (selector == @selector(connectionForListenerNamed:fromServiceNamed:) && (!object || [NSStringFromClass([object class]) isEqualToString:@"NSXPCSharedListener"]))
+        if (selector == @selector(connectionForListenerNamed:fromServiceNamed:) && (!object || [NSStringFromClass([object class]) isEqualToString:@"NSXPCSharedListener"])) {
             crash = NO;
+        }
+
+        // An assertion failure originates from this method on 10.2.2. Seems harmless?
+        // rdar://problem/30105831
+        if (selector == @selector(informAuxServiceOfSelf) && (!object || [NSStringFromClass([object class]) isEqualToString:@"NSRemoteView"])) {
+            crash = NO;
+        }
+        
 #pragma clang diagnostic pop
         
         if (crash)
@@ -699,11 +680,11 @@ static NSString *OFSymbolicBacktrace(NSException *exception) {
 	
 	NSLog(@"Assertion Failed:\n---------------------------\nFunction: %@\nFile: %@\nLine: %d\nDescription: %@\nStack Trace:\n%@\n---------------------------",
 	      functionName, fileName, line, description, symbolicTrace);
+#if defined(OMNI_ASSERTIONS_ON)
+        OBAssertFailed([description UTF8String]); // In case there is a breakpoint in the debugger for assertion failures.
+#endif
 	[description release];
 	[symbolicTrace release];
-#if defined(OMNI_ASSERTIONS_ON)
-        OBAssertFailed(); // In case there is a breakpoint in the debugger for assertion failures.
-#endif
     } else {
         NSString *description = [[NSString alloc] initWithFormat:format arguments:args];
         NSString *report = [NSString stringWithFormat:@"Assertion Failed:\n---------------------------\nFunction: %@\nFile: %@\nLine: %d\nDescription: %@\n---------------------------",

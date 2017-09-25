@@ -1,4 +1,4 @@
-// Copyright 2006-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2006-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -16,7 +16,6 @@ NS_ASSUME_NONNULL_BEGIN
 
 @class NSArray, NSBundle; // Foundation
 @class NSBox, NSImage, NSMenuItem, NSView; // AppKit
-@class OITabbedInspector;
 
 @interface OIInspectorTabController : NSObject
 {
@@ -30,7 +29,7 @@ NS_ASSUME_NONNULL_BEGIN
     OIVisibilityState _visibilityState;
 }
 
-- initWithInspectorDictionary:(NSDictionary *)tabPlist containingInspector:(OITabbedInspector *)containingInspector inspectorRegistry:(OIInspectorRegistry *)inspectorRegistry bundle:(NSBundle *)fromBundle;
+- initWithInspectorDictionary:(NSDictionary *)tabPlist inspectorRegistry:(OIInspectorRegistry *)inspectorRegistry bundle:(NSBundle *)fromBundle;
 
 @property(nonatomic,readonly) OIInspector <OIConcreteInspector> *inspector;
 @property (nonatomic, weak) OIInspectorRegistry *inspectorRegistry;
@@ -56,6 +55,10 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSUInteger)shortcutModifierFlags;
 - (NSMenuItem *)menuItemForTarget:(nullable id)target action:(SEL)action;
 
+@end
+
+@protocol OIInspectorTabContainer
+- (OIInspectorTabController *)tabWithIdentifier:(NSString *)identifier;
 @end
 
 NS_ASSUME_NONNULL_END

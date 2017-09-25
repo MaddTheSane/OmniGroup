@@ -1,4 +1,4 @@
-// Copyright 1998-2005, 2007, 2010-2011, 2014 Omni Development, Inc. All rights reserved.
+// Copyright 1998-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -17,15 +17,11 @@ static NSMutableDictionary *UniqueTable = nil;
 
 @implementation OFKnownKeyDictionaryTemplate
 
-+ (void)becomingMultiThreaded;
-{
-    Lock = [[NSLock alloc] init];
-}
-
 + (void) initialize;
 {
     OBINITIALIZE;
 
+    Lock = [[NSLock alloc] init];
     UniqueTable = [[NSMutableDictionary alloc] init];
 }
 
@@ -45,7 +41,7 @@ static NSMutableDictionary *UniqueTable = nil;
     __block OFKnownKeyDictionaryTemplate *template = nil;
     OFWithLock(Lock, ^{
         if (!(template = [UniqueTable objectForKey: keys])) {
-            template = (OFKnownKeyDictionaryTemplate *)OBAllocateObjectWithIndexedIvars(self, sizeof(NSObject *) * [keys count]);
+            template = (OFKnownKeyDictionaryTemplate *)NSAllocateObject(self, sizeof(NSObject *) * [keys count], NULL);
             template = [template _initWithKeys:keys];
             [UniqueTable setObject:template forKey:keys];
             [template release];

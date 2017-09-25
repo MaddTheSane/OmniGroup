@@ -1,4 +1,4 @@
-// Copyright 2004-2015 Omni Development, Inc. All rights reserved.
+// Copyright 2004-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -65,7 +65,12 @@ NSString *OFXMLIDFromString(NSString *str)
 {
     OBINVARIANT([self checkInvariants]);
 
-    [self _clear];
+    if (_idToObject && _objectToID) {
+        [self _clear];
+    } else {
+        // Can happen if we are deallocated w/o init being called. For example, if our OFXMLDocument subclass encounters an error in an init method and returns nil.
+    }
+    
     [super dealloc];
 }
 
@@ -106,7 +111,7 @@ NSString *OFXMLIDFromString(NSString *str)
 
 #pragma mark - Public API
 
-/*" Manages the identifier/object relationship.  If object is nil, then identifier is required and any mapping for the identifier is cleared and nil is returned.  If object is non-nil, then the object is registered.  In this case, the identifier can be nil, signalling that the caller doesn't care what identifier is registered.  If the identifier is non-nil, then it is the preferred value to use for the identifier.  If some other object already has that identifier registered, though, a new unique identifier will be created.  In the registration case, this method returns a new retained unique identifier for the object.  Note that registration does not retain the object -- thus if the object is deallocated, it must be deregistered.  The identifer actually used is returned autoreleased.  The object is notified when it is added and removed from the registry via the OFXMLIdentifierRegistryObject protocol. "*/
+/*" Manages the identifier/object relationship.  If object is nil, then identifier is required and any mapping for the identifier is cleared and nil is returned.  If object is non-nil, then the object is registered.  In this case, the identifier can be nil, signalling that the caller doesn't care what identifier is registered.  If the identifier is non-nil, then it is the preferred value to use for the identifier.  If some other object already has that identifier registered, though, a new unique identifier will be created.  In the registration case, this method returns a new retained unique identifier for the object.  Note that registration does not retain the object -- thus if the object is deallocated, it must be deregistered.  The identifier actually used is returned autoreleased.  The object is notified when it is added and removed from the registry via the OFXMLIdentifierRegistryObject protocol. "*/
 - (NSString *)registerIdentifier:(NSString *)identifier forObject:(id <OFXMLIdentifierRegistryObject>)object;
 {
     OBINVARIANT_EXPENSIVE([self checkInvariants]);
@@ -186,6 +191,7 @@ NSString *OFXMLIDFromString(NSString *str)
 - (NSUInteger)registrationCount;
 {
     OBPRECONDITION(CFDictionaryGetCount(_idToObject) == CFDictionaryGetCount(_objectToID));
+    
     return CFDictionaryGetCount(_idToObject);
 }
 

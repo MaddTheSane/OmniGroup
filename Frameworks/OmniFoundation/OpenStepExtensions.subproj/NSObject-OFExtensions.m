@@ -1,4 +1,4 @@
-// Copyright 1997-2016 Omni Development, Inc. All rights reserved.
+// Copyright 1997-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -215,7 +215,7 @@ void OFMainThreadPerformBlockSynchronously(void (^block)(void))
 
 // Inspired by <https://github.com/n-b/CTT2>, but redone to use a timer to avoid spinning the runloop as fast as possible when polling.
 
-BOOL OFRunLoopRunUntil(NSTimeInterval timeout, OFRunLoopRunType runType, OFRunLoopRunPredicate _Nullable predicate)
+BOOL OFRunLoopRunUntil(NSTimeInterval timeout, OFRunLoopRunType runType, OFRunLoopRunPredicate NS_NOESCAPE _Nullable predicate)
 {
     __block BOOL done = NO;
     
@@ -249,7 +249,7 @@ BOOL OFRunLoopRunUntil(NSTimeInterval timeout, OFRunLoopRunType runType, OFRunLo
     
     CFAbsoluteTime startTime = CFAbsoluteTimeGetCurrent();
     while (YES) {
-        CFAbsoluteTime remainingTimeout = 0.0;
+        CFTimeInterval remainingTimeout = 0.0;
         if (timeout > 0.0) {
             CFAbsoluteTime currentTime = CFAbsoluteTimeGetCurrent();
             remainingTimeout = (startTime + timeout) - currentTime;

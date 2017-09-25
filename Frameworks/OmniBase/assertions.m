@@ -1,4 +1,4 @@
-// Copyright 1997-2016 Omni Development, Inc. All rights reserved.
+// Copyright 1997-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -21,34 +21,21 @@ BOOL OBEnableExpensiveAssertions = NO;
 
 void OBLogAssertionFailure(const char *type, const char *expression, const char *file, unsigned int lineNumber, const char *reason)
 {
+    // Make these start with 'Error: ' so that they get highlighted in build logs in various places.
     if (expression && *expression != '\0') {
         if (reason && *reason != '\0')
-            fprintf(stderr, "%s failed: '%s' (reason: '%s') at %s:%d\n", type, expression, reason, file, lineNumber);
+            fprintf(stderr, "Error: %s failed. Requires '%s' (reason: '%s') at %s:%d\n", type, expression, reason, file, lineNumber);
         else
-            fprintf(stderr, "%s failed: requires '%s', at %s:%d\n", type, expression, file, lineNumber);
+            fprintf(stderr, "Error: %s failed. Requires '%s', at %s:%d\n", type, expression, file, lineNumber);
     } else {
         if (reason && *reason != '\0')
-            fprintf(stderr, "%s failed (reason: '%s') at %s:%d\n", type, reason, file, lineNumber);
+            fprintf(stderr, "Error: %s failed (reason: '%s') at %s:%d\n", type, reason, file, lineNumber);
         else
-            fprintf(stderr, "%s failed at %s:%d\n", type, file, lineNumber);
+            fprintf(stderr, "Error: %s failed at %s:%d\n", type, file, lineNumber);
     }
 }
 
 static NSString * const OBEnableExpensiveAssertionsKey = @"OBEnableExpensiveAssertions";
-
-static void OBDefaultAssertionHandler(const char *type, const char *expression, const char *file, unsigned int lineNumber, const char *reason)
-{
-    OBLogAssertionFailure(type, expression, file, lineNumber, reason);
-}
-
-static OBAssertionFailureHandler currentAssertionHandler = OBDefaultAssertionHandler;
-void OBSetAssertionFailureHandler(OBAssertionFailureHandler handler)
-{
-    if (handler)
-        currentAssertionHandler = handler;
-    else
-        currentAssertionHandler = OBDefaultAssertionHandler;
-}
 
 void OBInvokeAssertionFailureHandler(const char *type, const char *expression, const char *file, unsigned int lineNumber, NSString *fmt, ...)
 {
@@ -63,14 +50,20 @@ void OBInvokeAssertionFailureHandler(const char *type, const char *expression, c
     }
     
     OBRecordBacktrace(expression, OBBacktraceBuffer_OBAssertionFailure);
-    currentAssertionHandler(type, expression, file, lineNumber, [reason UTF8String]);
-    OBAssertFailed();
+
+    const char *reasonCString = [reason UTF8String];
+    OBLogAssertionFailure(type, expression, file, lineNumber, reasonCString);
+    OBAssertFailed(reasonCString);
 }
 
-void OBAssertFailed(void)
+// The message is not logged here, but is used to check if there is a bug logged.
+void OBAssertFailed(const char *message)
 {
-    // This function is an intended target for breakpoints. To ensure it doesn't get optimized out (even with __attribute__((noinline))), put an asm statement here.
-    asm("");
+    // If the assertion message contains a bug link, allow continuing past it.
+    // If you can't immediately fix the problem, please log a bug with steps to hit the problem and associate it with your app.
+    if (message == NULL || strstr(message, "bug://") == NULL) {
+        OBTrap(); // If you think you need to comment this out, maybe try breaking on this line and adding a "thread return" command to that breakpoint instead
+    }
 }
 
 void _OBAssertNotImplemented(id self, const char *selName)
@@ -81,7 +74,7 @@ void _OBAssertNotImplemented(id self, const char *selName)
     if ([self respondsToSelector:sel]) {
         Class impClass = OBClassImplementingMethod([self class], sel);
         NSLog(@"%@ has implementation of %@", NSStringFromClass(impClass), NSStringFromSelector(sel));
-        OBAssertFailed();
+        OBAssertFailed("");
     }
 }
 

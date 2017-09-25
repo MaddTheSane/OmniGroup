@@ -1,4 +1,4 @@
-// Copyright 2000-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2000-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -40,12 +40,14 @@ typedef NS_ENUM(NSUInteger, OFTimeSpanFormatterUnit) {
 	unsigned int floatValuesInSeconds : 1;
 	unsigned int displayUnits : 7; /* Bits should match UNITS_COUNT */
         unsigned int usesArchiveUnitStrings : 1;
+        unsigned int allowsElapsedUnits: 1;
     } _flags;
 }
 
 + (NSString *)localizedPluralStringForUnits:(OFTimeSpanFormatterUnit)unit;
 + (NSString *)localizedSingularStringForUnits:(OFTimeSpanFormatterUnit)unit;
 + (NSString *)localizedAbbreviationStringForUnits:(OFTimeSpanFormatterUnit)unit;
++ (NSString *)localizedElapsedStringForUnits:(OFTimeSpanFormatterUnit)unit;
 
 - (NSNumberFormatter *)numberFormatter;
 
@@ -56,6 +58,9 @@ typedef NS_ENUM(NSUInteger, OFTimeSpanFormatterUnit) {
 @property (nonatomic, assign) BOOL usesArchiveUnitStrings;
 
 - (OFTimeSpan *)timeSpanValueForNumberValue:(NSNumber *)aNumber;
+- (OFTimeSpan *)timeSpanValueForString:(NSString *)string errorDescription:(out NSString **)error;
+
+- (NSString *)placeholderString;  // 0 of the lowest enabled unit, localized, unrounded, obeying the above flags but will not displayUnmodifiedTimeSpan even if the receiver does
 
 @property (nonatomic, assign) float hoursPerDay;
 @property (nonatomic, assign) float hoursPerWeek;
@@ -71,6 +76,8 @@ typedef NS_ENUM(NSUInteger, OFTimeSpanFormatterUnit) {
 @property (nonatomic, assign) BOOL displayWeeks;
 @property (nonatomic, assign) BOOL displayMonths;
 @property (nonatomic, assign) BOOL displayYears;
+
+@property (nonatomic, assign) BOOL allowsElapsedUnits;
 
 - (BOOL)isStandardWorkTime;
 - (BOOL)isStandardCalendarTime;

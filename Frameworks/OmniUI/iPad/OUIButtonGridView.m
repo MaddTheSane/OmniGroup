@@ -1,4 +1,4 @@
-// Copyright 2010-2015 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -11,7 +11,7 @@ RCS_ID("$Id$");
 
 @interface OUIButtonGridView() {
   @private
-    NSUInteger _borderMask;
+    OUIButtonGridViewBorder _borderMask;
 }
 
 @property (nonatomic, readwrite, copy) NSArray *buttons;
@@ -31,7 +31,7 @@ RCS_ID("$Id$");
 
 #pragma mark - API
 
-- (void)setDataSource:(id<OUIButtonGridViewDataSource>)dataSource;
+- (void)setDataSource:(nullable id<OUIButtonGridViewDataSource>)dataSource;
 {
     if (_dataSource != dataSource) {
         _dataSource = dataSource;
@@ -50,7 +50,7 @@ RCS_ID("$Id$");
     }
 }
 
-- (void)setBorderMask:(NSUInteger)borderMask;
+- (void)setBorderMask:(OUIButtonGridViewBorder)borderMask;
 {
     _borderMask = borderMask;
     [self setNeedsDisplay];
@@ -221,7 +221,7 @@ static void _DrawButtonBorder(CGContextRef ctx, CGRect lineRect)
     for (NSUInteger row = 0; row < self.numberOfRows; row++) {
         for (NSUInteger column = 0; column < [self numberOfColumnsInRow:row]; column++) {
             NSIndexPath *indexPath = [NSIndexPath indexPathForButtonGridViewColumn:column inButtonGridViewRow:row];
-            UIButton *button = [self.dataSource buttonGridView:self buttonForColumnAtIndexPath:indexPath];
+            UIButton *button = [self.dataSource buttonGridView:self buttonForIndexPath:indexPath];
             [button addTarget:self action:@selector(_didPressGridViewButton:) forControlEvents:UIControlEventTouchUpInside];
             button.translatesAutoresizingMaskIntoConstraints = NO;
             [self addSubview:button];

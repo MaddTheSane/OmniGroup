@@ -1,4 +1,4 @@
-// Copyright 2004-2005, 2007-2008, 2010-2011, 2013-2014 Omni Development, Inc. All rights reserved.
+// Copyright 2004-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -38,9 +38,15 @@ RCS_ID("$Id$");
     
     FSRef fsRef;
     AliasHandle aliasHandle = NULL;
-    
-    require(CFURLGetFSRef(urlRef, &fsRef) == true, error_out);
-    require_noerr(FSNewAlias(NULL, &fsRef, &aliasHandle), error_out);
+
+    if (!CFURLGetFSRef(urlRef, &fsRef)) {
+        goto error_out;
+    }
+
+    OSErr err = FSNewAlias(NULL, &fsRef, &aliasHandle);
+    if (err != noErr || aliasHandle == NULL) {
+        goto error_out;
+    }
 
     CFRelease(urlRef);
     
@@ -127,7 +133,11 @@ error_out:
             path = CFBridgingRelease(urlString);
             break;
         } else {
-            NSLog(@"FSResolveAliasWithMountFlags -> %d", result);
+            if (result == fnfErr || result == nsvErr) {
+                // This is an expected 'error' -- ideally we'd either remove this code or pass back an NSError.
+            } else {
+                NSLog(@"FSResolveAliasWithMountFlags -> %d", result);
+            }
         }
         
         if (result == nsvErr) {
@@ -150,7 +160,11 @@ error_out:
             path = CFBridgingRelease(aliasPath);
             break;
         } else {
-            NSLog(@"FSResolveAliasWithMountFlags -> %d", result);
+            if (result == fnfErr || result == nsvErr) {
+                // This is an expected 'error' -- ideally we'd either remove this code or pass back an NSError.
+            } else {
+                NSLog(@"FSResolveAliasWithMountFlags -> %d", result);
+            }
         }
     } while (0);
 

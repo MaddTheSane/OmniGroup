@@ -1,4 +1,4 @@
-// Copyright 1997-2016 Omni Development, Inc. All rights reserved.
+// Copyright 1997-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -76,10 +76,10 @@ RCS_ID("$Id$")
 
 static void (*original_setFrameSize)(id self, SEL _cmd, NSSize newSize);
 
-+ (void)performPosing;
-{
+OBPerformPosing(^{
+    Class self = objc_getClass("NSView");
     original_setFrameSize = (typeof(original_setFrameSize))OBReplaceMethodImplementationWithSelector(self, @selector(setFrameSize:), @selector(OALogging_setFrameSize:));
-}
+});
 
 - (void)OALogging_setFrameSize:(NSSize)newSize;
 {
@@ -91,9 +91,9 @@ static void (*original_setFrameSize)(id self, SEL _cmd, NSSize newSize);
 
 #endif
 
-#if 1 && defined(DEBUG_bungi) && defined(OMNI_ASSERTIONS_ON)
-
 // Log attempts to modify the view hierarchy while drawing, possibly related to <bug:///116473> (Crasher: Crash on launch +[NSGraphicsContext restoreGraphicsState] (in AppKit))
+// Too many false positives (AppKit adds/removes views while an ancestor is locked) to have this enabled generally.
+#if 0 && defined(DEBUG_bungi) && defined(OMNI_ASSERTIONS_ON)
 
 static NSCountedSet *ViewsBeingDrawn = nil;
 
@@ -148,24 +148,25 @@ static void replacement_lockFocus(NSView *self, SEL _cmd)
 static void replacement_unlockFocus(NSView *self, SEL _cmd)
 {
     OBPRECONDITION(ViewsBeingDrawn);
-    OBPRECONDITION([NSThread isMainThread]);
+    OBPRECONDITION([NSThread isMainThread] || [NSStringFromClass([self class]) isEqual:@"NSProgressIndicator"]);
 
     [ViewsBeingDrawn removeObject:self];
 
     original_unlockFocus(self, _cmd);
 }
 
-+ (void)performPosing;
-{
+OBPerformPosing(^{
     OBASSERT(ViewsBeingDrawn == nil);
     
     ViewsBeingDrawn = [[NSCountedSet alloc] init];
     
+    Class self = objc_getClass("NSView");
+
     original_didAddSubview = (typeof(original_didAddSubview))OBReplaceMethodImplementation(self, @selector(didAddSubview:), (IMP)replacement_didAddSubview);
     original_willRemoveSubview = (typeof(original_willRemoveSubview))OBReplaceMethodImplementation(self, @selector(willRemoveSubview:), (IMP)replacement_willRemoveSubview);
     original_lockFocus = (typeof(original_lockFocus))OBReplaceMethodImplementation(self, @selector(lockFocus), (IMP)replacement_lockFocus);
     original_unlockFocus = (typeof(original_unlockFocus))OBReplaceMethodImplementation(self, @selector(unlockFocus), (IMP)replacement_unlockFocus);
-}
+});
 
 #endif
 
@@ -441,25 +442,33 @@ static NSMutableArray *scrollEntries = nil;
     NSRect bounds = [self bounds];
     NSScrollView *enclosingScrollView = [self enclosingScrollView];
     NSRect documentVisibleRect = [enclosingScrollView documentVisibleRect];
+    NSEdgeInsets contentInsets = enclosingScrollView.contentInsets;
 
     NSPoint scrollPosition;
     
     // Vertical position
-    if (NSHeight(documentVisibleRect) >= NSHeight(bounds)) {
-        scrollPosition.y = 0.0f; // We're completely visible
-    } else {
-        scrollPosition.y = (NSMinY(documentVisibleRect) - NSMinY(bounds)) / (NSHeight(bounds) - NSHeight(documentVisibleRect));
+    {
+        // TODO: Need to swap which insets we use here for flipped?
+        CGFloat minYScroll = NSMinY(bounds) - contentInsets.top;
+        CGFloat maxYScroll = (NSMaxY(bounds) + contentInsets.bottom) - NSHeight(enclosingScrollView.bounds);
+        if (NSHeight(documentVisibleRect) >= NSHeight(bounds) + contentInsets.top + contentInsets.bottom) {
+            scrollPosition.y = 0; // We're completely visible
+        } else {
+            scrollPosition.y = CLAMP((documentVisibleRect.origin.y - minYScroll) / (maxYScroll - minYScroll), 0, 1);
+        }
         if (![self isFlipped])
             scrollPosition.y = 1.0f - scrollPosition.y;
-        scrollPosition.y = CLAMP(scrollPosition.y, 0, 1);
     }
 
     // Horizontal position
-    if (NSWidth(documentVisibleRect) >= NSWidth(bounds)) {
-        scrollPosition.x = 0.0f; // We're completely visible
-    } else {
-        scrollPosition.x = (NSMinX(documentVisibleRect) - NSMinX(bounds)) / (NSWidth(bounds) - NSWidth(documentVisibleRect));
-        scrollPosition.x = CLAMP(scrollPosition.x, 0, 1);
+    {
+        CGFloat minXScroll = NSMinX(bounds) - contentInsets.left;
+        CGFloat maxXScroll = (NSMaxX(bounds) + contentInsets.right) - NSWidth(enclosingScrollView.bounds);
+        if (NSWidth(documentVisibleRect) >= NSWidth(bounds) + contentInsets.left + contentInsets.right) {
+            scrollPosition.x = 0; // We're completely visible
+        } else {
+            scrollPosition.x = CLAMP((documentVisibleRect.origin.x - minXScroll) / (maxXScroll - minXScroll), 0, 1);
+        }
     }
 
     return scrollPosition;
@@ -470,29 +479,27 @@ static NSMutableArray *scrollEntries = nil;
     NSRect bounds = [self bounds];
     NSScrollView *enclosingScrollView = [self enclosingScrollView];
     NSRect desiredRect = [enclosingScrollView documentVisibleRect];
-
+    NSEdgeInsets contentInsets = enclosingScrollView.contentInsets;
+    
     // Vertical position
-    if (NSHeight(desiredRect) < NSHeight(bounds)) {
-        scrollPosition.y = CLAMP(scrollPosition.y, 0, 1);
+    {
         if (![self isFlipped])
             scrollPosition.y = 1.0f - scrollPosition.y;
-        desiredRect.origin.y = (CGFloat)rint(NSMinY(bounds) + scrollPosition.y * (NSHeight(bounds) - NSHeight(desiredRect)));
-        if (NSMinY(desiredRect) < NSMinY(bounds))
-            desiredRect.origin.y = NSMinY(bounds);
-        else if (NSMaxY(desiredRect) > NSMaxY(bounds))
-            desiredRect.origin.y = NSMaxY(bounds) - NSHeight(desiredRect);
-    }
 
+        CGFloat minYScroll = NSMinY(bounds) - contentInsets.top;
+        CGFloat maxYScroll = (NSMaxY(bounds) + contentInsets.bottom) - NSHeight(enclosingScrollView.bounds);
+        CGFloat yScroll = minYScroll + (CLAMP(scrollPosition.y, 0, 1) * (maxYScroll - minYScroll));
+        desiredRect.origin.y = yScroll;
+    }
+    
     // Horizontal position
-    if (NSWidth(desiredRect) < NSWidth(bounds)) {
-        scrollPosition.x = CLAMP(scrollPosition.x, 0, 1);
-        desiredRect.origin.x = (CGFloat)rint(NSMinX(bounds) + scrollPosition.x * (NSWidth(bounds) - NSWidth(desiredRect)));
-        if (NSMinX(desiredRect) < NSMinX(bounds))
-            desiredRect.origin.x = NSMinX(bounds);
-        else if (NSMaxX(desiredRect) > NSMaxX(bounds))
-            desiredRect.origin.x = NSMaxX(bounds) - NSHeight(desiredRect);
+    {
+        CGFloat minXScroll = NSMinX(bounds) - contentInsets.left;
+        CGFloat maxXScroll = (NSMaxX(bounds) + contentInsets.right) - NSWidth(enclosingScrollView.bounds);
+        CGFloat xScroll = minXScroll + (CLAMP(scrollPosition.x, 0, 1) * (maxXScroll - minXScroll));
+        desiredRect.origin.x = xScroll;
     }
-
+    
     [self scrollPoint:desiredRect.origin];
 }
 
@@ -1137,18 +1144,18 @@ static NSString *_vibrancyInfo(NSView *view, NSUInteger level)
     NSLog(@"Vibrancy info for view tree starting at %@:\n%@", [self shortDescription], _vibrancyInfo(self, 0));
 }
 
-#ifdef DEBUG
 - (void)expectDeallocationOfViewTreeSoon;
 {
-    [self applyToViewTree:^(NSView *treeView) {
-        OBExpectDeallocationWithPossibleFailureReason(treeView, ^NSString *(NSView *remainingView){
-            if (remainingView.superview)
-                return @"still has superview";
-            return nil;
-        });
-    }];
+    if (OBExpectedDeallocationsIsEnabled()) {
+        [self applyToViewTree:^(NSView *treeView) {
+            OBExpectDeallocationWithPossibleFailureReason(treeView, ^NSString *(NSView *remainingView){
+                if (remainingView.superview)
+                    return @"still has superview";
+                return nil;
+            });
+        }];
+    }
 }
-#endif
 
 @end
 

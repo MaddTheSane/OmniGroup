@@ -1,4 +1,4 @@
-// Copyright 2010-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -61,6 +61,16 @@ static NSString *AreaCacheSuffix[] = {
 static dispatch_queue_t PreviewCacheOperationQueue; // Serial background queue for general operations; GCD so we can use async/sync/barrier
 static NSOperationQueue *PreviewPreparationQueue; // Serial queue for pre-flighting operations for generating previews
 static NSOperationQueue *PreviewCacheReadWriteQueue; // Concurrent background queue for loading/saving/decoding preview images
+
+#ifdef OMNI_ASSERTIONS_ON
+// dispatch_get_current_queue() is deprecated, but we only use it in debug builds.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+static BOOL IsOnQueue(dispatch_queue_t queue) {
+    return (dispatch_get_current_queue() == queue);
+}
+#pragma clang diagnostic pop
+#endif
 
 // A cache of preview file name -> OUIDocumentPreview instances and temporary aliases for in-flight moves/copies. Only usable inside PreviewCacheOperationQueue.
 static NSMutableDictionary *PreviewFileNameToPreview;
@@ -191,7 +201,7 @@ static void _populatePreview(Class self, NSSet *existingPreviewFileNames, OFFile
         PreviewFileNameToPreview = [[NSMutableDictionary alloc] init];
     
     preview = [[self alloc] _initWithFileURL:fileEdit.originalFileURL fileEdit:fileEdit area:area previewURL:previewURL exists:exists empty:empty];
-    [PreviewFileNameToPreview setObject:preview forKey:[previewURL lastPathComponent]];
+    _registerPreview(preview, [previewURL lastPathComponent]);
     DEBUG_PREVIEW(1, @"Populated preview %@=%p (exists:%d, empty:%d) for %@ area:%lu", [previewURL lastPathComponent], preview, exists, empty, [fileEdit shortDescription], area);
 }
 
@@ -231,8 +241,7 @@ static void _populatePreview(Class self, NSSet *existingPreviewFileNames, OFFile
 
 + (void)_populateCacheWithFileEdits:(id <NSFastEnumeration>)fileEdits;
 {
-    // dispatch_get_current_queue() is deprecated, sadly.
-    // OBPRECONDITION(dispatch_get_current_queue() == PreviewCacheOperationQueue);
+    OBPRECONDITION(IsOnQueue(PreviewCacheOperationQueue));
     
     // Do a bulk lookup of what preview URLs exist (we expect that this method is called few times with all the known file items)
     NSSet *existingPreviewFileNames;
@@ -345,23 +354,34 @@ static void _populatePreview(Class self, NSSet *existingPreviewFileNames, OFFile
     [self _cachePreviewImages:cachePreviews andWriteImages:YES];
 }
 
+static void _registerPreview(OUIDocumentPreview *preview, NSString *previewFilename)
+{
+    OBPRECONDITION(IsOnQueue(PreviewCacheOperationQueue));
+#ifdef OMNI_ASSERTIONS_ON
+    {
+        // If the incomming image is not nil, we should either have nothing in our cache, or should have some form of placeholder. We shouldn't be replacing valid previews (those should get a new date and thus a new cache key).
+        OBASSERT(PreviewFileNameToPreview, "Looking up previews while the cache isn't loaded.");
+        OUIDocumentPreview *existingPreview = PreviewFileNameToPreview[previewFilename];
+        OBASSERT_IF(preview.exists,
+                    (existingPreview == nil || // nothing in the cache
+                     existingPreview.exists == NO || // cached missing value
+                     existingPreview.empty || // cached empty file
+
+                     // We Noticed a preview file that exists on disk, but haven't load it, and the new preview is loaded already.
+                     // This is a race between noticing new previews and the document closing path saving them. There is no big performance issue if the preview we have hasn't been loaded.
+                     // See bug:///137636 (iOS-OmniGraffle Crasher: assertion fails sometimes saving document preview on close)
+                     (existingPreview.fileEdit == preview.fileEdit && existingPreview->_image == NULL && existingPreview->_loadOperation == nil && preview->_image != NULL)),
+                    @"We should not have an existing preview for a file/date with an image if we are caching a new preview with an image. bug:///142473 (Frameworks-iOS Unassigned: Assertion failure caching previews: redundant preview when opening a file from iCloud Drive, closing without editing)");
+    }
+#endif
+    PreviewFileNameToPreview[previewFilename] = preview;
+}
+
 + (void)_registerPreview:(OUIDocumentPreview *)preview withFilename:(NSString *)previewFilename;
 {
     dispatch_async(PreviewCacheOperationQueue, ^{
-#ifdef OMNI_ASSERTIONS_ON
-        {
-            // If the incomming image is not nil, we should either have nothing in our cache, or should have some form of placeholder. We shouldn't be replacing valid previews (those should get a new date and thus a new cache key).
-            OBASSERT(PreviewFileNameToPreview, "Looking up previews while the cache isn't loaded.");
-            OUIDocumentPreview *existingPreview = [PreviewFileNameToPreview objectForKey:previewFilename];
-            OBASSERT_IF(preview.exists,
-                        (existingPreview == nil || // nothing in the cache
-                         existingPreview.exists == NO || // cached missing value
-                         existingPreview.empty), // cached empty file
-                        @"We should not have an existing preview for a file/date with an image if we are caching a new preview with an image.");
-        }
-#endif
-        [PreviewFileNameToPreview setObject:preview forKey:previewFilename];
-        
+        _registerPreview(preview, previewFilename);
+
         [[NSOperationQueue mainQueue] addOperationWithBlock:^{
             // If we new document has just been downloaded or added via iTunes, we might be transitioning from a placeholder, to an empty preview and then to a real preview. We'd like to only keep the real CGImageRef in memory if the original preview was in view (_displayCount > 0), but we lose this information when we update from placeholder preview to empty preview. We could maybe bring it along in some form, or we could make OUIDocumentPreview instances mutable. On the other hand, there are other race conditions where we can end up with a CGImageRef loaded and a _displayCount==0 (for example, when async image loading sets _image after the preview has scrolled off screen -- though that shouldn't happen since we currently wait for async image loading when calling -image). At any rate, we'll have a separate cleanup pass for previews that end up not being shown in screen.
             if (DiscardHiddenPreviewsTimer == nil) {
@@ -404,8 +424,6 @@ static void _populatePreview(Class self, NSSet *existingPreviewFileNames, OFFile
         
             preview.image = scaledImage;
             DEBUG_PREVIEW(1, @"  yielded generated image to preview");
-            
-            [self _registerPreview:preview withFilename:previewFilename];
 
             if (writeImages) {
                 UIImage *uiImage = [UIImage imageWithCGImage:scaledImage]; // ... could maybe use CGImageIO directly
@@ -413,8 +431,7 @@ static void _populatePreview(Class self, NSSet *existingPreviewFileNames, OFFile
             }
             
             CFRelease(scaledImage);
-        } else
-            [self _registerPreview:preview withFilename:previewFilename];
+        }
         
         if (writeImages) {
             if (!jpgData)
@@ -426,6 +443,9 @@ static void _populatePreview(Class self, NSSet *existingPreviewFileNames, OFFile
                 NSLog(@"Error writing preview to %@: %@", previewURL, [writeError toPropertyList]);
             }
         }
+
+        // Waiting to register this until it is written to disk so that lookups don't see a preview image URL that isn't yet on disk.
+        [self _registerPreview:preview withFilename:previewFilename];
     }];
 }
 
@@ -461,8 +481,7 @@ static void _populatePreview(Class self, NSSet *existingPreviewFileNames, OFFile
 {
     NSOperationQueue *callingQueue = [NSOperationQueue currentQueue];
     OBASSERT(callingQueue != PreviewCacheReadWriteQueue);
-    // dispatch_get_current_queue() is deprecated, sadly.
-    //OBASSERT(dispatch_get_current_queue() != PreviewCacheOperationQueue);
+    OBASSERT(!IsOnQueue(PreviewCacheOperationQueue));
 
     // This is lame, but since this queue is concurrent, we can't add an operation and daisy chain the main queue callback off that.
     [PreviewCacheReadWriteQueue waitUntilAllOperationsAreFinished];
@@ -479,7 +498,9 @@ static void _populatePreview(Class self, NSSet *existingPreviewFileNames, OFFile
 + (BOOL)hasPreviewsForFileEdit:(OFFileEdit *)fileEdit;
 {
     OBPRECONDITION([NSThread isMainThread]);
-    OBPRECONDITION(fileEdit);
+    if (fileEdit == nil) {
+        return YES; // we can't be missing any previews for an edit that doesn't exist.
+    }
     
     __block BOOL hasPreviews = NO;
     
@@ -491,7 +512,7 @@ static void _populatePreview(Class self, NSSet *existingPreviewFileNames, OFFile
         
         BOOL (^checkArea)(OUIDocumentPreviewArea area) = ^(OUIDocumentPreviewArea area){
             NSString *previewFilename = [self _filenameForPreviewOfFileWithEditIdentifier:fileEdit.uniqueEditIdentifier withArea:area];
-            OUIDocumentPreview *preview = [PreviewFileNameToPreview objectForKey:previewFilename];
+            OUIDocumentPreview *preview = PreviewFileNameToPreview[previewFilename];
             return preview.exists;
         };
         
@@ -624,10 +645,33 @@ static NSString *cacheKeyForFileURL(NSURL *fileURL)
     }
 }
 
-static CGImageRef _copyPlaceholderPreviewImage(Class self, Class documentClass, NSURL *fileURL, OUIDocumentPreviewArea area) CF_RETURNS_RETAINED;
-static CGImageRef _copyPlaceholderPreviewImage(Class self, Class documentClass, NSURL *fileURL, OUIDocumentPreviewArea area)
++ (void)writeEncryptedEmptyPreviewsForFileEdit:(OFFileEdit *)fileEdit fileURL:(NSURL *)fileURL;
 {
-    OUIImageLocation *placeholderImage = [documentClass placeholderPreviewImageForFileURL:fileURL area:area];
+    for (OUIDocumentPreviewArea area = OUIDocumentPreviewAreaLarge; area <= OUIDocumentPreviewAreaSmall; area++) {
+        Class documentClass = [[OUIDocumentAppController controller] documentClassForURL:fileURL];
+        CGImageRef imageRef = _copyPlaceholderPreviewImage([self class], documentClass, fileURL, YES, area); // returns +1 CF
+        [OUIDocumentPreview cachePreviewImages:^(OUIDocumentPreviewCacheImage cacheImage){
+            cacheImage(fileEdit, imageRef);
+            CGImageRelease(imageRef);
+        }];
+    }
+}
+
+static CGImageRef _copyPlaceholderPreviewImage(Class self, Class documentClass, NSURL *fileURL, BOOL isEncrypted, OUIDocumentPreviewArea area) CF_RETURNS_RETAINED;
+static CGImageRef _copyPlaceholderPreviewImage(Class self, Class documentClass, NSURL *fileURL, BOOL isEncrypted, OUIDocumentPreviewArea area)
+{
+    OUIImageLocation *placeholderImage;
+
+    if (!documentClass) {
+        // This can happen for file types that we have in the document browser, but can't actually open. We still need to show a preview for them somehow.
+        documentClass = [OUIDocument class];
+    }
+
+    if (isEncrypted) {
+        placeholderImage = [documentClass encryptedPlaceholderPreviewImageForFileURL:fileURL area:area];
+    } else {
+        placeholderImage = [documentClass placeholderPreviewImageForFileURL:fileURL area:area];
+    }
     if (!placeholderImage) {
         OBASSERT_NOT_REACHED("No default preview image registered?");
         return NULL;
@@ -732,7 +776,7 @@ static CGImageRef _copyPlaceholderPreviewImage(Class self, Class documentClass, 
         OBASSERT(PreviewFileNameToPreview, "Looking up previews before the cache is loaded?");
 
         NSString *previewFilename = [self _filenameForPreviewOfFileWithEditIdentifier:fileEdit.uniqueEditIdentifier withArea:area];
-        preview = [PreviewFileNameToPreview objectForKey:previewFilename];
+        preview = PreviewFileNameToPreview[previewFilename];
         
         if (!preview && PreviewDestinationPathToSourcePreview) {
             // Check our aliases for in-flight moves and copies. We register preview aliases on URL only since we don't know what the date will be for copied files when we see them.
@@ -778,7 +822,7 @@ static CGImageRef _copyPlaceholderPreviewImage(Class self, Class documentClass, 
             NSString *previewFilename = [self _filenameForPreviewOfFileWithEditIdentifier:fromEditIdentifier withArea:area];
             
             OBASSERT(PreviewFileNameToPreview, "Looking up previews while the cache isn't loaded.");
-            OUIDocumentPreview *preview = [PreviewFileNameToPreview objectForKey:previewFilename];
+            OUIDocumentPreview *preview = PreviewFileNameToPreview[previewFilename];
             if (preview) {
                 DEBUG_PREVIEW(1, @"Adding alias %@ -> %@", destinationKey, [preview shortDescription]);
                 PreviewDestinationPathToSourcePreview[destinationKey] = preview;
@@ -829,7 +873,7 @@ static void _copyPreview(Class self, OFFileEdit *sourceFileEdit, OFFileEdit *tar
     DEBUG_PREVIEW(1, @"copying preview %@ -> %@", sourcePreviewFileURL, targetPreviewFileURL);
     
     OBASSERT(PreviewFileNameToPreview, "Looking up previews while the cache isn't loaded.");
-    OUIDocumentPreview *sourcePreview = [PreviewFileNameToPreview objectForKey:[sourcePreviewFileURL lastPathComponent]];
+    OUIDocumentPreview *sourcePreview = PreviewFileNameToPreview[[sourcePreviewFileURL lastPathComponent]];
     // Need to check for nil here becuase of this bug. <bug:///98537> (Wrong date is bing used to generate preview filename)
     if (!sourcePreview || (sourcePreview->_type != OUIDocumentPreviewTypeRegular)) // -type asserts we've loaded the file, but we might not have loaded all the preview sizes. We just want to copy whatever is on disk.
         return; // Not a worthwhile thing to copy.
@@ -852,7 +896,7 @@ static void _copyPreview(Class self, OFFileEdit *sourceFileEdit, OFFileEdit *tar
 
     if (!PreviewFileNameToPreview)
         PreviewFileNameToPreview = [[NSMutableDictionary alloc] init];
-    [PreviewFileNameToPreview setObject:targetPreview forKey:[targetPreviewFileURL lastPathComponent]];
+    _registerPreview(targetPreview, [targetPreviewFileURL lastPathComponent]);
 }
 
 + (void)cachePreviewImagesForFileEdit:(OFFileEdit *)targetFileEdit
@@ -1018,7 +1062,7 @@ static void _copyPreview(Class self, OFFileEdit *sourceFileEdit, OFFileEdit *tar
     if (_empty) {
         // There is a zero length file or was an error reading the image
         _type = OUIDocumentPreviewTypeEmpty;
-        _image = _copyPlaceholderPreviewImage([self class], documentClass, _fileURL, _area); // returns +1 CF
+        _image = _copyPlaceholderPreviewImage([self class], documentClass, _fileURL, NO, _area); // returns +1 CF
         if (_image) {
             DEBUG_PREVIEW(1, @"Caching badged placeholder for empty %@ %lu", [_fileEdit shortDescription], _area);
             return;
@@ -1027,7 +1071,7 @@ static void _copyPreview(Class self, OFFileEdit *sourceFileEdit, OFFileEdit *tar
     }
     
     _type = OUIDocumentPreviewTypePlaceholder;
-    _image = _copyPlaceholderPreviewImage([self class], documentClass, _fileURL, _area); // returns +1 CF
+    _image = _copyPlaceholderPreviewImage([self class], documentClass, _fileURL, NO, _area); // returns +1 CF
     DEBUG_PREVIEW(1, @"Caching badged placeholder for missing %@ %lu", [_fileEdit shortDescription], _area);
     
     OBPOSTCONDITION(_image);
@@ -1036,7 +1080,8 @@ static void _copyPreview(Class self, OFFileEdit *sourceFileEdit, OFFileEdit *tar
 - (void)startLoadingPreview;
 {
     OBPRECONDITION([NSThread isMainThread]);
-    
+    OBPRECONDITION([[OUIDocumentAppController controller] document] == nil, "Don't load previews while we have an open document.  bug:///137636 (iOS-OmniGraffle Crasher: assertion fails sometimes saving document preview on close)"); 
+
     if (_image)
         return; // Already loaded!
     

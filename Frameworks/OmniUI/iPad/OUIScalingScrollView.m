@@ -1,4 +1,4 @@
-// Copyright 2010-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -56,6 +56,14 @@ static OUIScalingView *_scalingView(OUIScalingScrollView *self)
     return view;
 }
 
+- (void)setBounds:(CGRect)bounds {
+    CGRect oldBounds = self.bounds;
+    [super setBounds:bounds];
+    if (!CGSizeEqualToSize(oldBounds.size, self.bounds.size) && [self.delegate respondsToSelector:@selector(scrollViewDidChangeFrame)]) {
+        [self.delegate scrollViewDidChangeFrame];
+    }
+}
+
 - (CGFloat)fullScreenScaleForUnscaledContentSize:(CGSize)unscaledContentSize;
 {
     if (unscaledContentSize.width == 0 || unscaledContentSize.height == 0) {
@@ -82,13 +90,27 @@ static OUIScalingView *_scalingView(OUIScalingScrollView *self)
     if (!view || view.scaleEnabled == NO)
         return;
     
+    CGSize oldScrollBuffer = self.scrollBufferSize;
+    CGSize preferredScrollBufferSize = [self preferredScrollBufferSizeForScale:effectiveScale];
+
+    if (view.scale == effectiveScale && CGSizeEqualToSize(oldScrollBuffer, preferredScrollBufferSize)) {
+        // early out if we're not changing anything
+        return;
+    }
+
+    _scrollBufferSize = preferredScrollBufferSize;
+
     view.scale = effectiveScale;
     
     // The scroll view has futzed with our transform to make us look bigger, but we're going to do this by fixing our frame/bounds.
     view.transform = CGAffineTransformIdentity;
     
     // Build the new frame based on an integral scaling of the canvas size and make the bounds match. Thus the view is 1-1 pixel resolution.
-    CGRect scaledContentSize = CGRectIntegral(CGRectMake(0, 0, effectiveScale * unscaledContentSize.width, effectiveScale * unscaledContentSize.height));
+    CGSize viewportBufferSize = preferredScrollBufferSize;
+    // Buffer needs to be added to each edge, so * 2
+    CGSize fullSize = CGSizeMake(effectiveScale * unscaledContentSize.width + 2 * viewportBufferSize.width,
+                                 effectiveScale * unscaledContentSize.height + 2 * viewportBufferSize.height);
+    CGRect scaledContentSize = CGRectIntegral(CGRectMake(0, 0, fullSize.width, fullSize.height));
     view.frame = scaledContentSize;
     view.bounds = scaledContentSize;
     
@@ -132,6 +154,23 @@ static OUIScalingView *_scalingView(OUIScalingScrollView *self)
     [view scaleChanged];
 }
 
+// Might want buffer for a scale that's about to be set, not our current one
+- (CGSize)preferredScrollBufferSizeForScale:(CGFloat)scale
+{
+    CGSize viewportBufferSize = CGSizeZero;
+    
+    NSObject<OUIVisibleBoundsDelegate> *boundsDelegate = _scalingView(self).visibleBoundsDelegate;
+    if (boundsDelegate != nil) {
+        viewportBufferSize = [boundsDelegate sizeOfViewport];
+    } else {
+        OBASSERT_NOT_REACHED(@"scrollview expects a bounds delegate to be able to calculate scrollbuffer");
+    }
+    CGFloat percentage = self.delegate.scrollBufferAsPercentOfViewportSize;
+    viewportBufferSize.width *= percentage;
+    viewportBufferSize.height *= percentage;
+    return viewportBufferSize;
+}
+
 - (void)adjustContentInsetAnimated:(BOOL)animated;
 {
     OUIScalingView *view = _scalingView(self);
@@ -150,7 +189,7 @@ static OUIScalingView *_scalingView(OUIScalingScrollView *self)
     UIEdgeInsets totalInsets = UIEdgeInsetsMake(ySpace/2, xSpace/2, ySpace/2, xSpace/2);  // natural insets to center the canvas
     totalInsets.left = fmax(totalInsets.left, self.minimumInsets.left);
     totalInsets.right = fmax(totalInsets.right, self.minimumInsets.right);
-    
+
     if (ySpace > self.minimumInsets.top + self.minimumInsets.bottom) {
         // need more top or bottom insets
         totalInsets.top = fmax(totalInsets.top, self.minimumInsets.top);

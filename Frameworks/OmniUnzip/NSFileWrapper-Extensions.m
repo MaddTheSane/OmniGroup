@@ -13,9 +13,11 @@
 
 RCS_ID("$Id$")
 
+NS_ASSUME_NONNULL_BEGIN
+
 @implementation NSFileWrapper (OmniUnzipExtensions)
 
-- (NSFileWrapper *)zippedFileWrapper:(NSError **)outError;
+- (nullable NSFileWrapper *)zippedFileWrapper:(NSError **)outError;
 {
     NSData *zippedData = [OUZipArchive zipDataFromFileWrappers:self.fileWrappers.allValues error:outError];
     OBASSERT(zippedData);
@@ -27,7 +29,7 @@ RCS_ID("$Id$")
     return [[NSFileWrapper alloc] initRegularFileWithContents:zippedData];
 }
 
-- (NSFileWrapper *)unzippedFileWrapperFromURL:(NSURL *)url error:(NSError **)outError;
+- (nullable NSFileWrapper *)unzippedFileWrapperWithError:(NSError **)outError;
 {
     if (!self.isRegularFile) {
         if (outError)
@@ -39,25 +41,21 @@ RCS_ID("$Id$")
     
     OUUnzipArchive *unzipArchive;
     
-    if (url != nil && url.isFileURL) {
-        unzipArchive = [[OUUnzipArchive alloc] initWithPath:url.path error:outError];
-        if (!unzipArchive)
-            return nil;
-    } else {
-        NSData *zippedData = [self regularFileContents];
-        if (!zippedData) {
-            if (outError)
-                *outError = [NSError errorWithDomain:NSPOSIXErrorDomain code:EIO userInfo:nil];
-            return nil;
-        }
-
-        unzipArchive = [[OUUnzipArchive alloc] initWithPath:url.path data:zippedData error:outError];
-        if (!unzipArchive) {
-            return nil;
-        }
+    NSData *zippedData = [self regularFileContents];
+    if (!zippedData) {
+        if (outError)
+            *outError = [NSError errorWithDomain:NSPOSIXErrorDomain code:EIO userInfo:nil];
+        return nil;
+    }
+    
+    unzipArchive = [[OUUnzipArchive alloc] initWithPath:nil data:zippedData description:[self filename] error:outError];
+    if (!unzipArchive) {
+        return nil;
     }
     
     return [unzipArchive fileWrapperWithTopLevelWrapper:YES error:outError];
 }
 
 @end
+
+NS_ASSUME_NONNULL_END

@@ -1,4 +1,4 @@
-// Copyright 1997-2016 Omni Development, Inc. All rights reserved.
+// Copyright 1997-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -18,6 +18,7 @@
 #import <OmniFoundation/OFBinding.h>
 #import <OmniFoundation/OFBundledClass.h>
 #import <OmniFoundation/OFBundleRegistry.h>
+#import <OmniFoundation/OFBundleRegistryTarget.h>
 #import <OmniFoundation/OFByteProviderProtocol.h>
 #import <OmniFoundation/OFCancelErrorRecovery.h>
 #import <OmniFoundation/OFCharacterScanner.h>
@@ -67,6 +68,7 @@
 #import <OmniFoundation/OFSelectionSet.h>
 #import <OmniFoundation/OFStringDecoder.h>
 #import <OmniFoundation/OFStringScanner.h>
+//#import <OmniFoundation/OFSymmetricKeywrap.h> -- imports non-module headers
 #import <OmniFoundation/OFSyncClient.h>
 #import <OmniFoundation/OFTimeSpan.h>
 #import <OmniFoundation/OFTimeSpanFormatter.h>
@@ -121,6 +123,7 @@
 #import <OmniFoundation/OFXMLCursor.h>
 #import <OmniFoundation/OFXMLDocument.h>
 #import <OmniFoundation/OFXMLElement.h>
+#import <OmniFoundation/OFXMLElementParser.h>
 #import <OmniFoundation/OFXMLIdentifier.h>
 #import <OmniFoundation/OFXMLIdentifierRegistry.h>
 #import <OmniFoundation/OFXMLInternedStringTable.h>
@@ -158,6 +161,8 @@
 // Foundation extensions
 #import <OmniFoundation/NSArray-OFExtensions.h>
 #import <OmniFoundation/NSAttributedString-OFExtensions.h>
+#import <OmniFoundation/NSBundle-OFExtensions.h>
+#import <OmniFoundation/NSCalendar-OFExtensions.h>
 #import <OmniFoundation/NSData-OFCompression.h>
 #import <OmniFoundation/NSData-OFEncoding.h>
 #import <OmniFoundation/NSData-OFExtensions.h>
@@ -190,7 +195,6 @@
 #import <OmniFoundation/NSFileManager-OFTemporaryPath.h>
 
 #if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
-    #import <OmniFoundation/NSBundle-OFExtensions.h>
     #import <OmniFoundation/NSCalendarDate-OFExtensions.h>
     #import <OmniFoundation/NSComparisonPredicate-OFExtensions.h>
     #import <OmniFoundation/NSData-OFFileIO.h>
@@ -204,7 +208,6 @@
     #import <OmniFoundation/NSScanner-OFExtensions.h>
     #import <OmniFoundation/NSScriptCommand-OFExtensions.h>
     #import <OmniFoundation/NSScriptObjectSpecifier-OFExtensions.h>
-    #import <OmniFoundation/NSThread-OFExtensions.h>
 #endif
 
 // CoreFoundation extensions

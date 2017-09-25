@@ -1,4 +1,4 @@
-// Copyright 2015-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2015-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -13,15 +13,16 @@
 @import OmniUnzip;
 
 #import <OmniUIDocument/OUIDocumentPicker.h>
+#import <OmniUI/OUIAppController.h>
 
 @protocol OUIDocumentExporterHost <NSObject>
 
 - (ODSFileItem *)fileItemToExport;
-- (UIColor *)tintColorForExportMenu;
+- (UIColor *)tintColorForExportMenu; // use [UIColor blackColor] to also get untemplated images
 
 @optional
 - (void)prepareToExport;
-- (BOOL)useCompactBarButtonItemsIfApplicable;
+- (NSArray *)fileItemsToExport;
 
 @end
 
@@ -35,11 +36,12 @@
 - (instancetype)initWithHostViewController:(UIViewController <OUIDocumentExporterHost> *)hostViewController NS_DESIGNATED_INITIALIZER; // For subclassing only
 - (instancetype)init NS_UNAVAILABLE;
 
-@property (nonatomic, readonly, weak) UIViewController <OUIDocumentExporterHost> *hostViewController;
+@property (nonatomic, readonly, weak) UIViewController <OUIDocumentExporterHost, OUIDisabledDemoFeatureAlerter> *hostViewController;
 @property (nonatomic, strong) UIBarButtonItem *barButtonItem;
 
 - (BOOL)canExportFileItem:(ODSFileItem *)fileItem;
 - (void)exportItem:(ODSFileItem *)fileItem;
+- (void)exportItem:(ODSFileItem *)fileItem sender:(id)sender;
 - (void)export:(id)sender;
 - (void)emailFileItem:(ODSFileItem *)fileItem;
 - (void)sendEmailWithFileWrapper:(NSFileWrapper *)fileWrapper forExportType:(NSString *)exportType fileName:(NSString *)fileName;
@@ -53,7 +55,7 @@
 - (void)exportFileWrapperOfType:(NSString *)exportType forFileItem:(ODSFileItem *)fileItem withCompletionHandler:(void (^)(NSFileWrapper *fileWrapper, NSError *error))completionHandler;
 - (BOOL)_canUseEmailBodyForExportType:(NSString *)exportType;
 - (NSArray<OUIMenuOption *> *)additionalExportOptionsForFileItem:(ODSFileItem *)fileItem;
-- (NSMutableArray *)appSpecificAvailableExportTypesForFileItem:(ODSFileItem *)fileItem serverAccount:(OFXServerAccount *)serverAccount exportOptionsType:(OUIExportOptionsType)exportOptionsType;
+
 - (BOOL)supportsSendToCameraRoll;
 - (BOOL)supportsPrinting;
 - (BOOL)supportsCopyAsImage;
@@ -69,4 +71,9 @@
 - (void)purchaseExportType:(NSString *)fileUTI navigationController:(UINavigationController *)navigationController;  // not sure we should really have the navigation controller here.  it might need to just be generic view controller (our hostController).  also, it might turn out this can be implemented on the superclass instead of the subclasses.
 - (NSString *)purchaseDescriptionForExportType:(NSString *)fileUTI;
 
+@end
+
+@interface OUIDocumentExporter (OUIDocumentExporterDeprecated)
+// Subclass -[ODSFileItem(OUIDocumentExtensions) availableExportTypesForFileExportToLocalDocuments:] instead.
+- (NSArray *)appSpecificAvailableExportTypesForFileItem:(ODSFileItem *)fileItem serverAccount:(OFXServerAccount *)serverAccount exportOptionsType:(OUIExportOptionsType)exportOptionsType OB_DEPRECATED_ATTRIBUTE;
 @end

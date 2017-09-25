@@ -1,4 +1,4 @@
-// Copyright 2010-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -12,11 +12,22 @@
 @class UITouch;
 @class NSData;
 
+@protocol OUIVisibleBoundsDelegate <NSObject>
+
+/// The rect in view's coordinates that is unobstructed by any UINavigationControllers' navigationBars or toolbars
+- (CGRect)unobstructedVisibleBoundsOfView:(UIView*)view;
+
+/// The size of the viewport, not including any UINavigationControllers' navigationBars or toolbars
+- (CGSize)sizeOfViewport;
+
+@end
+
 @interface OUIScalingView : UIView
 
 // If this view is within a OUIScalingScrollView, then this property should be considered read-only and the scale should be adjusted via its methods.
 @property(assign,nonatomic) CGFloat scale;
 @property(assign,nonatomic) BOOL scaleEnabled;
+@property (nonatomic, weak) IBOutlet NSObject<OUIVisibleBoundsDelegate> *visibleBoundsDelegate;
 
 // For subclasses;
 - (void)scaleChanged;
@@ -27,6 +38,7 @@
 @property(readonly) BOOL wantsUnflippedCoordinateSystem;
 
 // Conversion to/from device space (for UIView positioning/scrolling, UITouch coordinates) and RSDataMapper's "view" space.
+// TODO: remove these (more notes in .m file)
 - (CGPoint)viewPointForTouchPoint:(CGPoint)point;
 - (CGPoint)viewPointForTouch:(UITouch *)touch;
 

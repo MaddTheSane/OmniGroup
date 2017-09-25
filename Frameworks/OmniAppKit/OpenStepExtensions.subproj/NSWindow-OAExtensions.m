@@ -1,4 +1,4 @@
-// Copyright 1997-2016 Omni Development, Inc. All rights reserved.
+// Copyright 1997-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -18,6 +18,8 @@
 
 RCS_ID("$Id$")
 
+NS_ASSUME_NONNULL_BEGIN
+
 @interface NSView (DebuggingSPI)
 - (NSString *)_subtreeDescription;
 @end
@@ -28,27 +30,39 @@ static void (*oldMakeKeyAndOrderFront)(id self, SEL _cmd, id sender);
 static void (*oldDidChangeValueForKey)(id self, SEL _cmd, NSString *key);
 static void (*oldSetFrameDisplayAnimateIMP)(id self, SEL _cmd, NSRect newFrame, BOOL shouldDisplay, BOOL shouldAnimate);
 static void (*oldDisplayIfNeededIMP)(id, SEL) = NULL;
-static NSWindow *becomingKeyWindow = nil;
+static NSWindow * _Nullable becomingKeyWindow = nil;
 
 @implementation NSWindow (OAExtensions)
 
-+ (void)performPosing;
-{
+OBPerformPosing(^{
+    Class self = objc_getClass("NSWindow");
     oldBecomeKeyWindow = (void *)OBReplaceMethodImplementationWithSelector(self, @selector(becomeKeyWindow), @selector(replacement_becomeKeyWindow));
     oldResignKeyWindow = (void *)OBReplaceMethodImplementationWithSelector(self, @selector(resignKeyWindow), @selector(replacement_resignKeyWindow));
     oldMakeKeyAndOrderFront = (void *)OBReplaceMethodImplementationWithSelector(self, @selector(makeKeyAndOrderFront:), @selector(replacement_makeKeyAndOrderFront:));
     oldDidChangeValueForKey = (void *)OBReplaceMethodImplementationWithSelector(self, @selector(didChangeValueForKey:), @selector(replacement_didChangeValueForKey:));
     oldSetFrameDisplayAnimateIMP = (typeof(oldSetFrameDisplayAnimateIMP))OBReplaceMethodImplementationWithSelector(self, @selector(setFrame:display:animate:), @selector(replacement_setFrame:display:animate:));    
     oldDisplayIfNeededIMP = (typeof(oldDisplayIfNeededIMP))OBReplaceMethodImplementationWithSelector(self, @selector(displayIfNeeded), @selector(_OA_replacement_displayIfNeeded));
-}
+});
 
-static NSMutableArray *zOrder;
+static NSMutableArray * _Nullable zOrder;
 
-- (id)_addToZOrderArray;
+- (nullable id)_addToZOrderArray;
 {
     [zOrder addObject:self];
     return nil;
 }
+
++ (BOOL)hasTabbedWindowSupport;
+{
+    static BOOL _hasTabbedWindowSupport;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        _hasTabbedWindowSupport = [NSWindow instancesRespondToSelector:@selector(tabbedWindows)];
+    });
+    
+    return _hasTabbedWindowSupport;
+}
+
 
 // Note that this will not return miniaturized windows (or any other ordered out window)
 + (NSArray *)windowsInZOrder;
@@ -64,7 +78,7 @@ static NSLock *displayIfNeededBlocksLock = nil;
 static NSMapTable *displayIfNeededBlocks = nil;
 static BOOL displayIfNeededBlocksInProgress = NO;
 
-+ (void)window:(NSWindow *)window beforeDisplayIfNeededPerformBlock:(void (^)(void))block;
++ (void)window:(nullable NSWindow *)window beforeDisplayIfNeededPerformBlock:(void (^)(void))block;
 {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
@@ -96,6 +110,11 @@ static BOOL displayIfNeededBlocksInProgress = NO;
     }
 }
 
++ (BOOL)isPerformingDisplayIfNeededBlocks;
+{
+    return displayIfNeededBlocksInProgress;
+}
+
 + (void)beforeAnyDisplayIfNeededPerformBlock:(void (^)(void))block;
 {
     [self window:nil beforeDisplayIfNeededPerformBlock:block];
@@ -123,7 +142,7 @@ static BOOL displayIfNeededBlocksInProgress = NO;
     [NSWindow performDisplayIfNeededBlocksForWindow:nil];
 }
 
-+ (void)performDisplayIfNeededBlocksForWindow:(NSWindow *)window;
++ (void)performDisplayIfNeededBlocksForWindow:(nullable NSWindow *)window;
 {
     // Make sure we are executing these blocks only on the main thread
     OBPRECONDITION([NSThread isMainThread]);
@@ -348,49 +367,49 @@ static BOOL displayIfNeededBlocksInProgress = NO;
     static NSMenuItem *headerItem, *frameItem, *alignmentRectItem, *intrinsicContentSizeItem, *ambiguousItem, *translatesItem, *horizontalItem, *verticalItem, *pickSuperviewItem, *logSubtreeItem, *copyAddressItem;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        constraintsOptions = [[NSMenu alloc] initWithTitle:@"View Debugging"];
+        constraintsOptions = [[NSMenu alloc] initWithTitle:OBUnlocalized(@"View Debugging")];
         [constraintsOptions setAutoenablesItems:NO];
         
-        headerItem = [constraintsOptions addItemWithTitle:@"<PICKED VIEW>" action:NULL keyEquivalent:@""];
+        headerItem = [constraintsOptions addItemWithTitle:OBUnlocalized(@"<PICKED VIEW>") action:NULL keyEquivalent:@""];
         [headerItem setEnabled:NO];
         
-        frameItem = [constraintsOptions addItemWithTitle:@"<FRAME>" action:NULL keyEquivalent:@""];
+        frameItem = [constraintsOptions addItemWithTitle:OBUnlocalized(@"<FRAME>") action:NULL keyEquivalent:@""];
         [frameItem setEnabled:NO];
         
-        alignmentRectItem = [constraintsOptions addItemWithTitle:@"<ALIGNMENT RECT>" action:NULL keyEquivalent:@""];
+        alignmentRectItem = [constraintsOptions addItemWithTitle:OBUnlocalized(@"<ALIGNMENT RECT>") action:NULL keyEquivalent:@""];
         [alignmentRectItem setEnabled:NO];
         
-        intrinsicContentSizeItem = [constraintsOptions addItemWithTitle:@"<INTRINSIC CONTENT SIZE>" action:NULL keyEquivalent:@""];
+        intrinsicContentSizeItem = [constraintsOptions addItemWithTitle:OBUnlocalized(@"<INTRINSIC CONTENT SIZE>") action:NULL keyEquivalent:@""];
         [intrinsicContentSizeItem setEnabled:NO];
         
         [constraintsOptions addItem:[NSMenuItem separatorItem]];
         
-        ambiguousItem = [constraintsOptions addItemWithTitle:@"<AMBIGIOUS CONSTRAINTS>" action:NULL keyEquivalent:@""];
+        ambiguousItem = [constraintsOptions addItemWithTitle:OBUnlocalized(@"<AMBIGIOUS CONSTRAINTS>") action:NULL keyEquivalent:@""];
         [ambiguousItem setEnabled:NO];
         
-        translatesItem = [constraintsOptions addItemWithTitle:@"<TRANSLATES AUTORESIZING MASK>" action:NULL keyEquivalent:@""];
+        translatesItem = [constraintsOptions addItemWithTitle:OBUnlocalized(@"<TRANSLATES AUTORESIZING MASK>") action:NULL keyEquivalent:@""];
         [translatesItem setEnabled:NO];
         
-        horizontalItem = [constraintsOptions addItemWithTitle:@"Visualize horizontal constraints" action:@selector(_visualizeConstraintsMenuAction:) keyEquivalent:@""];
+        horizontalItem = [constraintsOptions addItemWithTitle:OBUnlocalized(@"Visualize horizontal constraints") action:@selector(_visualizeConstraintsMenuAction:) keyEquivalent:@""];
         [horizontalItem setIndentationLevel:1];
         [horizontalItem setTag:NSLayoutConstraintOrientationHorizontal];
         [horizontalItem setEnabled:YES];
         
-        verticalItem = [constraintsOptions addItemWithTitle:@"Visualize vertical constraints" action:@selector(_visualizeConstraintsMenuAction:) keyEquivalent:@""];
+        verticalItem = [constraintsOptions addItemWithTitle:OBUnlocalized(@"Visualize vertical constraints") action:@selector(_visualizeConstraintsMenuAction:) keyEquivalent:@""];
         [verticalItem setIndentationLevel:1];
         [verticalItem setTag:NSLayoutConstraintOrientationVertical];
         [verticalItem setEnabled:YES];
         
-        [constraintsOptions addItemWithTitle:@"Stop visualizing constraints" action:@selector(_stopVisualizingConstraintsMenuAction:) keyEquivalent:@""];
+        [constraintsOptions addItemWithTitle:OBUnlocalized(@"Stop visualizing constraints") action:@selector(_stopVisualizingConstraintsMenuAction:) keyEquivalent:@""];
         
         [constraintsOptions addItem:[NSMenuItem separatorItem]];
         
-        pickSuperviewItem = [constraintsOptions addItemWithTitle:@"<SUPERVIEW>" action:@selector(_pickSuperviewMenuAction:) keyEquivalent:@""];
+        pickSuperviewItem = [constraintsOptions addItemWithTitle:OBUnlocalized(@"<SUPERVIEW>") action:@selector(_pickSuperviewMenuAction:) keyEquivalent:@""];
         
-        logSubtreeItem = [constraintsOptions addItemWithTitle:@"Log subview hierarchy" action:@selector(_logSubtreeDescriptionMenuAction:) keyEquivalent:@""];
+        logSubtreeItem = [constraintsOptions addItemWithTitle:OBUnlocalized(@"Log subview hierarchy") action:@selector(_logSubtreeDescriptionMenuAction:) keyEquivalent:@""];
         [logSubtreeItem setEnabled:YES];
         
-        copyAddressItem = [constraintsOptions addItemWithTitle:@"Copy address" action:@selector(_copyAddressMenuAction:) keyEquivalent:@""];
+        copyAddressItem = [constraintsOptions addItemWithTitle:OBUnlocalized(@"Copy address") action:@selector(_copyAddressMenuAction:) keyEquivalent:@""];
         [copyAddressItem setEnabled:YES];
     });
     
@@ -398,11 +417,11 @@ static BOOL displayIfNeededBlocksInProgress = NO;
     [frameItem setTitle:[NSString stringWithFormat:@"Frame: %@", NSStringFromRect([pickedView frame])]];
     [alignmentRectItem setTitle:[NSString stringWithFormat:@"Alignment Rect: %@", NSStringFromRect([pickedView alignmentRectForFrame:[pickedView frame]])]];
     [intrinsicContentSizeItem setTitle:[NSString stringWithFormat:@"Intrinsic Content Size: %@", NSStringFromSize([pickedView intrinsicContentSize])]];
-    [ambiguousItem setTitle:[pickedView hasAmbiguousLayout] ? @"Has ambiguous layout" : @"Does not have ambiguous layout"];
-    [translatesItem setTitle:[pickedView translatesAutoresizingMaskIntoConstraints] ? @"Translates autoresizing mask into constraints" : @"Does not translate autoresizing mask into constraints"];
+    [ambiguousItem setTitle:OBUnlocalized([pickedView hasAmbiguousLayout] ? @"Has ambiguous layout" : @"Does not have ambiguous layout")];
+    [translatesItem setTitle:OBUnlocalized([pickedView translatesAutoresizingMaskIntoConstraints] ? @"Translates autoresizing mask into constraints" : @"Does not translate autoresizing mask into constraints")];
     
     NSView *superview = [pickedView superview];
-    [pickSuperviewItem setTitle:(superview != nil) ? [NSString stringWithFormat:@"Superview: %@…", [superview shortDescription]] : @"No superview"];
+    [pickSuperviewItem setTitle:OBUnlocalized((superview != nil) ? [NSString stringWithFormat:@"Superview: %@…", [superview shortDescription]] : @"No superview")];
     [pickSuperviewItem setEnabled:superview != nil];
     
     for (NSMenuItem *item in constraintsOptions.itemArray) {
@@ -418,7 +437,7 @@ static BOOL displayIfNeededBlocksInProgress = NO;
     return picked;
 }
 
-- (void)visualizeConstraintsForPickedView:(id)sender;
+- (void)visualizeConstraintsForPickedView:(nullable id)sender;
 {
     [OAViewPicker beginPickingForWindow:self withCompletionHandler:^(NSView *pickedView) {
         if (pickedView)
@@ -426,6 +445,11 @@ static BOOL displayIfNeededBlocksInProgress = NO;
         else
             return NO;
     }];
+}
+
+- (NSResponder * _Nullable)nullableFirstResponder;
+{
+    return self.firstResponder;
 }
 
 // NSCopying protocol
@@ -480,3 +504,115 @@ static void *RecalculateKeyViewLoopScheduledKey = &RecalculateKeyViewLoopSchedul
 
 @end
 
+#pragma mark -
+
+static BOOL (*original_validateUserInterfaceItem)(NSWindow *self, SEL _cmd, id <NSValidatedUserInterfaceItem>) = NULL;
+
+@implementation NSWindow (NSWindowTabbingExtensions)
+
+OBPerformPosing(^{
+    Class self = objc_getClass("NSWindow");
+    original_validateUserInterfaceItem = (typeof(original_validateUserInterfaceItem))OBReplaceMethodImplementation(self, @selector(validateUserInterfaceItem:), (IMP)[[self class] instanceMethodForSelector:@selector(_replacement_validateUserInterfaceItem:)]);
+});
+
+- (BOOL)_replacement_validateUserInterfaceItem:(id <NSValidatedUserInterfaceItem>)item;
+{
+    BOOL result = original_validateUserInterfaceItem(self, _cmd, item);
+    
+    if (item.action == @selector(toggleTabBar:)) {
+        // Why doesn't NSValidatedUserInterfaceItem conform to NSObject?
+        if ([(id)item isKindOfClass:[NSMenuItem class]]) {
+            // AppKit puts a checkmark on the menu item title, rather than toggling between Show/Hide as is the convention for other AppKit provided menu items.
+            // rdar://problem/28569216
+            NSMenuItem *menuItem = OB_CHECKED_CAST(NSMenuItem, item);
+            NSString *title = nil;
+            
+            if (menuItem.state) {
+                title = NSLocalizedStringFromTableInBundle(@"Hide Tab Bar", @"OmniAppKit", OMNI_BUNDLE, "menu item title");
+            } else {
+                title = NSLocalizedStringFromTableInBundle(@"Show Tab Bar", @"OmniAppKit", OMNI_BUNDLE, "menu item title");
+            }
+
+            menuItem.title = title;
+            menuItem.state = 0;
+        }
+    }
+    
+    return result;
+}
+
+- (void)withTabbingMode:(NSWindowTabbingMode)tabbingMode performBlock:(void (^)(void))block;
+{
+    OBPRECONDITION(block != NULL);
+    
+    if ([[self class] hasTabbedWindowSupport]) {
+        NSWindowTabbingMode savedTabbingMode = self.tabbingMode;
+        NSDisableScreenUpdates();
+        @try {
+            self.tabbingMode = tabbingMode;
+            block();
+        } @finally {
+            self.tabbingMode = savedTabbingMode;
+            NSEnableScreenUpdates();
+        }
+    } else {
+        block();
+    }
+}
+
+@end
+
+#pragma mark -
+
+NSNotificationName const OAWindowUserTabbingPreferenceDidChange = @"OAWindowUserTabbingPreferenceDidChange";
+void *OAWindowUserTabbingPreferenceDidChangeObservationContext = &OAWindowUserTabbingPreferenceDidChangeObservationContext;
+
+@interface OAWinderUserTabbingPreferenceObserver : NSObject {
+  @private
+    NSUserDefaults *_userDefaults;
+}
+
+@end
+
+#pragma mark -
+
+static OAWinderUserTabbingPreferenceObserver *_sharedUserWindowTabbingPreferenceObserver;
+
+@implementation OAWinderUserTabbingPreferenceObserver : NSObject
+
+OBDidLoad(^{
+    if (_sharedUserWindowTabbingPreferenceObserver == nil) {
+        _sharedUserWindowTabbingPreferenceObserver = [[OAWinderUserTabbingPreferenceObserver alloc] init];
+    }
+});
+
+- (instancetype)init;
+{
+    self = [super init];
+    if (self == nil) {
+        return nil;
+    }
+    
+    _userDefaults = [NSUserDefaults standardUserDefaults];
+    [_userDefaults addObserver:self forKeyPath:@"AppleWindowTabbingMode" options:0 context:OAWindowUserTabbingPreferenceDidChangeObservationContext];
+    
+    return self;
+}
+
+- (void)dealloc;
+{
+    OBASSERT_NOT_REACHED("Global instance should never be deallocated.");
+}
+
+- (void)observeValueForKeyPath:(nullable NSString *)keyPath ofObject:(nullable id)object change:(nullable NSDictionary<NSKeyValueChangeKey,id> *)change context:(nullable void *)context;
+{
+    if (context == OAWindowUserTabbingPreferenceDidChangeObservationContext) {
+        [[NSNotificationCenter defaultCenter] postNotificationName:OAWindowUserTabbingPreferenceDidChange object:nil];
+    } else {
+        [super observeValueForKeyPath:keyPath ofObject:object change:change context:context];
+    }
+}
+
+@end
+
+NS_ASSUME_NONNULL_END

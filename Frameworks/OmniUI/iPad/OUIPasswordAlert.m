@@ -1,4 +1,4 @@
-// Copyright 2010-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -51,23 +51,23 @@ NSString * const OUIPasswordAlertObfuscatedPasswordPlaceholder = @"********";
     self = [super init];
     if (!self)
         return nil;
-
-    _protectionSpace = [protectionSpace copy];
-    _title = [title copy];
-    _options = options;
-
-    if ([NSString isEmptyString:_title]) {
+    
+    if ([NSString isEmptyString:title] && protectionSpace != nil) {
         NSString *name = [protectionSpace realm];
         if ([NSString isEmptyString:name]) {
             name = [protectionSpace host];
         }
-    
-        _title = [name copy];
+        
+        title = name;
     }
+    
+    _protectionSpace = [protectionSpace copy];
+    _title = [title copy];
+    _options = options;
     
     BOOL showUsername = (_options & OUIPasswordAlertOptionShowUsername) != 0;
     BOOL allowEditingUsername = (_options & OUIPasswordAlertOptionAllowsEditingUsername) != 0;
-
+    
     _alertController = [UIAlertController alertControllerWithTitle:_title message:self.message preferredStyle:UIAlertControllerStyleAlert];
     __weak typeof(self) weakSelf = self;
     
@@ -104,8 +104,13 @@ NSString * const OUIPasswordAlertObfuscatedPasswordPlaceholder = @"********";
         [self _didDismissWithAction:OUIPasswordAlertActionLogIn];
     }];
     [_alertController addAction:self.loginAction];
-
+    
     return self;
+}
+
+- (id)initWithTitle:(NSString *)title options:(OUIPasswordAlertOptions)options;
+{
+    return [self initWithProtectionSpace:nil title:title options:options];
 }
 
 - (void)setTitle:(NSString *)title;
@@ -182,7 +187,7 @@ NSString * const OUIPasswordAlertObfuscatedPasswordPlaceholder = @"********";
 
     self.passwordTextField.text = password;
     self.passwordConfirmationTextField.text = password;
-    OBPOSTCONDITION([self.password isEqualToString:password]);
+    OBPOSTCONDITION([self.password isEqualToString:password] || ([password isEqualToString:OUIPasswordAlertObfuscatedPasswordPlaceholder] && [self isUsingObfuscatedPasswordPlaceholder] && self.password == nil));
 }
 
 - (BOOL)isUsingObfuscatedPasswordPlaceholder;
@@ -192,6 +197,7 @@ NSString * const OUIPasswordAlertObfuscatedPasswordPlaceholder = @"********";
 
 - (void)showFromController:(UIViewController *)controller;
 {
+    OBPRECONDITION([NSThread isMainThread]);
     OBPRECONDITION(self.delegate || _finished_callback); // Otherwise there's no point
     [[OUIPasswordAlert _visibleAlerts] addObject:self]; // we hold a reference to ourselves until -_didDismissWithAction:
     [controller presentViewController:self.alertController animated:YES completion:nil];

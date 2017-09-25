@@ -1,4 +1,4 @@
-// Copyright 2014-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2014-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -14,13 +14,14 @@
 #import <OmniFoundation/OFErrors.h>
 #import <OmniFoundation/OFByteProviderProtocol.h>
 #import <OmniFileStore/OFSFileManagerDelegate.h>
-#import <OmniFileStore/OFSDocumentKey.h>
+#import <OmniFileStore/OFSKeySlots.h>
 #import <OmniFileStore/OFSEncryptionConstants.h>
 #import <OmniBase/OmniBase.h>
 #import "OFSEncryption-Internal.h"
 #import <OmniFileStore/Errors.h>
 #import <OmniDAV/ODAVFileInfo.h>
 #import <dispatch/dispatch.h>
+#import <stdatomic.h>
 #import <libkern/OSAtomic.h>
 
 RCS_ID("$Id$");
@@ -179,8 +180,8 @@ static NSError *unsupportedError_(int lineno, NSString *detail) __attribute__((c
 
 @implementation OFSSegmentEncryptWorker
 {
-    int32_t      _nonceCounter;
-    uint8_t      _iv[ SEGMENTED_IV_LEN-4 ];
+    atomic_int_fast32_t      _nonceCounter;
+    uint8_t                 _iv[ SEGMENTED_IV_LEN-4 ];
 }
 
 - (instancetype)initWithBytes:(const uint8_t *)bytes length:(NSUInteger)length;
@@ -207,7 +208,7 @@ static NSError *unsupportedError_(int lineno, NSString *detail) __attribute__((c
 {
     CCCryptorRef cryptor;
     uint8_t segmentIV[ kCCBlockSizeAES128 ];
-    int32_t nonceCounter;
+    atomic_int_fast32_t nonceCounter;
     dispatch_semaphore_t hashSem;
     CCHmacContext ctxt;
     const size_t strideLength = 4096;
@@ -216,7 +217,7 @@ static NSError *unsupportedError_(int lineno, NSString *detail) __attribute__((c
     @synchronized(self) {
         cryptor = _cachedCryptor;
         _cachedCryptor = nil;
-        nonceCounter = OSAtomicIncrement32(&_nonceCounter);
+        nonceCounter = atomic_fetch_add(&_nonceCounter, 1);
     }
     
     /* Construct the initial CTR state for this segment: our random IV, our counter, and four bytes of zeroes for the block counter */
@@ -441,9 +442,9 @@ static NSRange checkHeaderMagic(NSData * __nonnull ciphertext, size_t ciphertext
     
     if (outError) {
         if (checkForeignHeaderMagic(ciphertext, ciphertextLength)) {
-            *outError = badMagic("invalid encryption header");
+            *outError = badMagic("Invalid encryption header.");
         } else {
-            *outError = headerError("invalid encryption header");
+            *outError = headerError("Invalid encryption header.");
         }
     }
     
@@ -457,7 +458,7 @@ static NSRange checkHeaderMagic(NSData * __nonnull ciphertext, size_t ciphertext
 + (BOOL)parseHeader:(NSData *)ciphertext truncated:(BOOL)mayBeTruncated wrappedInfo:(NSRange *)outBlobLocation dataOffset:(size_t *)outHeaderLength error:(NSError * __autoreleasing *)outError;
 {
     if (!ciphertext) {
-        if (outError) *outError = headerError("missing ciphertext");
+        if (outError) *outError = headerError("Missing ciphertext.");
         return NO;
     }
     size_t ciphertextLength = [ciphertext length];
@@ -471,7 +472,7 @@ static NSRange checkHeaderMagic(NSData * __nonnull ciphertext, size_t ciphertext
     size_t paddedLength = ((NSMaxRange(wrappedKeyBlobRange) + 15) / 16) * 16;
     
     if (!mayBeTruncated && ciphertextLength < (paddedLength + SEGMENTED_FILE_MAC_LEN)) {
-        if (outError) *outError = headerError("file too short");
+        if (outError) *outError = headerError("File too short.");
         return NO;
     }
     
@@ -482,7 +483,7 @@ static NSRange checkHeaderMagic(NSData * __nonnull ciphertext, size_t ciphertext
         [ciphertext getBytes:buf range:(NSRange){NSMaxRange(wrappedKeyBlobRange), paddingLength}];
         for(size_t i = 0; i < paddingLength; i++) {
             if (buf[i] != 0) {
-                if (outError) *outError = headerError("invalid encryption header");
+                if (outError) *outError = headerError("Invalid encryption header.");
                 return NO;
             }
         }
@@ -498,7 +499,7 @@ static NSRange checkHeaderMagic(NSData * __nonnull ciphertext, size_t ciphertext
     return YES;
 }
 
-+ (nullable OFSSegmentDecryptWorker *)decryptorForWrappedKey:(NSData *)keyblob documentKey:(OFSDocumentKey *)kek error:(NSError * __autoreleasing *)outError;
++ (nullable OFSSegmentDecryptWorker *)decryptorForWrappedKey:(NSData *)keyblob documentKey:(OFSKeySlots *)kek error:(NSError * __autoreleasing *)outError;
 {
     OFSSegmentDecryptWorker *result = [[OFSSegmentDecryptWorker alloc] init];
     
@@ -508,7 +509,7 @@ static NSRange checkHeaderMagic(NSData * __nonnull ciphertext, size_t ciphertext
     if (resultSize < 0)
         return nil;
     if (resultSize != SEGMENTED_INNER_LENGTH_PADDED) {
-        if (outError) *outError = headerError("invalid encryption header");
+        if (outError) *outError = headerError("Invalid encryption header.");
         return nil;
     }
     
@@ -527,29 +528,40 @@ static NSRange checkHeaderMagic(NSData * __nonnull ciphertext, size_t ciphertext
     
     size_t totalCiphertextLength = [ciphertext length];
     
-    if (totalCiphertextLength <= (segmentsBegin + SEGMENTED_FILE_MAC_LEN)) {
+    if (totalCiphertextLength < (segmentsBegin + SEGMENTED_FILE_MAC_LEN)) {
         // Impossible file length
-        // we must have at least one segment, even if it's empty it will contain the segment MAC
-        if (outError) *outError = headerError("file too short");
+        // We may have no segments, but even in that case, we'll have the header (before segmentsBegin) and the end-of-ciphertext MAC
+        if (outError) *outError = headerError("File too short.");
         return nil;
     }
     
     size_t segmentsLength = totalCiphertextLength - segmentsBegin - SEGMENTED_FILE_MAC_LEN;
     size_t segmentCount = ( segmentsLength + SEGMENT_ENCRYPTED_PAGE_SIZE - 1 ) / SEGMENT_ENCRYPTED_PAGE_SIZE;
     size_t plaintextLength = segmentsLength - (SEGMENT_HEADER_LEN * segmentCount);
-    size_t lastSegmentLength = segmentsLength - (SEGMENT_ENCRYPTED_PAGE_SIZE * (segmentCount-1));
     
-    if (lastSegmentLength < SEGMENT_HEADER_LEN) {
-        // Impossible file length
-        // (some ciphertext lengths do not correspond to any plaintext length)
-        if (outError) *outError = headerError("file too short");
-        return nil;
+    size_t lastSegmentLength;
+    if (segmentCount > 0) {
+        lastSegmentLength = segmentsLength - (SEGMENT_ENCRYPTED_PAGE_SIZE * (segmentCount-1));
+        
+        if (lastSegmentLength < SEGMENT_HEADER_LEN) {
+            // Impossible file length
+            // (some ciphertext lengths do not correspond to any plaintext length)
+            if (outError) *outError = headerError("File too short.");
+            return nil;
+        }
+    } else {
+        // Initialize just in case, but we don't expect this value to be used – its only reference below should be in dispatch_apply(0, ^{…}), which won't invoke its block.
+        lastSegmentLength = 0;
     }
     
     NSMutableData *plaintext = [NSMutableData dataWithLength:plaintextLength];
 
     char *plaintextBuffer = [plaintext mutableBytes];
-    __block uint32_t errorBits = 0;
+    __block atomic_uint_fast32_t errorBits = 0;
+    
+    if (plaintextBuffer == NULL) {
+        NSLog(@"Failed to get mutableBytes from an %@ of length %zu! A crash is likely to occur soon.", NSStringFromClass([plaintext class]), plaintextLength);
+    }
     
     /* Check all the segment MACs, and decrypt */
     dispatch_apply(segmentCount, dispatch_get_global_queue(QOS_CLASS_UNSPECIFIED, 0), ^(size_t segmentIndex){
@@ -564,7 +576,7 @@ static NSRange checkHeaderMagic(NSData * __nonnull ciphertext, size_t ciphertext
         const uint8_t *segmentBegins = [subrange bytes];
 
         if (![self verifySegment:segmentIndex data:subrange]) {
-            OSAtomicOr32(0x01, &errorBits);
+            atomic_fetch_or(&errorBits, 0x01);
             return;
         }
         
@@ -572,13 +584,13 @@ static NSRange checkHeaderMagic(NSData * __nonnull ciphertext, size_t ciphertext
                             into:(uint8_t *)plaintextBuffer + (segmentIndex * SEGMENTED_PAGE_SIZE)
                           header:segmentBegins
                            error:NULL]) {
-            OSAtomicOr32(0x02, &errorBits);
+            atomic_fetch_or(&errorBits, 0x02);
             return;
         }
     });
     
     if (errorBits != 0) {
-        if (outError) *outError = headerError("encrypted file is corrupt");
+        if (outError) *outError = headerError("Encrypted file is corrupt.");
         return nil;
     }
     
@@ -594,7 +606,7 @@ static NSRange checkHeaderMagic(NSData * __nonnull ciphertext, size_t ciphertext
     uint8_t foundFileMAC[SEGMENTED_FILE_MAC_LEN];
     [ciphertext getBytes:foundFileMAC range:(NSRange){ segmentsBegin + segmentsLength, SEGMENTED_FILE_MAC_LEN}];
     if (finishAndVerifyHMAC256(&fileMACContext, foundFileMAC, SEGMENTED_FILE_MAC_LEN) != 0) {
-        if (outError) *outError = headerError("encrypted file is corrupt");
+        if (outError) *outError = headerError("Encrypted file is corrupt.");
         return nil;
     }
     

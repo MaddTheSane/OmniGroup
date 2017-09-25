@@ -1,4 +1,4 @@
-// Copyright 2008-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2008-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -17,6 +17,7 @@ enum {
     OFSNoFileManagerForScheme,
     OFSBaseURLIsNotAbsolute,
     OFSCannotCreateDirectory,
+    OFSCannotRead,
     OFSCannotWrite,
     OFSCannotMove,
     OFSNoSuchDirectory,
@@ -29,10 +30,14 @@ enum {
     OFSDAVOperationInvalidMultiStatusResponse,
     
     // Encryption
-    OFSEncryptionBadFormat,       // We don't understand the encryption metadata
+    OFSEncryptionBadFormat = 100, // We don't understand the encryption metadata
     OFSEncryptionNeedAuth,        // Incorrect passphrase given, no passphrase given, key not available, biometric authentication needed, etc.
     OFSEncryptionConflict,        // Simultaneous modification of encryption info.
     OFSEncryptionStorageError,    // Failure reading or writing key information to the Keychain
+    OFSEncryptionNeedNewSubkey,   // Can't encrypt a file because we have no active keyslots of the right type (uinfo: OFSEncryptionNeedNewSubkeyTypeKey)
+    
+    OFSEncryptionMinimumErrorCode = 100,
+    OFSEncryptionMaximumErrorCode = 199,
 };
 
 extern NSString * const OFSErrorDomain;
@@ -44,6 +49,7 @@ extern BOOL OFSShouldOfferToReportError(NSError *error);
 #define OFSResponseLocationErrorKey (@"Location")
 
 #define OFSEncryptionBadFormatNotEncryptedKey @"no-magic"
+#define OFSEncryptionNeedNewSubkeyTypeKey @"type"
 
 extern NSString * const OFSURLErrorFailingURLErrorKey;          // > 4.0 use NSURLErrorFailingURLErrorKey
 extern NSString * const OFSURLErrorFailingURLStringErrorKey;    // > 4.0 use NSURLErrorFailingURLStringErrorKey
@@ -112,6 +118,7 @@ typedef enum {
 @interface NSError (OFSExtensions)
 + (NSError *)certificateTrustErrorForChallenge:(NSURLAuthenticationChallenge *)challenge;
 - (BOOL)causedByPermissionFailure;
+- (BOOL)causedByEncryptionFailure;
 @end
 
 // User info key that contains the NSURLAuthenticationChallenge passed when a certificate trust issue was encountered
@@ -119,7 +126,7 @@ typedef enum {
 
 // Subcodes for OFSEncryptionNeedAuth: these are keys in the userinfo dictionary
 #define OFSEncryptionNeedPassword            (@"need-password")    // exists if no password supplied, but we could continue if we got a good one
-#define OFSEncryptionWrongPassword           (@"wrong-password")   // exists if a password was supplied but it didn't work
+#define OFSEncryptionWrongPassword           (@"wrong-password")   // exists if a password was supplied but it didn't work. The value associated with this key is not guaranteed to be of any particular type, nor does it necessarily carry meaningful information.
 #define OFSEncryptionNeedKeychain            (@"need-keychain")    // exists if it has a keychain reference but we couldn't use it
 #define OFSEncryptionKeyStore                (@"key-store")        // contains the NSData key management blob
 

@@ -1,6 +1,9 @@
 /* error description */
 "Could not access the WebDAV location <%@>." = "No se ha podido acceder a la ubicación WebDAV <%@>.";
 
+/* parsing a multistatus response, expected a particular XML element but found something else */
+"Expected “%@” element missing in multistatus result from %@" = "Falta el elemento esperado “%1$@” en el resultado de estado múltiple de %2$@.";
+
 /* Text for HTTP error code 507 (insufficient storage) */
 "insufficient storage" = "almacenamiento insuficiente";
 
@@ -11,13 +14,13 @@
 "No such file \"%@\"." = "No existe el archivo “%@”.";
 
 /* error suggestion */
-"Please check that the user name and password you provided are correct." = "Compruebe que el nombre de usuario y la contraseña son correctos.";
+"Please check that the user name and password you provided are correct." = "Comprueba que el nombre de usuario y la contraseña son correctos.";
 
 /* error reason */
-"Please make sure that the account information is correct." = "Asegúrese de que la información de la cuenta es correcta.";
+"Please make sure that the account information is correct." = "Asegúrate de que la información de la cuenta es correcta.";
 
 /* error reason */
-"Please make sure that the destination folder exists." = "Asegúrese de que existe la carpeta de destino.";
+"Please make sure that the destination folder exists." = "Asegúrate de que existe la carpeta de destino.";
 
 /* error reason */
 "The %@ server returned \"%@\" (%ld) in response to a request to \"%@ %@\"." = "El servidor %1$@ ha respondido “%2$@” (%3$ld) a una solicitud de “%4$@ %5$@”.";

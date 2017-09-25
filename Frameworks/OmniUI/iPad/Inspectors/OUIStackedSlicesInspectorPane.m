@@ -1,4 +1,4 @@
-// Copyright 2010-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -11,11 +11,13 @@
 
 #import <OmniUI/OUIEmptyPaddingInspectorSlice.h>
 #import <OmniUI/OUIInspector.h>
+#import <OmniUI/OUIInspectorAppearance.h>
 #import <OmniUI/OUIInspectorSlice.h>
 #import <OmniUI/OUIInspectorSliceView.h>
 #import <OmniUI/OUIKeyboardNotifier.h>
 #import <OmniUI/OUIMinimalScrollNotifierImplementation.h>
 #import <OmniUI/UIViewController-OUIExtensions.h>
+#import <OmniUI/OUIAbstractTableViewInspectorSlice.h>
 
 #import "OUIParameters.h"
 
@@ -33,11 +35,7 @@ RCS_ID("$Id$");
 NSString *OUIStackedSlicesInspectorContentViewDidChangeFrameNotification = @"OUIStackedSlicesInspectorContentViewDidChangeFrame";
 
 @interface OUIStackedSlicesInspectorPaneContentView : UIScrollView
-{
-@private
-    OUIInspectorBackgroundView *_backgroundView;
-}
-- (UIColor *)inspectorBackgroundViewColor;
+@property (nonatomic, strong) OUIInspectorBackgroundView *backgroundView;
 @end
 
 @implementation OUIStackedSlicesInspectorPaneContentView
@@ -69,10 +67,9 @@ static id _commonInit(OUIStackedSlicesInspectorPaneContentView *self)
     return [_backgroundView inspectorBackgroundViewColor];
 }
 
-
-- (void)setFrame:(CGRect)frame{
-    [super setFrame:frame];
-    [[NSNotificationCenter defaultCenter] postNotificationName:OUIInspectorDidEndChangingInspectedObjectsNotification object:self];
+- (void)setInspectorBackgroundViewColor:(UIColor *)color;
+{
+    _backgroundView.backgroundColor = color;
 }
 
 - (void)layoutSubviews;
@@ -100,7 +97,6 @@ static id _commonInit(OUIStackedSlicesInspectorPaneContentView *self)
     NSArray *_slices;
     id <OUIScrollNotifier> _scrollNotifier;
     BOOL _initialLayoutHasBeenDone;
-    CGSize _lastLayoutSize;
 }
 
 + (instancetype)stackedSlicesPaneWithAvailableSlices:(OUIInspectorSlice *)slice, ...;
@@ -132,6 +128,17 @@ static id _commonInit(OUIStackedSlicesInspectorPaneContentView *self)
 - (void)dealloc;
 {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+- (UIColor *)inspectorBackgroundViewColor;
+{
+    return self.view.backgroundColor;
+}
+
+- (void)setInspectorBackgroundViewColor:(UIColor *)color;
+{
+    self.view.backgroundColor = color;
+    [self.view setNeedsDisplay];
 }
 
 - (void)setSliceAlignmentInsets:(UIEdgeInsets)newValue;
@@ -195,6 +202,9 @@ static id _commonInit(OUIStackedSlicesInspectorPaneContentView *self)
             continue;
         }
         
+        // This is a hack to make sure the slice checks with THIS pane for its appropriateness. Please see commit message for more details.
+        OUIStackedSlicesInspectorPane *oldContainingPane = slice.containingPane;
+        slice.containingPane = self;
         if ([slice isAppropriateForInspectedObjects:inspectedObjects]) {
             // If this slice includes a top group spacer and the previous slice was a spacer, remove that previous slice as it's not needed
             if (slice.includesInspectorSliceGroupSpacerOnTop && (previousSlice != nil) && [previousSlice isKindOfClass:[OUIEmptyPaddingInspectorSlice class]]) {
@@ -205,6 +215,7 @@ static id _commonInit(OUIStackedSlicesInspectorPaneContentView *self)
             [appropriateSlices addObject:slice];
             previousSlice = slice;
         }
+        slice.containingPane = oldContainingPane;
     }
     // Don't have a spacer at the end, either
     if ([appropriateSlices.lastObject isKindOfClass:[OUIEmptyPaddingInspectorSlice class]]) {
@@ -291,8 +302,17 @@ static void _removeSlice(OUIStackedSlicesInspectorPane *self, OUIStackedSlicesIn
     for (OUIInspectorSlice *slice in slices) {
         slice.containingPane = self;
         slice.view.backgroundColor = [slice sliceBackgroundColor];
+        
+        if ([OUIInspectorAppearance inspectorAppearanceEnabled])
+            [slice notifyChildrenThatAppearanceDidChange:OUIInspectorAppearance.appearance];
+        
         [self addChildViewController:slice];
         [self.sliceStackView addArrangedSubview:slice.view];
+        
+        if (![slice isKindOfClass:[OUIAbstractTableViewInspectorSlice class]]) {
+            UIEdgeInsets sliceEdgeInsets = [OUIInspectorSlice sliceAlignmentInsets];
+            slice.contentView.layoutMargins = sliceEdgeInsets;
+        }
     }
     for (NSUInteger index = 0; index < slices.count; index++) {
         OUIInspectorSlice *previous = index > 0 ? slices[index-1] : nil;
@@ -321,13 +341,14 @@ static void _removeSlice(OUIStackedSlicesInspectorPane *self, OUIStackedSlicesIn
 {
     self.slices = [self appropriateSlicesForInspectedObjects];
     
-#ifdef OMNI_ASSERTIONS_ON
-    if ([_slices count] == 0) {
-        // Inspected objects is nil if the inspector gets closed. Othrwise, if there really would be no applicable slices, the control to get here should have been disabled!    
-        OBASSERT(self.inspectedObjects == nil);
-        OBASSERT(self.visibility == OUIViewControllerVisibilityHidden);
+    OUIStackedSlicesInspectorPaneContentView *paneContentView = (OUIStackedSlicesInspectorPaneContentView *)self.contentView;
+    if (self.slices.count == 0) {
+        paneContentView.backgroundView.label.text = NSLocalizedStringFromTableInBundle(@"Nothing to Inspect", @"OmniUI", OMNI_BUNDLE, @"Text letting the user know why nothing is showing in the inspector");
+        paneContentView.backgroundView.label.font = [paneContentView.backgroundView.label.font fontWithSize:InspectorFontSize];
     }
-#endif
+    else {
+        paneContentView.backgroundView.label.text = nil;
+    }
 }
 
 - (BOOL)inspectorPaneOfClassHasAlreadyBeenPresented:(Class)paneClass;
@@ -381,7 +402,6 @@ static void _removeSlice(OUIStackedSlicesInspectorPane *self, OUIStackedSlicesIn
 - (void)updateInterfaceFromInspectedObjects:(OUIInspectorUpdateReason)reason;
 {
     [super updateInterfaceFromInspectedObjects:reason];
-    
     [self updateSlices];
     
     for (OUIInspectorSlice *slice in _slices) {
@@ -397,7 +417,7 @@ static void _removeSlice(OUIStackedSlicesInspectorPane *self, OUIStackedSlicesIn
 - (void)didReceiveMemoryWarning;
 {
     // Make sure to do this only when the whole inspector is hidden. We don't want to kill off a pane that pushed a detail pane.
-    if (self.visibility == OUIViewControllerVisibilityHidden && ![self.inspector isVisible]) {
+    if (self.visibility == OUIViewControllerVisibilityHidden && self.inspector.viewController.visibility == OUIViewControllerVisibilityHidden) {
         // Remove our slices now to avoid getting assertion failures about their views not being subviews of ours when we remove them.
         
         // Ditch our current slices too. When we get reloaded, we'll rebuild and re add them.
@@ -424,8 +444,7 @@ static void _removeSlice(OUIStackedSlicesInspectorPane *self, OUIStackedSlicesIn
 
 - (void)loadView;
 {
-    OUIStackedSlicesInspectorPaneContentView *view = [[OUIStackedSlicesInspectorPaneContentView alloc] initWithFrame:CGRectMake(0, 0, [OUIInspector defaultInspectorContentWidth], self.inspector.mainPane.preferredContentSize.height)];
-    _lastLayoutSize = view.frame.size;
+    OUIStackedSlicesInspectorPaneContentView *view = [[OUIStackedSlicesInspectorPaneContentView alloc] init];
 
     if (!_scrollNotifier)
         _scrollNotifier = [[OUIMinimalScrollNotifierImplementation alloc] init];
@@ -454,9 +473,9 @@ static void _removeSlice(OUIStackedSlicesInspectorPane *self, OUIStackedSlicesIn
         OBASSERT(slice.containingPane == self);
         OBASSERT([self isChildViewController:slice]);
         UIView *sliceView = slice.view;
+        [self.sliceStackView addArrangedSubview:sliceView];
         [sliceView.widthAnchor constraintEqualToAnchor:self.sliceStackView.widthAnchor].active = YES;
         sliceView.backgroundColor = [slice sliceBackgroundColor];
-        [self.sliceStackView addArrangedSubview:sliceView];
     }
 
     self.view = view;
@@ -477,6 +496,9 @@ static void _removeSlice(OUIStackedSlicesInspectorPane *self, OUIStackedSlicesIn
     }
     scrollview.contentInset = defaultInsets;
 
+    if ([OUIInspectorAppearance inspectorAppearanceEnabled])
+        [self notifyChildrenThatAppearanceDidChange:OUIInspectorAppearance.appearance];
+    
     [super viewWillAppear:animated];
 }
 
@@ -496,9 +518,7 @@ static void _removeSlice(OUIStackedSlicesInspectorPane *self, OUIStackedSlicesIn
 
 - (void)updateContentInsetsForKeyboard
 {
-    OBASSERT(self.isViewLoaded);
-    
-    if (self.view.window == nil) {
+    if (!self.isViewLoaded || self.view.window == nil) {
         return;
     }
     
@@ -526,12 +546,36 @@ static void _removeSlice(OUIStackedSlicesInspectorPane *self, OUIStackedSlicesIn
     OUIKeyboardNotifier *notifier = [OUIKeyboardNotifier sharedNotifier];
     UIEdgeInsets insets = view.contentInset;
     insets.bottom = notifier.lastKnownKeyboardHeight;
-    
+    if (self.inspector.alwaysShowToolbar || ([self.toolbarItems count] > 0)) {
+        insets.bottom += self.navigationController.toolbar.frame.size.height;
+    }
     
     [UIView animateWithDuration:notifier.lastAnimationDuration animations:^{
         [UIView setAnimationCurve:notifier.lastAnimationCurve];
         view.contentInset = insets;
     }];
+}
+
+#pragma mark - OUIInspectorAppearance
+
+- (NSArray <id<OUIThemedAppearanceClient>> *)themedAppearanceChildClients
+{
+    NSArray <id<OUIThemedAppearanceClient>> *clients = self.availableSlices;
+    if ([self inInspector])
+        clients = [clients arrayByAddingObject:self.view];
+    
+    return clients;
+}
+
+- (void)themedAppearanceDidChange:(OUIThemedAppearance *)changedAppearance;
+{
+    [super themedAppearanceDidChange:changedAppearance];
+    
+    OUIInspectorAppearance *appearance = OB_CHECKED_CAST_OR_NIL(OUIInspectorAppearance, changedAppearance);
+    OUIStackedSlicesInspectorPaneContentView *view = (OUIStackedSlicesInspectorPaneContentView *)self.contentView;
+    view.inspectorBackgroundViewColor = appearance.InspectorBackgroundColor;
+    self.navigationController.toolbar.barStyle = appearance.InspectorBarStyle;
+    self.navigationController.toolbar.backgroundColor = appearance.InspectorBackgroundColor;
 }
 
 @end

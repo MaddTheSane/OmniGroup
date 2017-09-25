@@ -1,4 +1,4 @@
-// Copyright 2016 Omni Development. Inc. All rights reserved.
+// Copyright 2016-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -23,11 +23,8 @@ struct skbuf {
     /* The contents of our saved blob */
     NSDictionary *passwordDerivation;
     
-    /* Cached, shareable encryption worker */
-    OFSSegmentEncryptWorker *reusableEncryptionWorker;
-    
-    /* The decrypted key slots. buf is nil if we are not unlocked/valid. */
-    NSData *buf;
+    /* The decrypted key slots. slots is nil if we are not unlocked/valid. */
+    OFSKeySlots *slots;
     
     /* We keep a copy of the wrapping key around so we can re-wrap after a rollover event such as a password change */
     struct skbuf wk;
@@ -40,6 +37,3 @@ struct skbuf {
 @property (nonatomic, readonly) NSData *applicationLabel;
 
 @end
-
-extern BOOL validateSlots(NSData *slots);
-extern NSData *unwrapData(const uint8_t *wrappingKey, size_t wrappingKeyLength, NSData *wrappedData, NSError **outError);

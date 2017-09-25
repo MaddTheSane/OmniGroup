@@ -1,4 +1,4 @@
-// Copyright 2010-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -7,7 +7,9 @@
 
 #import <OmniFoundation/NSURL-OFExtensions.h>
 
-#import <OmniBase/OBUtilities.h>
+@import OmniBase;
+@import Foundation;
+
 #import <OmniFoundation/NSSet-OFExtensions.h>
 #import <OmniFoundation/NSString-OFReplacement.h>
 #import <OmniFoundation/OFPreference.h>
@@ -150,17 +152,25 @@ NSRange OFURLRangeOfHost(NSString *rfc1808URL)
 
 NSURL *OFURLWithTrailingSlash(NSURL *baseURL)
 {
-    if (baseURL == nil)
+    if (baseURL == nil) {
         return nil;
+    }
     
-    if ([[baseURL path] hasSuffix:@"/"])
+    if ([[baseURL path] hasSuffix:@"/"]) {
         return baseURL;
+    }
     
     NSString *baseURLString = [baseURL absoluteString];
     NSRange pathRange = OFURLRangeOfPath(baseURLString);
     
-    if (pathRange.length && [baseURLString rangeOfString:@"/" options:NSAnchoredSearch|NSBackwardsSearch range:pathRange].length > 0)
+    if (pathRange.location == NSNotFound) {
+        // No path, so we can't append a / to the path
         return baseURL;
+    }
+    
+    if (pathRange.location != NSNotFound && [baseURLString rangeOfString:@"/" options:NSAnchoredSearch|NSBackwardsSearch range:pathRange].location != NSNotFound) {
+        return baseURL;
+    }
     
     NSMutableString *newString = [baseURLString mutableCopy];
     [newString insertString:@"/" atIndex:NSMaxRange(pathRange)];
@@ -571,14 +581,12 @@ static BOOL OFURLIsStillBeingCreatedOrHasGoneMissing(NSURL *fileURL)
 }
 
 // We no longer use an NSFileCoordinator when scanning the documents directory. NSFileCoordinator doesn't make writers of documents wait if there is a coordinator of their containing directory, so this doesn't help. We *could*, as we find documents, do a coordinated read on each document to make sure we get its most recent timestamp, but this seems wasteful in most cases.
-void OFScanDirectory(NSURL *directoryURL, BOOL shouldRecurse,
-                     _Nullable OFScanDirectoryFilter filterBlock,
-                     OFScanPathExtensionIsPackage pathExtensionIsPackage,
-                     OFScanDirectoryItemHandler itemHandler,
-                     OFScanErrorHandler errorHandler)
+static void _OFScanDirectory(NSURL *directoryURL, BOOL shouldRecurse,
+                             _Nullable OFScanDirectoryFilter filterBlock,
+                             OFScanPathExtensionIsPackage pathExtensionIsPackage,
+                             OFScanDirectoryItemHandler itemHandler,
+                             OFScanErrorHandler errorHandler)
 {
-    OBASSERT(![NSThread isMainThread]);
-    
     NSMutableArray *scanDirectoryURLs = [NSMutableArray arrayWithObjects:directoryURL, nil];
     
     NSFileManager *fileManager = [NSFileManager defaultManager];
@@ -652,6 +660,27 @@ void OFScanDirectory(NSURL *directoryURL, BOOL shouldRecurse,
             itemHandler(fileManager, fileURL);
         }
     }
+}
+
+// It's generally a bad idea to block the main queue with filesystem operations, so we have two versions here -- one that can be searched for independently for blocking.
+
+void OFScanDirectory(NSURL *directoryURL, BOOL shouldRecurse,
+                     _Nullable OFScanDirectoryFilter filterBlock,
+                     OFScanPathExtensionIsPackage pathExtensionIsPackage,
+                     OFScanDirectoryItemHandler itemHandler,
+                     OFScanErrorHandler errorHandler)
+{
+    OBPRECONDITION([NSOperationQueue currentQueue] != [NSOperationQueue mainQueue], "bug:///137297");
+    _OFScanDirectory(directoryURL, shouldRecurse, filterBlock, pathExtensionIsPackage, itemHandler, errorHandler);
+}
+
+void OFScanDirectoryAllowMainQueue(NSURL *directoryURL, BOOL shouldRecurse,
+                                   _Nullable OFScanDirectoryFilter filterBlock,
+                                   OFScanPathExtensionIsPackage pathExtensionIsPackage,
+                                   OFScanDirectoryItemHandler itemHandler,
+                                   OFScanErrorHandler errorHandler)
+{
+    _OFScanDirectory(directoryURL, shouldRecurse, filterBlock, pathExtensionIsPackage, itemHandler, errorHandler);
 }
 
 OFScanPathExtensionIsPackage OFIsPackageWithKnownPackageExtensions(NSSet * _Nullable packageExtensions)

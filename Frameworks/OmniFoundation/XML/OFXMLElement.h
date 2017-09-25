@@ -1,4 +1,4 @@
-// Copyright 2003-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2003-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -31,6 +31,8 @@ typedef void (^OFXMLElementApplierBlock)(OFXMLElement *element);
 - (OFXMLElement *)deepCopyWithName:(NSString *)name NS_RETURNS_RETAINED;
 
 @property(nonatomic,readonly) NSString *name;
+
+// 1 NSString, or any number of OFXMLElements or OFXMLUnparsedElements
 @property(nullable,nonatomic,readonly) NSArray *children;
 @property(nonatomic,readonly) NSUInteger childrenCount;
 - (id)childAtIndex:(NSUInteger)childIndex;
@@ -55,6 +57,7 @@ typedef void (^OFXMLElementApplierBlock)(OFXMLElement *element);
 - (void)markAsReferenced;
 @property(nonatomic,readonly) BOOL shouldIgnore;
 
+@property(nonatomic,readonly) NSUInteger attributeCount;
 @property(nullable,nonatomic,readonly) NSArray *attributeNames;
 - (nullable NSString *) attributeNamed: (NSString *) name;
 - (void) setAttribute: (NSString *) name string: (nullable NSString *) value;

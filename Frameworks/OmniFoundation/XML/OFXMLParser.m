@@ -1,4 +1,4 @@
-// Copyright 2003-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2003-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -24,27 +24,59 @@ RCS_ID("$Id$");
 #error Do not convert this to ARC w/o re-checking performance. Last time it was tried, it was noticably slower.
 #endif
 
+
+typedef struct _OFXMLParserTargetFunctions {
+    void (*setSystemID)(id <OFXMLParserTarget> target, SEL _cmd, OFXMLParser *parser, NSURL *systemID, NSString *publicID);
+    void (*addProcessingInstruction)(id <OFXMLParserTarget> target, SEL _cmd, OFXMLParser *parser, NSString *piName, NSString *piValue);
+    
+    OFXMLParserElementBehavior (*behaviorForElementWithQName)(id <OFXMLParserTarget> target, SEL _cmd, OFXMLParser *parser, OFXMLQName *name, id <OFXMLParserMultipleAttributeGenerator> multipleAttributeGenerator, id <OFXMLParserSingleAttributeGenerator> singleAttributeGenerator);
+    
+    void (*startElementWithQName)(id <OFXMLParserTarget> target, SEL _cmd, OFXMLParser *parser, OFXMLQName *elementQName, id <OFXMLParserMultipleAttributeGenerator> multipleAttributeGenerator, id <OFXMLParserSingleAttributeGenerator> singleAttributeGenerator);
+    
+    void (*endElement)(id <OFXMLParserTarget> target, SEL _cmd, OFXMLParser *parser, OFXMLQName *elementQName);
+    void (*endUnparsedElementWithQName)(id <OFXMLParserTarget> target, SEL _cmd, OFXMLParser *parser, OFXMLQName *elementName, NSString *identifier, NSData *contents);
+    
+    void (*addWhitespace)(id <OFXMLParserTarget> target, SEL _cmd, OFXMLParser *parser, NSString *whitespace);
+    void (*addString)(id <OFXMLParserTarget> target, SEL _cmd, OFXMLParser *parser, NSString *string);
+    void (*addComment)(id <OFXMLParserTarget> target, SEL _cmd, OFXMLParser *parser, NSString *string);
+} OFXMLParserTargetFunctions;
+
+static void OFXMLParserTargetFunctionsLookup(OFXMLParserTargetFunctions *functions, id <OFXMLParserTarget> target)
+{
+    // Assert on deprecated target methods.
+    OBASSERT_NOT_IMPLEMENTED(target, parser:shouldLeaveElementAsUnparsedBlock:); // Takes a OFXMLQName and attribute names/values now.
+    OBASSERT_NOT_IMPLEMENTED(target, parser:startElementNamed:attributeOrder:attributeValues:); // QName aware version now.
+    OBASSERT_NOT_IMPLEMENTED(target, parser:endUnparsedElementNamed:contents:); // QName aware version now.
+    OBASSERT_NOT_IMPLEMENTED(target, parser:endUnparsedElementWithQName:contents:); // And we pass the xml:id now.
+    
+    // -methodForSelector returns _objc_msgForward
+#define GET_IMP(slot, sel) do { \
+    if ([target respondsToSelector:sel]) { \
+        functions->slot = (typeof(functions->slot))[(id)target methodForSelector:sel]; \
+    } else { \
+        functions->slot = NULL; \
+    } \
+} while (0)
+    GET_IMP(setSystemID, @selector(parser:setSystemID:publicID:));
+    GET_IMP(addProcessingInstruction, @selector(parser:addProcessingInstructionNamed:value:));
+    GET_IMP(behaviorForElementWithQName, @selector(parser:behaviorForElementWithQName:multipleAttributeGenerator:singleAttributeGenerator:));
+    GET_IMP(startElementWithQName, @selector(parser:startElementWithQName:multipleAttributeGenerator:singleAttributeGenerator:));
+    GET_IMP(endElement, @selector(parser:endElementWithQName:));
+    GET_IMP(endUnparsedElementWithQName, @selector(parser:endUnparsedElementWithQName:identifier:contents:));
+    GET_IMP(addWhitespace, @selector(parser:addWhitespace:));
+    GET_IMP(addString, @selector(parser:addString:));
+    GET_IMP(addComment, @selector(parser:addComment:));
+#undef GET_IMP
+}
+
 @interface OFXMLParserState : NSObject <OFXMLParserMultipleAttributeGenerator, OFXMLParserSingleAttributeGenerator>
 {
 @public
     xmlParserCtxtPtr ctxt;
     OFXMLParser *parser;
-    NSObject <OFXMLParserTarget> *target;
+    id <OFXMLParserTarget> target;
     
-    struct {
-        void (*setSystemID)(NSObject <OFXMLParserTarget> *target, SEL _cmd, OFXMLParser *parser, NSURL *systemID, NSString *publicID);
-        void (*addProcessingInstruction)(NSObject <OFXMLParserTarget> *target, SEL _cmd, OFXMLParser *parser, NSString *piName, NSString *piValue);
-        
-        OFXMLParserElementBehavior (*behaviorForElementWithQName)(NSObject <OFXMLParserTarget> *target, SEL _cmd, OFXMLParser *parser, OFXMLQName *name, id <OFXMLParserMultipleAttributeGenerator> multipleAttributeGenerator, id <OFXMLParserSingleAttributeGenerator> singleAttributeGenerator);
-
-        void (*startElementWithQName)(NSObject <OFXMLParserTarget> *target, SEL _cmd, OFXMLParser *parser, OFXMLQName *elementQName, id <OFXMLParserMultipleAttributeGenerator> multipleAttributeGenerator, id <OFXMLParserSingleAttributeGenerator> singleAttributeGenerator);
-
-        void (*endElement)(NSObject <OFXMLParserTarget> *target, SEL _cmd, OFXMLParser *parser);
-        void (*endUnparsedElementWithQName)(NSObject <OFXMLParserTarget> *target, SEL _cmd, OFXMLParser *parser, OFXMLQName *elementName, NSString *identifier, NSData *contents);
-        
-        void (*addWhitespace)(NSObject <OFXMLParserTarget> *target, SEL _cmd, OFXMLParser *parser, NSString *whitespace);
-        void (*addString)(NSObject <OFXMLParserTarget> *target, SEL _cmd, OFXMLParser *parser, NSString *string);
-    } targetImp;
+    OFXMLParserTargetFunctions targetImp;
     
     NSUInteger elementDepth;
     BOOL rootElementFinished;
@@ -71,6 +103,7 @@ RCS_ID("$Id$");
     const xmlChar **namespaces;
     int nb_attributes;
     const xmlChar **attributes;
+    const xmlChar *elementURI;
 }
 @end
 
@@ -88,24 +121,27 @@ RCS_ID("$Id$");
 
 #pragma mark - OFXMLParserMultipleAttributeGenerator
 
-- (void)generateAttributesWithQNames:(void (^ NS_NOESCAPE)(NSMutableArray <OFXMLQName *> *qnames, NSMutableArray <NSString *> *values))receiver;
+static void _eachAttributePair(const xmlChar *elementURI,
+                               int nb_namespaces,
+                               const xmlChar **namespaces,
+                               int nb_attributes,
+                               const xmlChar **attributes,
+                               OFXMLInternedNameTable nameTable,
+                               void (NS_NOESCAPE ^receiver)(OFXMLQName *attributeQName, NSString *attributeValue))
 {
     OBPRECONDITION(nb_namespaces + nb_attributes > 1, "Otherwise nil should have been passed for the multiple-attribute generator");
-
-    NSMutableArray <OFXMLQName *> *attributeQNames = [[NSMutableArray alloc] init];
-    NSMutableArray <NSString *> *attributeValues = [[NSMutableArray alloc] init];
-
+    
     // For the plain-name based paths.
-
+    
     // Note: the segregation of namespace and attibutes will force us to reorder xmlns attributes to the beginning when round-tripping (since we map namespaces to attributes to avoid losing them).
     int namespaceIndex;
     for (namespaceIndex = 0; namespaceIndex < nb_namespaces; namespaceIndex++) {
         // Each namespace is given by two elements, a prefix and URI.
         const char *prefixCString = (const char *)namespaces[2*namespaceIndex + 0];
         const char *uriCString = (const char *)namespaces[2*namespaceIndex + 1];
-
+        
         OFXMLQName *qname = OFXMLInternedNameTableGetInternedName(nameTable, OFXMLNamespaceXMLNSCString, prefixCString);
-
+        
         NSString *URIString;
         if (uriCString)
             URIString = [[NSString alloc] initWithUTF8String:uriCString];
@@ -113,12 +149,11 @@ RCS_ID("$Id$");
             NSLog(@"Bogus namespace; no URI string");
             continue;
         }
-
-        [attributeQNames addObject:qname];
-        [attributeValues addObject:URIString];
+        
+        receiver(qname, URIString);
         [URIString release];
     }
-
+    
     // Each attribute is given by 5 elements, localname, prefix, URI, value start and value end.
     int attributeIndex;
     for (attributeIndex = 0; attributeIndex < nb_attributes; attributeIndex++) {
@@ -129,27 +164,46 @@ RCS_ID("$Id$");
         // Small values already benefit from being tagged pointers.
         // Overall, de-duplicating attribute values doesn't seem like a huge win given the frequency analysis done in the following bug for a representative large, real-world OmniFocus root transaction file.
         // See bug:///132530 (Frameworks-Mac Performance: Measure whether de-duplicating attribute values, unparsed elements, or strings in OFXMLParser is a win)
-
+        
         const char *attributeLocalname = (const char *)attributes[5*attributeIndex + 0];
         //const char *prefix = (const char *)attributes[5*attributeIndex + 1];
         const char *attributeNsURI = (const char *)attributes[5*attributeIndex + 2];
+        if (attributeNsURI == NULL) {
+            attributeNsURI = (const char *)elementURI;
+        }
         const char *valueStart = (const char *)attributes[5*attributeIndex + 3];
         const char *valueEnd = (const char *)attributes[5*attributeIndex + 4];
-
+        
         OFXMLQName *qname = OFXMLInternedNameTableGetInternedName(nameTable, attributeNsURI, attributeLocalname);
         NSString *value = [[NSString alloc] initWithBytes:valueStart length:valueEnd - valueStart encoding:NSUTF8StringEncoding];
-
+        
         // We specify XML_PARSE_NOENT so entities are already parsed up front.  Clients of the framework should thus always get nice Unicode strings w/o worrying about this muck.
-
-        [attributeQNames addObject:qname];
-        [attributeValues addObject:value];
-
+        
+        receiver(qname, value);
         [value release];
     }
+}
+
+- (void)generateAttributesWithQNames:(void (^ NS_NOESCAPE)(NSMutableArray <OFXMLQName *> *qnames, NSMutableArray <NSString *> *values))receiver;
+{
+    OBPRECONDITION(nb_namespaces + nb_attributes > 1, "Otherwise nil should have been passed for the multiple-attribute generator");
+
+    NSMutableArray <OFXMLQName *> *attributeQNames = [[NSMutableArray alloc] init];
+    NSMutableArray <NSString *> *attributeValues = [[NSMutableArray alloc] init];
+
+    _eachAttributePair(elementURI, nb_namespaces, namespaces, nb_attributes, attributes, nameTable, ^(OFXMLQName *qname, NSString *value){
+        [attributeQNames addObject:qname];
+        [attributeValues addObject:value];
+    });
 
     receiver(attributeQNames, attributeValues);
     [attributeQNames release];
     [attributeValues release];
+}
+
+- (void)generateAttributeQNamePairs:(void (^ NS_NOESCAPE)(OFXMLQName *attributeQName, NSString *attributeValue))receiver;
+{
+    _eachAttributePair(elementURI, nb_namespaces, namespaces, nb_attributes, attributes, nameTable, receiver);
 }
 
 - (void)generateAttributesWithPlainNames:(void (^ NS_NOESCAPE)(NSMutableArray <NSString *> *names, NSMutableDictionary <NSString *, NSString *> *values))receiver;
@@ -247,6 +301,9 @@ RCS_ID("$Id$");
         const char *attributeLocalname = (const char *)attributes[0];
         //const char *prefix = (const char *)attributes[1];
         const char *attributeNsURI = (const char *)attributes[2];
+        if (attributeNsURI == NULL) {
+            attributeNsURI = (const char *)elementURI;
+        }
         const char *valueStart = (const char *)attributes[3];
         const char *valueEnd = (const char *)attributes[4];
         
@@ -386,6 +443,8 @@ static BOOL _checkForUnparsedElement(OFXMLParserState *state, OFXMLQName *elemen
             state->unparsedBlockStart = p - base + state->ctxt->input->consumed;
             state->unparsedBlockElementNesting = 0;
 
+            // REVIEW: If the behavior is OFXMLParserElementBehaviorSkip we don't need to accumulate the a copy of the unparsed data.
+            // See bug:///144021 (Frameworks-Mac Performance: Optimize unparsed data for skip behavior)
             OBASSERT(state->unparsedElementData == nil);
             state->unparsedElementData = [[NSMutableData alloc] init];
             //fprintf(stderr, "unparsed element '%s' starts at offset %qd\n", localname, state->unparsedBlockStart);
@@ -439,7 +498,7 @@ static void _startElementNsSAX2Func(void *ctx, const xmlChar *localname, const x
     state->namespaces = namespaces;
     state->nb_attributes = nb_attributes;
     state->attributes = attributes;
-
+    state->elementURI = URI;
 
     OFXMLQName *elementQName = OFXMLInternedNameTableGetInternedName(state->nameTable, (const char *)URI, (const char *)localname);
 
@@ -448,6 +507,7 @@ static void _startElementNsSAX2Func(void *ctx, const xmlChar *localname, const x
         state->namespaces = NULL;
         state->nb_attributes = 0;
         state->attributes = NULL;
+        state->elementURI = NULL;
         return;
     }
 
@@ -469,6 +529,7 @@ static void _startElementNsSAX2Func(void *ctx, const xmlChar *localname, const x
     state->namespaces = NULL;
     state->nb_attributes = 0;
     state->attributes = NULL;
+    state->elementURI = NULL;
 
     // TODO: Make OFXMLWhitespaceBehaviorType QName aware.
     OFXMLWhitespaceBehaviorType oldBehavior = (OFXMLWhitespaceBehaviorType)[[state->whitespaceBehaviorStack lastObject] unsignedIntegerValue];
@@ -543,14 +604,14 @@ static void _endElementNsSAX2Func(void *ctx, const xmlChar *localname, const xml
                 
                 [unparsedElementData release];
                 unparsedElementData = nil;
-
-                [state->unparsedElementData release];
-                state->unparsedElementData = nil;
-                
-                [state->unparsedElementID release];
-                state->unparsedElementID = nil;
             }
+
+            [state->unparsedElementData release];
+            state->unparsedElementData = nil;
             
+            [state->unparsedElementID release];
+            state->unparsedElementID = nil;
+
             state->unparsedBlockStart = -1; // end of the unparsed block
             return;
         } else {
@@ -569,12 +630,28 @@ static void _endElementNsSAX2Func(void *ctx, const xmlChar *localname, const xml
             state->rootElementFinished = YES;
     }
     
-    if (state->targetImp.endElement)
-        state->targetImp.endElement(state->target, @selector(parserEndElement:), parser);
+    if (state->targetImp.endElement) {
+        OFXMLQName *qname = OFXMLInternedNameTableGetInternedName(state->nameTable, (const char *)URI, (const char *)localname);
+        state->targetImp.endElement(state->target, @selector(parser:endElementWithQName:), parser, qname);
+    }
 
     [state->whitespaceBehaviorStack removeLastObject];
     
     OBINVARIANT([state->whitespaceBehaviorStack count] == state->elementDepth + 1); // always have the default behavior on the stack!
+}
+
+static void _commentSAXFunc(void *ctx, const xmlChar *value)
+{
+    OFXMLParserState *state = (__bridge OFXMLParserState *)ctx;
+    OFXMLParser *parser = state->parser;
+
+    if (state->targetImp.addComment) {
+        NSString *comment = [[NSString alloc] initWithUTF8String:(const char *)value];
+        if (comment) {
+            state->targetImp.addComment(state->target, @selector(parser:addComment:), parser, comment);
+        }
+        [comment release];
+    }
 }
 
 typedef NS_ENUM(NSInteger, OFXMLStringClassification) {
@@ -612,7 +689,6 @@ static OFXMLStringClassification _classifyNSString(NSString *str, NSCharacterSet
     }
     return OFXMLStringClassificationSomeNonWhitespace;
 }
-
 
 static void _charactersSAXFunc(void *ctx, const xmlChar *ch, int len)
 {
@@ -756,7 +832,7 @@ static void _OFXMLParserStateCleanUp(OFXMLParserState *state)
     return self;
 }
 
-- (id)initWithWhitespaceBehavior:(OFXMLWhitespaceBehavior *)whitespaceBehavior defaultWhitespaceBehavior:(OFXMLWhitespaceBehaviorType)defaultWhitespaceBehavior target:(NSObject <OFXMLParserTarget> *)target;
+- (id)initWithWhitespaceBehavior:(OFXMLWhitespaceBehavior *)whitespaceBehavior defaultWhitespaceBehavior:(OFXMLWhitespaceBehaviorType)defaultWhitespaceBehavior target:(id <OFXMLParserTarget>)target;
 {
     if (!(self = [super init]))
         return nil;
@@ -777,27 +853,7 @@ static void _OFXMLParserStateCleanUp(OFXMLParserState *state)
     _state->whitespaceBehavior = whitespaceBehavior;
 
     _state->target = target;
-    
-    // Assert on deprecated target methods.
-    OBASSERT_NOT_IMPLEMENTED(target, parser:shouldLeaveElementAsUnparsedBlock:); // Takes a OFXMLQName and attribute names/values now.
-    OBASSERT_NOT_IMPLEMENTED(target, parser:startElementNamed:attributeOrder:attributeValues:); // QName aware version now.
-    OBASSERT_NOT_IMPLEMENTED(target, parser:endUnparsedElementNamed:contents:); // QName aware version now.
-    OBASSERT_NOT_IMPLEMENTED(target, parser:endUnparsedElementWithQName:contents:); // And we pass the xml:id now.
-    
-    // -methodForSelector returns _objc_msgForward
-#define GET_IMP(slot, sel) do { \
-    if ([target respondsToSelector:sel]) \
-        _state->targetImp.slot = (typeof(_state->targetImp.slot))[target methodForSelector:sel]; \
-} while (0)
-    GET_IMP(setSystemID, @selector(parser:setSystemID:publicID:));
-    GET_IMP(addProcessingInstruction, @selector(parser:addProcessingInstructionNamed:value:));
-    GET_IMP(behaviorForElementWithQName, @selector(parser:behaviorForElementWithQName:multipleAttributeGenerator:singleAttributeGenerator:));
-    GET_IMP(startElementWithQName, @selector(parser:startElementWithQName:multipleAttributeGenerator:singleAttributeGenerator:));
-    GET_IMP(endElement, @selector(parserEndElement:));
-    GET_IMP(endUnparsedElementWithQName, @selector(parser:endUnparsedElementWithQName:identifier:contents:));
-    GET_IMP(addWhitespace, @selector(parser:addWhitespace:));
-    GET_IMP(addString, @selector(parser:addString:));
-#undef GET_IMP
+    OFXMLParserTargetFunctionsLookup(&_state->targetImp, target);
 
     if ([target respondsToSelector:@selector(internedNameTableForParser:)]) {
         _state->nameTable = [target internedNameTableForParser:self];
@@ -824,6 +880,25 @@ static void _OFXMLParserStateCleanUp(OFXMLParserState *state)
     [_loadWarnings release];
     [_progress release];
     [super dealloc];
+}
+
+- (OFXMLQName *)getQNameWithNamespace:(NSString *)namespaceString name:(NSString *)nameString;
+{
+    OBASSERT(_state->nameTable != NULL);
+    return OFXMLInternedNameTableGetInternedName(_state->nameTable, [namespaceString UTF8String], [nameString UTF8String]);
+}
+
+- (NSObject<OFXMLParserTarget> *)target;
+{
+    return _state->target;
+}
+
+- (void)setTarget:(NSObject<OFXMLParserTarget> *)target;
+{
+    OBPRECONDITION(_state);
+    
+    _state->target = target;
+    OFXMLParserTargetFunctionsLookup(&_state->targetImp, target);
 }
 
 - (BOOL)parseData:(NSData *)xmlData error:(NSError **)outError;
@@ -862,6 +937,9 @@ static void _OFXMLParserStateCleanUp(OFXMLParserState *state)
     sax.startElementNs = _startElementNsSAX2Func;
     sax.endElementNs = _endElementNsSAX2Func;
     sax.serror = _xmlStructuredErrorFunc;
+    if (self.parseComments) {
+        sax.comment =_commentSAXFunc;
+    }
     
     // xmlSAXUserParseMemory hides the xmlParserCtxtPtr.  But, this means we can't get the source encoding, so we use the push approach.
     
@@ -915,11 +993,23 @@ static void _OFXMLParserStateCleanUp(OFXMLParserState *state)
         NSInteger bytesRead = [inputStream read:buffer maxLength:maxChunkSize];
         if (bytesRead > 0) {
             rc = xmlParseChunk(_state->ctxt, (const char *)buffer, (int)bytesRead, FALSE);
-            if (rc != 0 && rc != XML_ERR_USER_STOP) {
-                [_progress cancel];
-                break;
+            if (rc != 0) {
+                // We should exit early unconditionally for any error code other than XML_ERR_USER_STOP.
+                // XML_ERR_USER_STOP can occur in two situations:
+                //   - the parser encountered a premature EOF (if so, we should read the next chunk from the input stream)
+                //   - we called xmlStopParser() after generating an error
+                //
+                // The way we distinguish these cases is by looking at _state->error.
+                
+                if (rc == XML_ERR_USER_STOP && _state->error == nil) {
+                    // fall through
+                } else {
+                    // stop processing immediately
+                    [_progress cancel];
+                    break;
+                }
             }
-            
+
             // If we are in the middle of processing an unparsed element, copy the rest of this chunk into unparsedElementData and advance unparsedBlockStart
             if (_state->unparsedBlockStart >= (off_t)_state->ctxt->input->consumed) {
                 OBASSERT(_state->unparsedElementData != nil);

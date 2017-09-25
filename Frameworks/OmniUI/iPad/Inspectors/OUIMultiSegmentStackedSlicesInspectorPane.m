@@ -1,4 +1,4 @@
-// Copyright 2010-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -8,10 +8,19 @@
 #import <OmniUI/OUIMultiSegmentStackedSlicesInspectorPane.h>
 
 #import <OmniUI/OUIInspector.h>
+#import <OmniUI/OUIInspectorAppearance.h>
 #import <OmniUI/OUIInspectorBackgroundView.h>
 #import <OmniUI/OUITabBar.h>
 
 RCS_ID("$Id$");
+
+@interface OUIMultiSegmentStackedSlicesInspectorPane (/*Private*/)
+@property (nonatomic, strong) UINavigationItem *segmentsNavigationItem;
+@property (nonatomic, copy) UIColor *selectedTabTintColor;
+@property (nonatomic, copy) UIColor *horizontalTabBottomStrokeColor;
+@property (nonatomic, copy) UIColor *horizontalTabSeparatorTopColor;
+
+@end
 
 @implementation OUIInspectorSegment
 @end
@@ -28,17 +37,48 @@ RCS_ID("$Id$");
     if (!(self = [super initWithNibName:nibNameOrNil bundle:nibBundleOrNil]))
         return nil;
     
-    _segments = [self makeAvailableSegments];
-    
     _titleTabBar = [[OUITabBar alloc] initWithFrame:CGRectMake(0,0,[OUIInspector defaultInspectorContentWidth],30)];
-    _titleTabBar.tabTitles = [_segments valueForKey:@"title"];
     [_titleTabBar addTarget:self action:@selector(_changeSegment:) forControlEvents:UIControlEventValueChanged];
+    _titleTabBar.appearanceDelegate = self;
+
+    [self reloadAvailableSegments];
+
+    self.selectedTabTintColor = [UIColor blackColor];
+    self.horizontalTabBottomStrokeColor = [UIColor colorWithWhite:0.80 alpha:1.0];
+    self.horizontalTabSeparatorTopColor = [UIColor colorWithWhite:0.96 alpha:1.0];
     
+    return self;
+}
+
+- (void)reloadAvailableSegments; // this will end up calling makeAvailableSegments
+{
+    _segments = [self makeAvailableSegments];
+
+    _titleTabBar.tabTitles = [_segments valueForKey:@"title"];
+    // titles have to be set before images, because reasons.
+    for (OUIInspectorSegment *segment in _segments) {
+        if (segment.image) {
+            _titleTabBar.showsTabImage = YES;
+            _titleTabBar.showsTabTitle = NO;
+            [_titleTabBar setImage:segment.image forTabWithTitle:segment.title];
+        }
+    }
     // Do this once in case we are told to inspect objects before our view is supposedly loaded.
     _titleTabBar.selectedTabIndex = 0;
     [self _changeSegment:nil];
-    
-    return self;
+}
+
+- (UINavigationItem *)segmentsNavigationItem;
+{
+    if (!_segmentsNavigationItem) {
+        _segmentsNavigationItem = [[UINavigationItem alloc] init];
+        UISegmentedControl *control = [[UISegmentedControl alloc] initWithItems:[_segments valueForKey:@"title"]];
+
+        [control addTarget:self action:@selector(_changeNavigationSegment:) forControlEvents:UIControlEventValueChanged];
+        _segmentsNavigationItem.titleView = control;
+    }
+
+    return _segmentsNavigationItem;
 }
 
 - (void)setSelectedSegment:(OUIInspectorSegment *)segment;
@@ -54,6 +94,23 @@ RCS_ID("$Id$");
     self.availableSlices = segment.slices;
     [self setToolbarItems:_toolbarItemsForSegment(_selectedSegment) animated:NO];
     [self.viewIfLoaded setNeedsLayout];
+
+    if (!self.wantsEmbeddedTitleTabBar) {
+        UISegmentedControl *control = (UISegmentedControl *)self.navigationItem.titleView;
+
+        if ([control isKindOfClass:UISegmentedControl.class]) {
+            NSInteger currentIndex = control.selectedSegmentIndex;
+            NSInteger index = [self _segmentIndexFromSegmentTitle:segment.title];
+            if (currentIndex != index) {
+                control.selectedSegmentIndex = index;
+            }
+        }
+    }
+}
+
+- (BOOL)wantsEmbeddedTitleTabBar; // return NO if you want a segmented control in the navigation items instead of tabs in the content.
+{
+    return YES;
 }
 
 - (NSArray *)makeAvailableSegments; // For subclasses
@@ -68,16 +125,21 @@ static NSArray *_toolbarItemsForSegment(OUIInspectorSegment *segment)
 {
     NSArray *toolbarItems = [[[segment slices] objectAtIndex:0] toolbarItems];
     
-    if ([toolbarItems count] == 0)
-        // We don't need the bottom toolbar, but toggling between having a toolbar and not is buggy, seemingly in UIPopoverController. For one thing, it animates even if we pass around animate:NO. Turning that off via OUIWithoutAnimating(^{...}), the SHADOW behind the popover still animates. Also, the content size of the popover is what the contained view controller gets to set, so we would need to report a greater size for non-toolbar controllers, or we'd need OUIInspector to adjust height when it toggled the toolbar on/off.
-        toolbarItems = [NSArray arrayWithObject:[[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:nil action:NULL]];
-    
     return toolbarItems;
 }
 
 - (NSArray *)toolbarItems;
 {
     return _toolbarItemsForSegment(_selectedSegment);
+}
+
+- (UINavigationItem *)navigationItem;
+{
+    if (self.wantsEmbeddedTitleTabBar) {
+        return [super navigationItem];
+    } else {
+        return self.segmentsNavigationItem;
+    }
 }
 
 /*
@@ -100,6 +162,7 @@ static NSArray *_toolbarItemsForSegment(OUIInspectorSegment *segment)
 }
 
 #define VERTICAL_SPACING_AROUND_TABS 0.0
+#define VERTICAL_SPACING_FOR_NON_TABS (0.0)
 
 - (void)loadView;
 {
@@ -114,50 +177,119 @@ static NSArray *_toolbarItemsForSegment(OUIInspectorSegment *segment)
     CGRect newFrame = CGRectInset(_titleTabBar.frame, 0.0, -VERTICAL_SPACING_AROUND_TABS);
     newFrame.origin.y = 0.0;
     newFrame.size.width = [OUIInspector defaultInspectorContentWidth];
-    
+
+    if (!self.wantsEmbeddedTitleTabBar) {
+        newFrame.size.height = VERTICAL_SPACING_FOR_NON_TABS;
+    }
+
+    NSMutableArray *constraints = [NSMutableArray array];
+
     OUIInspectorBackgroundView *tabBackground = [[OUIInspectorBackgroundView alloc] initWithFrame:newFrame];
     tabBackground.translatesAutoresizingMaskIntoConstraints = NO;
+
     [container addSubview:tabBackground];
-    
-    _titleTabBar.frame = CGRectInset(tabBackground.bounds, 0.0, VERTICAL_SPACING_AROUND_TABS);
-    _titleTabBar.translatesAutoresizingMaskIntoConstraints = NO;
-    [tabBackground addSubview:_titleTabBar];
+    if (self.wantsEmbeddedTitleTabBar) {
+        _titleTabBar.frame = CGRectInset(tabBackground.bounds, 0.0, VERTICAL_SPACING_AROUND_TABS);
+        _titleTabBar.translatesAutoresizingMaskIntoConstraints = NO;
+        [tabBackground addSubview:_titleTabBar];
+    }
 
     self.view = container;
 
-    // Set up space for the OUIStackedSlicesInspectorPane
-    newFrame.origin.y = CGRectGetMaxY(newFrame);
-    newFrame.size.height = CGRectGetMaxY(container.bounds) - newFrame.origin.y;
+    if (self.wantsEmbeddedTitleTabBar) {
+        // Set up space for the OUIStackedSlicesInspectorPane
+        newFrame.origin.y = CGRectGetMaxY(newFrame);
+        newFrame.size.height = CGRectGetMaxY(container.bounds) - newFrame.origin.y;
+    } else {
+        newFrame.size.height = 0;
+    }
+
     _contentView.frame = newFrame;
     _contentView.translatesAutoresizingMaskIntoConstraints = NO;
     [container addSubview:_contentView];
-    
-    [NSLayoutConstraint activateConstraints:
-     @[
-       // put the tab bar in its place
-       [tabBackground.heightAnchor constraintEqualToConstant:30.0],
-       [tabBackground.widthAnchor constraintEqualToAnchor:container.widthAnchor],
-       [_titleTabBar.heightAnchor constraintEqualToConstant:30.0],
-       [_titleTabBar.widthAnchor constraintEqualToAnchor:container.widthAnchor],
-       [_titleTabBar.centerYAnchor constraintEqualToAnchor: tabBackground.centerYAnchor],
-       // topLayoutGuide gets updated when we get (or lose?) a nav bar.
-       [tabBackground.topAnchor constraintEqualToAnchor:self.topLayoutGuide.bottomAnchor],
-       // constrain the inspector slices to be as big as possible, but below the tabs.
-       [_contentView.topAnchor constraintEqualToAnchor:self.topLayoutGuide.bottomAnchor constant:_titleTabBar.frame.size.height],
-       [_contentView.widthAnchor constraintEqualToAnchor:container.widthAnchor],
-       [_contentView.bottomAnchor constraintEqualToAnchor:container.bottomAnchor],
-       [_contentView.leftAnchor constraintEqualToAnchor:container.leftAnchor],
-       [_contentView.rightAnchor constraintEqualToAnchor:container.rightAnchor],
-       ]];
+
+    if (self.wantsEmbeddedTitleTabBar) {
+        [constraints addObjectsFromArray:@[
+            // put the tab bar in its place
+            [tabBackground.heightAnchor constraintEqualToConstant:30.0],
+            [tabBackground.widthAnchor constraintEqualToAnchor:container.widthAnchor],
+            [tabBackground.leadingAnchor constraintEqualToAnchor: container.leadingAnchor],
+            [tabBackground.topAnchor constraintEqualToAnchor:container.safeAreaLayoutGuide.topAnchor],
+            [tabBackground.bottomAnchor constraintEqualToAnchor:_contentView.topAnchor],
+
+            [_titleTabBar.heightAnchor constraintEqualToConstant:30.0],
+            [_titleTabBar.widthAnchor constraintEqualToAnchor:container.widthAnchor],
+            [_titleTabBar.leadingAnchor constraintEqualToAnchor: tabBackground.leadingAnchor],
+            [_titleTabBar.topAnchor constraintEqualToAnchor:tabBackground.topAnchor],
+
+            ]];
+    } else {
+        [tabBackground.heightAnchor constraintEqualToConstant:VERTICAL_SPACING_FOR_NON_TABS];
+        [tabBackground.widthAnchor constraintEqualToAnchor:container.widthAnchor];
+        [constraints addObject:[_contentView.topAnchor constraintEqualToAnchor:self.topLayoutGuide.bottomAnchor constant:VERTICAL_SPACING_FOR_NON_TABS]];
+    }
+
+    [constraints addObjectsFromArray:@[
+        [_contentView.widthAnchor constraintEqualToAnchor:container.widthAnchor],
+        [_contentView.bottomAnchor constraintEqualToAnchor:container.bottomAnchor],
+        [_contentView.leftAnchor constraintEqualToAnchor:container.leftAnchor],
+        [_contentView.rightAnchor constraintEqualToAnchor:container.rightAnchor],
+        ]];
+
+
+    [NSLayoutConstraint activateConstraints:constraints];
 }
 
 
-#pragma mark - Private
+#pragma mark - PrivateOP
 
 - (void)_changeSegment:(id)sender;
 {
     OBPRECONDITION(_titleTabBar);
+    if (_segments.count == 0) {
+        return;
+    }
     [self setSelectedSegment:[_segments objectAtIndex:[_titleTabBar selectedTabIndex]]];
 }
+
+- (void)_changeNavigationSegment:(id)sender;
+{
+    OBASSERT(self.wantsEmbeddedTitleTabBar == NO, @"_changeNavigationSegment should only be called when not using tabs.");
+    UISegmentedControl *control = (UISegmentedControl *)self.navigationItem.titleView;
+
+    if ([control isKindOfClass:UISegmentedControl.class]) {
+        NSInteger index = control.selectedSegmentIndex;
+        self.titleTabBar.selectedTabIndex = index;
+        [self setSelectedSegment:[self.segments objectAtIndex:index]];
+    }
+}
+
+- (NSInteger)_segmentIndexFromSegmentTitle:(NSString *)title;
+{
+    for (NSUInteger index = 0; index < self.segments.count; index++) {
+        OUIInspectorSegment *segment = [self.segments objectAtIndex:index];
+        if ([title isEqualToString:segment.title]) {
+            return index;
+        }
+    }
+
+    return NSNotFound;
+}
+
+#pragma mark - OUIThemedAppearanceClient
+
+- (void)themedAppearanceDidChange:(OUIThemedAppearance *)changedAppearance;
+{
+    [super themedAppearanceDidChange:changedAppearance];
+    
+    OUIInspectorAppearance *appearance = OB_CHECKED_CAST_OR_NIL(OUIInspectorAppearance, changedAppearance);
+    self.selectedTabTintColor = appearance.InspectorTextColor;
+    self.horizontalTabBottomStrokeColor = appearance.HorizontalTabBottomStrokeColor;
+    self.horizontalTabSeparatorTopColor = appearance.HorizontalTabSeparatorTopColor;
+    
+    [_titleTabBar appearanceDidChange];
+}
+
+
 
 @end

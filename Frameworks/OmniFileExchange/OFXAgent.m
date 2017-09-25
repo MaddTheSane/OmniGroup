@@ -1,4 +1,4 @@
-// Copyright 2013-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2013-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -55,12 +55,12 @@ OFDeclareDebugLogLevel(OFXActivityDebug);
 {
     NSString *_memberIdentifier;
     
-    NSSet *_localPackagePathExtensions;
-    NSSet *_syncPathExtensions;
+    NSSet <NSString *> *_localPackagePathExtensions;
+    NSSet <NSString *> *_syncPathExtensions;
     
-    NSDictionary *_uuidToAccountAgent;
+    NSDictionary <NSString *, OFXAccountAgent *> *_uuidToAccountAgent;
     
-    OFXRegistrationTable *_registrationTable;
+    OFXRegistrationTable <OFXRegistrationTable<OFXFileMetadata *> *> *_registrationTable;
 
     OFNetStateNotifier *_stateNotifier;
     
@@ -134,7 +134,7 @@ BOOL OFXShouldSyncAllPathExtensions(NSSet *pathExtensions)
 + (ODAVConnectionConfiguration *)makeConnectionConfiguration;
 {
 #if ODAV_NSURLSESSION
-    OBFinishPortingLater("Look at the callers -- once we move to using NSURLSession, we'll be not reusing https connections across uploads/downloads");
+    OBFinishPortingLater("<bug:///147923> (iOS-OmniOutliner Bug: Look at the callers -- once we move to using NSURLSession, we'll be not reusing https connections across uploads/downloads - in -[OFXAgent makeConnectionConfiguration])");
 
     NSURLSessionConfiguration *configuration = [[NSURLSessionConfiguration defaultSessionConfiguration] copy];
     
@@ -200,8 +200,8 @@ BOOL OFXShouldSyncAllPathExtensions(NSSet *pathExtensions)
         // We don't assume that LaunchServices will see our file types (in particular, we might be a testing tool). But it *should* know about the types that our types conform to.
         void (^_addPackagePathExtensions)(NSArray *fileTypes) = ^(NSArray *fileTypes){
             for (NSDictionary *fileType in fileTypes) {
-                NSArray *conformsToTypes = fileType[@"UTTypeConformsTo"];
-                OBASSERT(conformsToTypes);
+                NSArray *conformsToTypes = fileType[(__bridge NSString *)kUTTypeConformsToKey];
+                OBASSERT(conformsToTypes, "No %@ entry in file type %@", kUTTypeConformsToKey, fileType);
                 
                 BOOL isFile = NO;
                 BOOL isFolder = NO;
@@ -434,7 +434,7 @@ static void _stopObservingAccountAgent(OFXAgent *self, OFXAccountAgent *accountA
     _registrationTable = nil;
 }
 
-- (OFXRegistrationTable *)metadataItemRegistrationTableForAccount:(OFXServerAccount *)account;
+- (OFXRegistrationTable <OFXFileMetadata *> *)metadataItemRegistrationTableForAccount:(OFXServerAccount *)account;
 {
     OBPRECONDITION([NSThread isMainThread]);
     OBPRECONDITION(_registrationTable); // Undefined while the agent is stopped
@@ -443,9 +443,9 @@ static void _stopObservingAccountAgent(OFXAgent *self, OFXAccountAgent *accountA
     return _registrationTable[OFXCopyRegistrationKeyForAccountMetadataItems(account.uuid)];
 }
 
-- (NSSet *)metadataItemsForAccount:(OFXServerAccount *)account;
+- (NSSet <OFXFileMetadata *> *)metadataItemsForAccount:(OFXServerAccount *)account;
 {
-    NSMutableSet *result = [NSMutableSet set];
+    NSMutableSet <OFXFileMetadata *> *result = [NSMutableSet set];
     
     // Strip out locally deleted metadata
     for (OFXFileMetadata *metadata in [self metadataItemRegistrationTableForAccount:account].values) {
@@ -759,12 +759,12 @@ static void _stopObservingAccountAgent(OFXAgent *self, OFXAccountAgent *accountA
         
     // Grab a snapshot of the server accounts that have credentials. We don't want to have a user add/remove accounts out from underneath us while syncing is going on. The most crucial properties on the server account are read-only (credentials are editable).
     NSArray *serverAccounts = [NSArray arrayWithArray:_accountRegistry.validCloudSyncAccounts];
-    NSMutableSet *failedAccounts = [[NSMutableSet alloc] init];
+    NSMutableSet <OFXServerAccount *> *failedAccounts = [[NSMutableSet alloc] init];
     
     DEBUG_SYNC(2, @"Performing account change (%ld accounts)", [serverAccounts count]);
     
-    NSMutableDictionary *uuidToAccountAgent = [NSMutableDictionary new];
-    NSMutableArray *addedAccountAgents = [NSMutableArray new];
+    NSMutableDictionary <NSString *, OFXAccountAgent *> *uuidToAccountAgent = [NSMutableDictionary new];
+    NSMutableArray <OFXAccountAgent *> *addedAccountAgents = [NSMutableArray new];
     
     // Collect resolve paths for all the accounts on the Mac. We do this up front so that we can detect if one account's local documents directory has been moved inside another.
 #if OFX_MAC_STYLE_ACCOUNT
@@ -881,8 +881,8 @@ static void _stopObservingAccountAgent(OFXAgent *self, OFXAccountAgent *accountA
         _startObservingAccountAgent(self, accountAgent);
     }
     
-    NSMutableSet *runningAccounts = [NSMutableSet new];
-    NSMutableSet *accountNetStateGroupIdentifiers = [NSMutableSet new];
+    NSMutableSet <OFXServerAccount *> *runningAccounts = [NSMutableSet new];
+    NSMutableSet <NSString *> *accountNetStateGroupIdentifiers = [NSMutableSet new];
     [_uuidToAccountAgent enumerateKeysAndObjectsUsingBlock:^(NSString *uuid, OFXAccountAgent *accountAgent, BOOL *stop) {
         if (accountAgent.started) {
             [runningAccounts addObject:accountAgent.account];

@@ -1,4 +1,4 @@
-// Copyright 2013-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2013-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -123,13 +123,13 @@ static OFPreference *OFXRecentTransferErrorThresholdBeforeAutomaticallyStopping;
         unsigned changed:1;
     } _edits;
 
-    NSArray *_recentRedirects;
+    NSArray <ODAVRedirect *> *_recentRedirects;
     
     // iOS client apps won't change their set of extensions at runtime, but the Mac agents will based on what package extensions it sees on the server.
-    NSMutableDictionary *_containerIdentifierToContainerAgent;
+    NSMutableDictionary <NSString *, OFXContainerAgent *> *_containerIdentifierToContainerAgent;
     
-    OFXRegistrationTable *_agentRegistrationTable;
-    OFXRegistrationTable *_metadataRegistrationTable;
+    OFXRegistrationTable <OFXRegistrationTable <OFXFileMetadata *> *> *_agentRegistrationTable;
+    OFXRegistrationTable <OFXFileMetadata *> *_metadataRegistrationTable;
     
     NSString *_agentMemberIdentifier;
     OFNetStateRegistration *_stateRegistration;
@@ -137,7 +137,7 @@ static OFPreference *OFXRecentTransferErrorThresholdBeforeAutomaticallyStopping;
     OFXAccountInfo *_info;
 }
 
-static NSSet *_lowercasePathExtensions(id <NSFastEnumeration> pathExtensions)
+static NSSet <NSString *> *_lowercasePathExtensions(id <NSFastEnumeration> pathExtensions)
 {
     if (!pathExtensions)
         return nil;
@@ -158,7 +158,7 @@ static NSSet *_lowercasePathExtensions(id <NSFastEnumeration> pathExtensions)
     OFXRecentTransferErrorThresholdBeforeAutomaticallyStopping = [OFPreference preferenceForKey:@"OFXRecentTransferErrorThresholdBeforeAutomaticallyStopping"];
 }
 
-- initWithAccount:(OFXServerAccount *)account agentMemberIdentifier:(NSString *)agentMemberIdentifier registrationTable:(OFXRegistrationTable *)registrationTable remoteDirectoryName:(NSString *)remoteDirectoryName localAccountDirectory:(NSURL *)localAccountDirectory localPackagePathExtensions:(id <NSFastEnumeration>)localPackagePathExtensions syncPathExtensions:(id <NSFastEnumeration>)syncPathExtensions;
+- initWithAccount:(OFXServerAccount *)account agentMemberIdentifier:(NSString *)agentMemberIdentifier registrationTable:(OFXRegistrationTable <OFXRegistrationTable <OFXFileMetadata *> *> *)registrationTable remoteDirectoryName:(NSString *)remoteDirectoryName localAccountDirectory:(NSURL *)localAccountDirectory localPackagePathExtensions:(id <NSFastEnumeration>)localPackagePathExtensions syncPathExtensions:(id <NSFastEnumeration>)syncPathExtensions;
 {
     OBPRECONDITION(account);
     OBPRECONDITION(account.usageMode == OFXServerAccountUsageModeCloudSync);
@@ -769,7 +769,7 @@ static NSSet *_lowercasePathExtensions(id <NSFastEnumeration> pathExtensions)
     // We can be racing with other clients updating the account's Info.plist or client plists. Try this a few times if hit file-missing errors.
     __autoreleasing NSError *error;
     __autoreleasing NSDate *serverDate;
-    NSArray *containerFileInfos;
+    NSArray <ODAVFileInfo *> *containerFileInfos = nil;
     for (NSUInteger try = 0; !containerFileInfos && try < 5; try++) {
         serverDate = nil;
         error = nil;
@@ -818,8 +818,8 @@ static NSSet *_lowercasePathExtensions(id <NSFastEnumeration> pathExtensions)
         }];
     }
     
-    // Remember what identifers the server knows about.
-    NSMutableSet *serverContainerIdentifiers = [NSMutableSet new];
+    // Remember what identifiers the server knows about.
+    NSMutableSet <NSString *> *serverContainerIdentifiers = [NSMutableSet new];
     
     for (ODAVFileInfo *containerFileInfo in containerFileInfos) {
         NSURL *remoteContainerURL = containerFileInfo.originalURL;
@@ -834,7 +834,7 @@ static NSSet *_lowercasePathExtensions(id <NSFastEnumeration> pathExtensions)
 
         [serverContainerIdentifiers addObject:identifier];
         
-        // Start up containers for new identifers if we are running in unfiltered mode.
+        // Start up containers for new identifiers if we are running in unfiltered mode.
         if (OFXShouldSyncAllPathExtensions(_syncPathExtensions))
             [self _containerAgentWithIdentifier:identifier];
         
@@ -863,7 +863,7 @@ static NSSet *_lowercasePathExtensions(id <NSFastEnumeration> pathExtensions)
     }
 }
 
-- (NSArray *)_upateInfoAndCollectContainerIdentifiersWithConnection:(ODAVConnection *)connection serverDate:(NSDate **)outServerDate error:(NSError **)outError;
+- (NSArray <ODAVFileInfo *> *)_upateInfoAndCollectContainerIdentifiersWithConnection:(ODAVConnection *)connection serverDate:(NSDate **)outServerDate error:(NSError **)outError;
 {
     // We store the main Info.plist, client files and containers in a flat hierarchy in the remote account. This allows us to do a single PROPFIND to see everything that has changed.
     ODAVMultipleFileInfoResult *result = OFXFetchFileInfosEnsuringDirectoryExists(connection, [self _remoteSyncDirectory], outError);
@@ -883,8 +883,8 @@ static NSSet *_lowercasePathExtensions(id <NSFastEnumeration> pathExtensions)
     }
     
     // Partition the files into their various types.
-    NSMutableArray *clientFileInfos = [NSMutableArray new];
-    NSMutableArray *containerFileInfos = [NSMutableArray new];
+    NSMutableArray <ODAVFileInfo *> *clientFileInfos = [NSMutableArray new];
+    NSMutableArray <ODAVFileInfo *> *containerFileInfos = [NSMutableArray new];
     ODAVFileInfo *accountFileInfo;
     
     ODAVFileInfo *remoteTemporaryDirectoryFileInfo;
@@ -1055,9 +1055,9 @@ static NSSet *_lowercasePathExtensions(id <NSFastEnumeration> pathExtensions)
     OBPRECONDITION([NSOperationQueue currentQueue] == _operationQueue);
     OBPRECONDITION(self.backgroundState == OFXAccountAgentStateStarted);
 
-    NSMutableArray *fileVersions = [NSMutableArray new];
+    NSMutableArray <NSString *> *fileVersions = [NSMutableArray new];
     [_containerIdentifierToContainerAgent enumerateKeysAndObjectsUsingBlock:^(NSString *identifier, OFXContainerAgent *containerAgent, BOOL *stop) {
-        NSArray *containerFileVersions = containerAgent.publishedFileVersions;
+        NSArray <NSString *> *containerFileVersions = containerAgent.publishedFileVersions;
         if (containerFileVersions)
             [fileVersions addObjectsFromArray:containerFileVersions];
     }];
@@ -1393,8 +1393,10 @@ static NSSet *_lowercasePathExtensions(id <NSFastEnumeration> pathExtensions)
     
     ODAVConnection *connection = [[ODAVConnection alloc] initWithSessionConfiguration:configuration baseURL:self.remoteBaseDirectory];
 
+#ifdef DEBUG_bungi
+    // Show or flakey networks (or just servers you can't reach because you're not on the vpn) will fail this.
     OBExpectDeallocation(connection); // These shouldn't be long lived...
-
+#endif
     connection.userAgent = _debugName;
     
 #if 0  // Seems redundant: if we don't implement this, we'll just bubble this error up to the invoker, who will present it if that makes sense.

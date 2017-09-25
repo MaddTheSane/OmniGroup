@@ -1,4 +1,4 @@
-// Copyright 2008-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2008-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -14,7 +14,14 @@
 
 RCS_ID("$Id$")
 
-@interface ODAVConnection_URLSession () <NSURLSessionDataDelegate, ODAVConnectionSubclass>
+
+// NSURLSession retains its delegate until it is invalidated. Break this up...
+@interface ODAVConnectionDelegate_URLSession : NSObject <NSURLSessionDataDelegate>
+- initWithConnection:(ODAVConnection_URLSession *)connection;
+@end
+
+
+@interface ODAVConnection_URLSession () <ODAVConnectionSubclass>
 @end
 
 @implementation ODAVConnection_URLSession
@@ -40,14 +47,16 @@ RCS_ID("$Id$")
     _configuration.HTTPShouldUsePipelining = configuration.HTTPShouldUsePipelining;
 
     // configuration.identifier -- set this for background operations
-    
-    // The request we are given will already have values -- would these override, or are these just for the convenience methods that make requests?
-    //configuration.requestCachePolicy = NSURLRequestUseProtocolCachePolicy;
+
+    // Default to not caching any DAV operations (as we did in ODAVConnection_URLConnection). Individual requests can override.
+    _configuration.requestCachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
+
     //configuration.timeoutIntervalForRequest = 300;
     
     //configuration = ...
     //configuration.URLCredentialStorage = ...
-    //configuration.URLCache = ...
+    
+    _configuration.URLCache = nil;
     
     /*
      We create a private serial queue for the NSURLSession delegate callbacks. ODAVOperations will receive their internal updates on that queue and then when they fire *their* callbacks, they do it on the queue the initial operation was requested on, or on an explicit queue if -startWithCallbackQueue: was used.
@@ -60,9 +69,11 @@ RCS_ID("$Id$")
     _delegateQueue = [[NSOperationQueue alloc] init];
     _delegateQueue.maxConcurrentOperationCount = 1;
     _delegateQueue.name = [NSString stringWithFormat:@"com.omnigroup.OmniDAV.connection_session_delegate for %p", self];
-    
-    _session = [NSURLSession sessionWithConfiguration:_configuration delegate:self delegateQueue:_delegateQueue];
-    DEBUG_DAV(1, @"Created session %@ with delegate queue %@", _session, _delegateQueue);
+
+    ODAVConnectionDelegate_URLSession *delegate = [[ODAVConnectionDelegate_URLSession alloc] initWithConnection:self];
+
+    _session = [NSURLSession sessionWithConfiguration:_configuration delegate:delegate delegateQueue:_delegateQueue];
+    DEBUG_DAV(1, @"Created session %@ with interposing delegate %@ and queue %@", _session, delegate, _delegateQueue);
     
     return self;
 }
@@ -71,7 +82,7 @@ RCS_ID("$Id$")
 {
     DEBUG_DAV(1, "Destroying connection");
 
-    OBFinishPortingLater("Should we let tasks finish or cancel them -- maybe make our caller specify which");
+    OBFinishPortingLater("<bug:///147931> (iOS-OmniOutliner Engineering: Should we let tasks finish or cancel them -- maybe make our caller specify which - in -[ODAVConnection_URLSession dealloc])");
     [_session finishTasksAndInvalidate];
     [_delegateQueue waitUntilAllOperationsAreFinished];
 }
@@ -112,6 +123,36 @@ RCS_ID("$Id$")
     return operation;
 }
 
+- (void)_taskCompleted:(NSURLSessionTask *)task error:(NSError *)error;
+{
+    /*
+     Radar 14557123: NSURLSession can send -URLSession:task:didCompleteWithError: twice for a task.
+     Cancelling a task and its normal completion can race and we can end up with two completion notifications.
+     */
+
+    ODAVOperation *op = [self _operationForTask:task isCompleting:YES];
+    [op _didCompleteWithError:error];
+
+    @synchronized(self) {
+        DEBUG_TASK(1, @"Removing operation %@ for task %@", op, task);
+        [_locked_runningOperationByTask removeObjectForKey:task];
+    }
+}
+
+@end
+
+@implementation ODAVConnectionDelegate_URLSession
+{
+    __weak ODAVConnection_URLSession *_weak_connection;
+}
+
+- initWithConnection:(ODAVConnection_URLSession *)connection;
+{
+    self = [super init];
+    _weak_connection = connection;
+    return self;
+}
+
 #pragma mark - NSURLSessionDelegate
 
 - (void)URLSession:(NSURLSession *)session didBecomeInvalidWithError:(NSError *)error;
@@ -125,8 +166,19 @@ RCS_ID("$Id$")
  completionHandler:(void (^)(NSURLSessionAuthChallengeDisposition disposition, NSURLCredential *credential))completionHandler;
 {
     DEBUG_DAV(1, "didReceiveChallenge:%@", challenge);
+
+    ODAVConnection_URLSession *connection = _weak_connection;
+    if (!connection) {
+        OBASSERT_NOT_REACHED("Connection delegate method called after deallocation");
+        if (completionHandler) {
+            completionHandler(NSURLSessionAuthChallengePerformDefaultHandling, nil);
+        }
+        return;
+    }
     
-    [self _handleChallenge:challenge operation:nil completionHandler:completionHandler];
+    // This is called for challenges that aren't related to a specific request, such as proxy authentication, TLS setup, Kerberos negotiation, etc.
+
+    [connection _handleChallenge:challenge operation:nil completionHandler:completionHandler];
 }
 
 #pragma mark - NSURLSessionTaskDelegate
@@ -138,7 +190,16 @@ willPerformHTTPRedirection:(NSHTTPURLResponse *)response
 {
     DEBUG_DAV(1, "task:%@ willPerformHTTPRedirection:%@ newRequest:%@", task, response, request);
     
-    ODAVOperation *op = [self _operationForTask:task];
+    ODAVConnection_URLSession *connection = _weak_connection;
+    if (!connection) {
+        OBASSERT_NOT_REACHED("Connection delegate method called after deallocation");
+        if (completionHandler) {
+            completionHandler(request);
+        }
+        return;
+    }
+
+    ODAVOperation *op = [connection _operationForTask:task];
     NSURLRequest *continuation = [op _willSendRequest:request redirectResponse:response];
     if (completionHandler)
         completionHandler(continuation);
@@ -150,10 +211,19 @@ didReceiveChallenge:(NSURLAuthenticationChallenge *)challenge
 {
     DEBUG_DAV(1, "task:%@ didReceiveChallenge:%@", task, challenge);
     
+    ODAVConnection_URLSession *connection = _weak_connection;
+    if (!connection) {
+        OBASSERT_NOT_REACHED("Connection delegate method called after deallocation");
+        if (completionHandler) {
+            completionHandler(NSURLSessionAuthChallengePerformDefaultHandling, nil);
+        }
+        return;
+    }
+
     // We seem to get the server trust challenge directed to the per-session method -URLSession:didReceiveChallenge:completionHandler:, but then the actual login credentials come through here. For now, we direct them to the same method.
     
-    ODAVOperation *operation = [self _operationForTask:task];
-    [self _handleChallenge:challenge operation:operation completionHandler:completionHandler];
+    ODAVOperation *operation = [connection _operationForTask:task];
+    [connection _handleChallenge:challenge operation:operation completionHandler:completionHandler];
 }
 
 - (void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task
@@ -161,18 +231,13 @@ didCompleteWithError:(NSError *)error;
 {
     DEBUG_DAV(1, "task:%@ didCompleteWithError:%@", task, error);
     
-    /*
-     Radar 14557123: NSURLSession can send -URLSession:task:didCompleteWithError: twice for a task.
-     Cancelling a task and its normal completion can race and we can end up with two completion notifications.
-     */
-    
-    ODAVOperation *op = [self _operationForTask:task isCompleting:YES];
-    [op _didCompleteWithError:error];
-    
-    @synchronized(self) {
-        DEBUG_TASK(1, @"Removing operation %@ for task %@", op, task);
-        [_locked_runningOperationByTask removeObjectForKey:task];
+    ODAVConnection_URLSession *connection = _weak_connection;
+    if (!connection) {
+        OBASSERT_NOT_REACHED("Connection delegate method called after deallocation");
+        return;
     }
+
+    [connection _taskCompleted:task error:error];
 }
 
 - (void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task
@@ -182,7 +247,13 @@ totalBytesExpectedToSend:(int64_t)totalBytesExpectedToSend;
 {
     DEBUG_DAV(1, "task:%@ didSendBodyData:%qd totalBytesSent:%qd totalBytesExpectedToSend:%qd", task, bytesSent, totalBytesSent, totalBytesExpectedToSend);
     
-    [[self _operationForTask:task] _didSendBodyData:bytesSent totalBytesSent:totalBytesSent totalBytesExpectedToSend:totalBytesSent];
+    ODAVConnection_URLSession *connection = _weak_connection;
+    if (!connection) {
+        OBASSERT_NOT_REACHED("Connection delegate method called after deallocation");
+        return;
+    }
+
+    [[connection _operationForTask:task] _didSendBodyData:bytesSent totalBytesSent:totalBytesSent totalBytesExpectedToSend:totalBytesSent];
 }
 
 #pragma mark - NSURLSessionDataDelegate
@@ -193,9 +264,18 @@ didReceiveResponse:(NSURLResponse *)response
 {
     DEBUG_DAV(1, "task:%@ didReceiveResponse:%@", dataTask, response);
     
-    [[self _operationForTask:dataTask] _didReceiveResponse:response];
+    ODAVConnection_URLSession *connection = _weak_connection;
+    if (!connection) {
+        OBASSERT_NOT_REACHED("Connection delegate method called after deallocation");
+        if (completionHandler) {
+            completionHandler(NSURLSessionResponseAllow);
+        }
+        return;
+    }
+
+    [[connection _operationForTask:dataTask] _didReceiveResponse:response];
     
-    OBFinishPortingLater("OmniDAV should have a means to do file member GETs as downloads to temporary files (NSURLSessionResponseBecomeDownload)");
+    OBFinishPortingLater("<bug:///147932> (iOS-OmniOutliner Bug: OmniDAV should have a means to do file member GETs as downloads to temporary files (NSURLSessionResponseBecomeDownload))");
     if (completionHandler)
         completionHandler(NSURLSessionResponseAllow);
 }
@@ -205,7 +285,13 @@ didReceiveResponse:(NSURLResponse *)response
 {
     DEBUG_DAV(1, "dataTask:%@ didReceiveData:<%@ length=%ld>", dataTask, [data class], [data length]);
     
-    [[self _operationForTask:dataTask] _didReceiveData:data];
+    ODAVConnection_URLSession *connection = _weak_connection;
+    if (!connection) {
+        OBASSERT_NOT_REACHED("Connection delegate method called after deallocation");
+        return;
+    }
+
+    [[connection _operationForTask:dataTask] _didReceiveData:data];
 }
 
 - (void)URLSession:(NSURLSession *)session dataTask:(NSURLSessionDataTask *)dataTask
@@ -213,7 +299,7 @@ didReceiveResponse:(NSURLResponse *)response
  completionHandler:(void (^)(NSCachedURLResponse *cachedResponse))completionHandler;
 {
     DEBUG_DAV(1, @"dataTask:%@ willCacheResponse:%@", dataTask, proposedResponse);
-    
+
     if (completionHandler)
         completionHandler(nil); // Don't cache DAV stuff if asked to.
 }

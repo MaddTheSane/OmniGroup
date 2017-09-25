@@ -1,4 +1,4 @@
-// Copyright 2010-2015 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -13,8 +13,14 @@
 
 #import "OUIParameters.h"
 #import <OmniUI/OUIInspector.h>
+#import <OmniUI/OUIInspectorAppearance.h>
+#import <OmniUI/UILabel-OUITheming.h>
 
 RCS_ID("$Id$");
+
+@interface OUIInspectorBackgroundView ()
+@property (nonatomic, strong, readwrite) UILabel *label;
+@end
 
 @implementation OUIInspectorBackgroundView
 
@@ -22,6 +28,15 @@ static id _commonInit(OUIInspectorBackgroundView *self)
 {
     self.opaque = YES;
     self.backgroundColor = [OUIInspector backgroundColor];
+    self.label = [[UILabel alloc] init];
+    self.label.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.label applyStyle:OUILabelStyleInspectorSliceInstructionText];
+    [self addSubview:self.label];
+    
+    [self.label.centerXAnchor constraintEqualToAnchor:self.centerXAnchor].active = YES;
+    [self.label.centerYAnchor constraintEqualToAnchor:self.centerYAnchor].active = YES;
+    
+    
     return self;
 }
 
@@ -39,6 +54,14 @@ static id _commonInit(OUIInspectorBackgroundView *self)
     return _commonInit(self);
 }
 
+- (void)willMoveToSuperview:(UIView *)superview;
+{
+    [super willMoveToSuperview:superview];
+    
+    if ([OUIInspectorAppearance inspectorAppearanceEnabled])
+        [self themedAppearanceDidChange:[OUIInspectorAppearance appearance]];
+}
+
 - (UIColor *)inspectorBackgroundViewColor;
 {
     return self.backgroundColor;
@@ -54,6 +77,15 @@ static id _commonInit(OUIInspectorBackgroundView *self)
 {
     super.backgroundColor = newValue;
     [self containingInspectorBackgroundViewColorChanged];
+}
+
+#pragma mark - OUIThemedAppearanceClient
+
+- (void)themedAppearanceDidChange:(OUIThemedAppearance *)changedAppearance;
+{
+    OUIInspectorAppearance *appearance = OB_CHECKED_CAST_OR_NIL(OUIInspectorAppearance, changedAppearance);
+    [super themedAppearanceDidChange:appearance];
+    self.backgroundColor = appearance.InspectorBackgroundColor;
 }
 
 @end

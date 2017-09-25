@@ -1,4 +1,4 @@
-// Copyright 1997-2016 Omni Development, Inc. All rights reserved.
+// Copyright 1997-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -14,9 +14,15 @@
 
 #import <OmniBase/OBUtilities.h>
 
+NS_ASSUME_NONNULL_BEGIN
+
 @interface NSWindow (OAExtensions)
 
+@property (class, nonatomic, readonly) BOOL hasTabbedWindowSupport;
+
 + (NSArray *)windowsInZOrder;
+
+@property (class, nonatomic, readonly, getter=isPerformingDisplayIfNeededBlocks) BOOL performingDisplayIfNeededBlocks;
 
 /// This block will be executed before -displayIfNeeded on *any* window.
 + (void)beforeAnyDisplayIfNeededPerformBlock:(void (^)(void))block;
@@ -38,7 +44,10 @@
 
 - (CGPoint)convertBaseToCGScreen:(NSPoint)windowPoint;
 
-- (IBAction)visualizeConstraintsForPickedView:(id)sender;
+- (IBAction)visualizeConstraintsForPickedView:(nullable id)sender;
+
+// 10.13 marks this weak and thus implicitly nullable. Add this property for use between pre-10.13 Swift code and 10.13 so conditional lets will compile on both targets.
+@property(nonatomic,readonly) NSResponder * _Nullable nullableFirstResponder;
 
 @end
 
@@ -50,4 +59,17 @@
 - (void)beforeDisplayIfNeededRecalculateKeyViewLoop;
 
 @end
+
+#pragma mark -
+
+@interface NSWindow (NSWindowTabbingExtensions)
+
+/// Temporarily sets the tabbing mode to the passed value, executes the block, then restore the previous value
+- (void)withTabbingMode:(NSWindowTabbingMode)tabbingMode performBlock:(void (^)(void))block;
+
+@end
+
+extern NSNotificationName const OAWindowUserTabbingPreferenceDidChange;
+
+NS_ASSUME_NONNULL_END
 

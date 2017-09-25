@@ -1,4 +1,4 @@
-// Copyright 2010-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -22,7 +22,7 @@ NSString * const OFCredentialsSecurityErrorDomain = @"com.omnigroup.OmniFoundati
 
 static NSString *_OFCertificateTrustPromptForErrorCode(NSInteger, NSString *);
 
-void _OFSecError(const char *caller, const char *function, OSStatus code, NSError **outError)
+void _OFSecError(const char *caller, const char *function, OSStatus code, NSError * __autoreleasing *outError)
 {
     NSString *errorMessage;
     
@@ -178,6 +178,39 @@ static NSString *_OFCertificateTrustPromptForErrorCode(NSInteger errorCode, NSSt
     }
 }
 
+NSURLCredential *OFTryApplyingTrustExceptions(NSURLAuthenticationChallenge *challenge, NSArray <NSData *> *storedExceptions)
+{
+    if (!storedExceptions)
+        return nil;
+    
+    NSUInteger trustExceptionCount = storedExceptions.count;
+    if (!trustExceptionCount)
+        return nil;
+    
+    SecTrustRef trustRef = challenge.protectionSpace.serverTrust;
+    SecTrustResultType trustEvaluationResult = -1;
+    if (SecTrustEvaluate(trustRef, &trustEvaluationResult) != noErr) {
+        // We can't even evaluate the trust ref. Something deeper is wrong than just an untrusted certificate.
+        return nil;
+    }
+    
+    // Check whether the trust status is one which we can't store exceptions for.
+    if (trustEvaluationResult == kSecTrustResultProceed || trustEvaluationResult == kSecTrustResultUnspecified || trustEvaluationResult == kSecTrustResultFatalTrustFailure)
+        return nil;
+    
+    // Give each of the exceptions a try.
+    for (NSUInteger trustExceptionIndex = 0; trustExceptionIndex < trustExceptionCount; trustExceptionIndex ++) {
+        if (SecTrustSetExceptions(trustRef, (__bridge CFDataRef)[storedExceptions objectAtIndex:trustExceptionIndex]) &&
+            SecTrustEvaluate(trustRef, &trustEvaluationResult) == noErr) {
+            // Did this work?
+            if (trustEvaluationResult == kSecTrustResultProceed || trustEvaluationResult == kSecTrustResultDeny || trustEvaluationResult == kSecTrustResultUnspecified || trustEvaluationResult == kSecTrustResultFatalTrustFailure)
+                return [NSURLCredential credentialForTrust:trustRef];
+        }
+    }
+    
+    return nil;
+}
+
 #if DEBUG
 NSString *OFCertificateTrustDurationName(OFCertificateTrustDuration disposition)
 {
@@ -217,5 +250,5 @@ NSOperation <OFCredentialChallengeDisposition> *OFImmediateCredentialResponse(NS
     op.disposition = disposition;
     op.credential = credential;
     [op start];
-    return op;
+    return [op autorelease];
 }

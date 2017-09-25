@@ -7,8 +7,13 @@
 //
 // $Id$
 
-#define OFDocEncryptionExposeName     @"ExposeName"
-#define OFDocEncryptionFileOptions    @"FileOptions"
+// String constants that can be placed in a schema dictionary
 
-#define OFDocEncryptionChildren       @"Children"
+#define OFDocEncryptionExposeName     @"Name"          // Value is the filename which this member should be exposed as in the encrypted wrapper
+#define OFDocEncryptionFileOptions    @"Options"       // Value is a boxed OFCMSOptions
+#define OFDocEncryptionChildren       @"Children"      // Value is a dictionary mapping names to schema dictionaries
 
+// Metadata keys supplied by our Spotlight helper methods.
+// Each importer will need to declare these itself.
+#define OFMDItemEncryptionRecipientCount         @"com_omnigroup_DocumentEncryption_recipientCount"
+#define OFMDItemEncryptionPassphraseIdentifier   @"com_omnigroup_DocumentEncryption_passphraseIdentifier"

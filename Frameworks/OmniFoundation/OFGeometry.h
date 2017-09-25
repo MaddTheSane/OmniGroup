@@ -1,4 +1,4 @@
-// Copyright 2002-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2002-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -96,4 +96,36 @@ static inline CGFloat OFSquareOfDistanceFromPointToCenterOfRect(CGPoint pt, CGRe
     CGFloat dX = CGRectGetMidX(rect) - pt.x;
     CGFloat dY = CGRectGetMidY(rect) - pt.y;
     return dX*dX + dY*dY;
+}
+
+// This is distance. If you really want to know accuracy of each dimension, check them separately.
+static inline BOOL OFPointEqualToPointWithAccuracy(CGPoint p1, CGPoint p2, CGFloat accuracy)
+{
+    CGFloat xDistance = p2.x - p1.x;
+    CGFloat yDistance = p2.y - p1.y;
+    CGFloat squaredDistance = xDistance*xDistance + yDistance*yDistance;
+    return squaredDistance < accuracy;
+}
+
+// Checking each dimension. Would area be more meaningful?
+static inline BOOL OFSizeEqualToSizeWithAccuracy(CGSize s1, CGSize s2, CGFloat accuracy)
+{
+    if (fabs(s1.width - s2.width) > accuracy) {
+        return false;
+    }
+    if (fabs(s1.height - s2.height) > accuracy) {
+        return false;
+    }
+    return true;
+}
+
+static inline BOOL OFRectEqualToRectWithAccuracy(CGRect r1, CGRect r2, CGFloat accuracy)
+{
+    return (OFSizeEqualToSizeWithAccuracy(r1.size, r2.size, accuracy) &&
+            OFPointEqualToPointWithAccuracy(r1.origin, r2.origin, accuracy));
+}
+
+static inline BOOL OFFloatEqualToFloatWithAccuracy(CGFloat f1, CGFloat f2, CGFloat accuracy)
+{
+    return fabs(f1 - f2) <= accuracy;
 }

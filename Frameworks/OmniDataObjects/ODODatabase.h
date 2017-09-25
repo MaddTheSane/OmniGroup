@@ -1,4 +1,4 @@
-// Copyright 2008-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2008-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -9,8 +9,8 @@
 
 #import <OmniFoundation/OFObject.h>
 
-@class NSString, NSURL, NSError, NSDictionary, NSMutableDictionary, NSPredicate;
-@class ODOModel, ODOEntity, ODOAttribute, ODOObjectID, ODOSQLStatement;
+@class NSPredicate, NSURL, NSError, NSString, NSArray;
+@class ODOModel, ODOEntity, ODOAttribute, ODOObjectID, ODOSQLConnection, ODOSQLStatement;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -18,14 +18,17 @@ extern BOOL ODOLogSQL; // Not set until +[ODODatabase initialize]
 
 @interface ODODatabase : OFObject
 
-- (id)initWithModel:(ODOModel *)model;
-@property(readonly) ODOModel *model;
+- (instancetype)initWithModel:(ODOModel *)model;
 
-@property(nullable, readonly) NSURL *connectedURL;
+@property (nullable, readonly) ODOSQLConnection *connection;
+@property (nullable, readonly) NSURL *connectedURL; // convenience for connection.URL
+@property (nonatomic, readonly) ODOModel *model;
+
 - (BOOL)connectToURL:(NSURL *)fileURL error:(NSError **)outError;
 - (BOOL)disconnect:(NSError **)outError;
 
-@property(readonly) BOOL isFreshlyCreated;
+@property(nonatomic, readonly, getter=isFreshlyCreated) BOOL freshlyCreated;
+
 - (void)didSave;
 
 // Values can be any plist type.  Setting a NSNull or nil will cause the metadata value to be removed.  Metadata changes are saved with the next normal save.
@@ -41,11 +44,13 @@ extern BOOL ODOLogSQL; // Not set until +[ODODatabase initialize]
 
 - (BOOL)fetchCommitedInt64Sum:(int64_t *)outSum fromAttribute:(ODOAttribute *)attribute entity:(ODOEntity *)entity matchingPredicate:(nullable NSPredicate *)predicate error:(NSError **)outError;
 
+- (nullable NSArray<NSArray<id> *> *)fetchCommittedAttributes:(NSArray<ODOAttribute *> *)attributes fromEntity:(ODOEntity *)entity matchingPredicate:(nullable NSPredicate *)predicate error:(NSError **)outError;
+
 // Dangerous API
 - (BOOL)executeSQLWithoutResults:(NSString *)sql error:(NSError **)outError;
 
 @end
 
-extern NSString * const ODODatabaseConnectedURLChangedNotification;
+extern NSNotificationName ODODatabaseConnectedURLChangedNotification;
 
 NS_ASSUME_NONNULL_END

@@ -1,4 +1,4 @@
-// Copyright 2010-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -13,6 +13,7 @@
 #import <OmniUI/OUIEmptyPaddingInspectorSlice.h>
 #import <OmniUI/OUIInspectorSliceView.h>
 #import <OmniUI/OUIStackedSlicesInspectorPane.h>
+#import <OmniUI/OUIThemedAppearance.h>
 #import <OmniUI/UIView-OUIExtensions.h>
 
 #import "OUIInspectorSlice-Internal.h"
@@ -57,7 +58,7 @@ OBDEPRECATED_METHOD(-minimumHeightForWidth:);
 {
     // Try to match the default UITableView insets for our default insets.
     static dispatch_once_t predicate;
-    static UIEdgeInsets alignmentInsets = (UIEdgeInsets) { .left = 15.0f, .right = 15.0f, .top = 0.0f, .bottom = 0.0f };
+    static UIEdgeInsets alignmentInsets = (UIEdgeInsets) { .left = 16, .right = 16, .top = 0.0f, .bottom = 0.0f };
     dispatch_once(&predicate, ^{
         UITableView *tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleGrouped];
         UIEdgeInsets separatorInsets = tableView.separatorInset;
@@ -102,7 +103,12 @@ OBDEPRECATED_METHOD(-minimumHeightForWidth:);
 + (NSString *)nibName;
 {
     // OUIAllocateViewController means we might get 'MyCustomFooInspectorSlice' for 'OUIFooInspectorSlice'. View controller's should be created so often that this would be too slow. One question is whether UINib is uniqued, though, since otherwise we perform extra I/O.
-    return OUICustomClassOriginalClassName(self);
+    // Swift classes prepend their module name to the value returned from NSStringFromClass(), which is in turn passed back from OUICustomClassOriginalClassName(). The compiled nib is extremely unlikely to have a module-scoped filename. Strip the leading module and dot before handing back the nib name.
+    NSString *className = OUICustomClassOriginalClassName(self);
+    NSRange dotRange  = [className rangeOfString:@"."];
+    if (dotRange.location != NSNotFound)
+        className = [className substringFromIndex:(dotRange.location + dotRange.length)];
+    return className;
 }
 
 + (NSBundle *)nibBundle;
@@ -148,6 +154,21 @@ OBDEPRECATED_METHOD(-minimumHeightForWidth:);
     OUIInspector *inspector = self.containingPane.inspector;
     OBASSERT(inspector);
     return inspector;
+}
+
+- (UIView *)contentView {
+    if (_contentView == nil) {
+        _contentView = [[UIView alloc] init];
+        _contentView.translatesAutoresizingMaskIntoConstraints = NO;
+        [self.view addSubview:_contentView];
+        
+        [_contentView.topAnchor constraintEqualToAnchor:self.view.topAnchor];
+        [_contentView.rightAnchor constraintEqualToAnchor:self.view.rightAnchor];
+        [_contentView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor];
+        [_contentView.leftAnchor constraintEqualToAnchor:self.view.leftAnchor];
+    }
+    
+    return _contentView;
 }
 
 - (void)setAlignmentInsets:(UIEdgeInsets)newValue;
@@ -484,6 +505,17 @@ OBDEPRECATED_METHOD(-minimumHeightForWidth:);
 {
     OBPRECONDITION(parent == nil || [parent isKindOfClass:[OUIStackedSlicesInspectorPane class]]);
     [super didMoveToParentViewController:parent];
+}
+
+#pragma mark - OUIThemedAppearance
+
+- (NSArray <id<OUIThemedAppearanceClient>> *)themedAppearanceChildClients;
+{
+    NSArray *clients = [super themedAppearanceChildClients];
+    if (_bottomSeparator)
+        clients = [clients arrayByAddingObject:_bottomSeparator];
+    
+    return clients;
 }
 
 @end

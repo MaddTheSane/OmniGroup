@@ -1,4 +1,4 @@
-// Copyright 2015-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2015-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -26,7 +26,6 @@
 #import <OmniUIDocument/OUIDocumentPreviewGenerator.h>
 #import <OmniUIDocument/OUIDocumentPreviewView.h>
 #import <OmniUIDocument/OUIDocumentPreviewingViewController.h>
-#import <OmniUIDocument/OUIDocumentProviderPreferencesViewController.h>
 #import <OmniUIDocument/OUIDocumentTitleView.h>
 #import <OmniUIDocument/OUIDocumentViewController.h>
 #import <OmniUIDocument/OUIExportOptionsType.h>
@@ -37,3 +36,4 @@
 #import <OmniUIDocument/OUIToolbarTitleButton.h>
 #import <OmniUIDocument/OmniUIDocumentAppearance.h>
 #import <OmniUIDocument/OmniUIDocumentImages.h>
+#import <OmniUIDocument/ODSFileItem-OUIDocumentExtensions.h>

@@ -1,4 +1,4 @@
-// Copyright 1997-2016 Omni Development, Inc. All rights reserved.
+// Copyright 1997-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -10,9 +10,9 @@
 #import <OmniFoundation/OFObject.h>
 #import <Foundation/NSGeometry.h>
 
-@class NSArray, NSBundle, NSMutableArray, NSMutableDictionary;
-@class NSBox, NSButton, NSImageView, NSMatrix, NSTabView, NSTextField, NSToolbar, NSView, NSWindow;
-@class OAPreferenceClient, OAPreferenceClientRecord, OAPreferencesIconView, OAPreferencesWindow;
+@class NSArray, NSBundle;
+@class NSToolbar, NSWindow;
+@class OAPreferenceClient, OAPreferenceClientRecord, OAPreferencesIconView;
 
 extern const NSLayoutPriority OAPreferenceClientControlBoxFixedWidthPriority;
 
@@ -52,13 +52,14 @@ typedef void (^OAPreferenceClientChangeCompletion)(__kindof OAPreferenceClient *
 - (void)setCurrentClientByClassName:(NSString *)name completion:(OAPreferenceClientChangeCompletion)completion;
 - (void)setCurrentClientRecord:(OAPreferenceClientRecord *)clientRecord completion:(OAPreferenceClientChangeCompletion)completion;
 - (void)reloadCurrentClient;
+- (void)resetInterface;
 - (NSArray <OAPreferenceClientRecord *> *)clientRecords;
 - (NSString *)defaultKeySuffix;
 - (OAPreferenceClientRecord *)clientRecordWithShortTitle:(NSString *)shortTitle;
 - (OAPreferenceClientRecord *)clientRecordWithIdentifier:(NSString *)identifier;
 - (OAPreferenceClient *)clientWithShortTitle:(NSString *)shortTitle;
 - (OAPreferenceClient *)clientWithIdentifier:(NSString *)identifier;
-- (OAPreferenceClient *)currentClient;
+@property(nonatomic,strong,readonly) OAPreferenceClient *currentClient;
 - (void)iconView:(OAPreferencesIconView *)iconView buttonHitAtIndex:(NSUInteger)index;
 - (void)validateRestoreDefaultsButton;
 
@@ -69,6 +70,8 @@ typedef void (^OAPreferenceClientChangeCompletion)(__kindof OAPreferenceClient *
 - (IBAction)showPreviousClient:(id)sender;
 - (IBAction)setCurrentClientFromToolbarItem:(id)sender;
 - (IBAction)showHelpForClient:(id)sender;
+
+@property (strong, nonatomic) NSToolbar *toolbar;
 
 @end
 

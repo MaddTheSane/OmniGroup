@@ -1,4 +1,4 @@
-// Copyright 2010-2015 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -44,13 +44,13 @@ static NSMutableArray *blocksWhileDisabled = nil;
    disableCount--;
     
     while (!disableCount && blocksWhileDisabled.count) {
-        void (^block)() = [blocksWhileDisabled objectAtIndex:0];
+        void (^block)(void) = [blocksWhileDisabled objectAtIndex:0];
         [blocksWhileDisabled removeObjectAtIndex:0];
         block();
     }
 }
 
-+ (void)_performOrQueueBlock:(void (^)())block;
++ (void)_performOrQueueBlock:(void (^)(void))block;
 {
     if (disableCount) {
         if (!blocksWhileDisabled)
@@ -171,8 +171,12 @@ static void _writePreviewsForFileItem(OUIDocumentPreviewGenerator *self, OFFileE
 {
     NSURL *fileURL = originalFileEdit.originalFileURL;
     
-    id <OUIDocumentPreviewGeneratorDelegate> delegate = self->_weak_delegate;
+    if (![self->_currentPreviewUpdatingFileItem isValid]) {
+        [self _finishedUpdatingPreview];
+        return;
+    }
     
+    id <OUIDocumentPreviewGeneratorDelegate> delegate = self->_weak_delegate;
     if (![delegate previewGenerator:self shouldGeneratePreviewForURL:fileURL]) {
         [OUIDocumentPreview writeEmptyPreviewsForFileEdit:originalFileEdit];
         [self _finishedUpdatingPreview];
@@ -226,9 +230,19 @@ static void _writePreviewsForFileItem(OUIDocumentPreviewGenerator *self, OFFileE
                 }];
             }];
         } else {
-            OUIDocumentHandleDocumentOpenFailure(document, ^(BOOL success){
-                [self _finishedUpdatingPreview];
-            });
+            if (document.isDocumentEncrypted) {
+                [OUIDocumentPreviewGenerator _performOrQueueBlock:^{
+                    OUIDocumentHandleDocumentOpenFailure(document, ^(BOOL success){
+                        OFFileEdit *fileEdit = document.fileItem.fileEdit;
+                        [OUIDocumentPreview writeEncryptedEmptyPreviewsForFileEdit:fileEdit fileURL:document.fileURL];
+                        [self _finishedUpdatingPreview];
+                    });
+                }];
+            } else {
+                OUIDocumentHandleDocumentOpenFailure(document, ^(BOOL success){
+                    [self _finishedUpdatingPreview];
+                });
+            }
         }
     }];
 }
@@ -302,8 +316,10 @@ static void _writePreviewsForFileItem(OUIDocumentPreviewGenerator *self, OFFileE
     // If there is user-interaction blocking work going on (moving items in the document picker, for example), try to stay out of the way of completion handlers that would resume user interaction.
     NSBlockOperation *previewOperation = [NSBlockOperation blockOperationWithBlock:^{
         OFFileEdit *fileEdit = _currentPreviewUpdatingFileItem.fileEdit;
-        OBASSERT(fileEdit);
-        _writePreviewsForFileItem(self, fileEdit);
+        if (fileEdit != nil) {
+            // It might be nil because it's the first time we've opened this external file item.
+            _writePreviewsForFileItem(self, fileEdit);
+        }
     }];
     previewOperation.queuePriority = NSOperationQueuePriorityLow;
     [[NSOperationQueue mainQueue] addOperation:previewOperation];

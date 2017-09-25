@@ -1,4 +1,4 @@
-// Copyright 2013-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2013-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -15,6 +15,13 @@
 
 RCS_ID("$Id$");
 
+// Right now log files go into ~/Documents, which is OK to clean up on iOS, but seems bad on the Mac since the user could intentionally be storing stuff there.
+#if TARGET_OS_IOS
+    #define REMOVE_OLD_LOG_FILES 1
+#else
+    #define REMOVE_OLD_LOG_FILES 0
+#endif
+
 inline void OBLog(OBLogger *logger, NSInteger messageLevel, NSString *format, ...)
 {
     if (logger == nil || messageLevel < logger.level)
@@ -26,7 +33,8 @@ inline void OBLog(OBLogger *logger, NSInteger messageLevel, NSString *format, ..
     va_end(args);
 }
 
-inline void OBLogS(OBLogger *logger, NSInteger messageLevel, NSString *message) {
+// should only be called from OBLogger.swift
+inline void OBLogSwiftVariadicCover(OBLogger *logger, NSInteger messageLevel, NSString *message) {
     OBLog(logger, messageLevel, message);
 }
 
@@ -49,9 +57,12 @@ static NSURL * _DocumentsDirectoryURL()
 }
 
 static NSString *_logFileSuffix = @".log";
+
+#if REMOVE_OLD_LOG_FILES
 // This is hacky time math, but we're only using it for cleaning up old log files, so approximations suffice:
 static NSTimeInterval _oneDayInSeconds = 24 * 60 * 60;
 static NSTimeInterval _oneWeekInSeconds = 7 * 24 * 60 * 60;
+#endif
 
 static void _ProcessLogFiles(NSString *loggerName, NSDate *olderThanDate, OBLogFileHandler handler)
 {
@@ -78,6 +89,7 @@ static void _ProcessLogFiles(NSString *loggerName, NSDate *olderThanDate, OBLogF
     }
 }
 
+#if REMOVE_OLD_LOG_FILES
 static void _RemoveLogFiles(NSString *loggerName, NSDate *olderThanDate)
 {
     _ProcessLogFiles(loggerName, olderThanDate, ^(NSURL *itemURL) {
@@ -87,6 +99,7 @@ static void _RemoveLogFiles(NSString *loggerName, NSDate *olderThanDate)
         }
     });
 }
+#endif
 
 @interface NSString (OBLoggerExtensions)
 - (BOOL)appendToURL:(NSURL *)url atomically:(BOOL)atomically error:(NSError **)error;
@@ -165,12 +178,14 @@ static void _setPOSIXError(NSError **error, NSString *description)
     
     const char *env = getenv([name UTF8String]); /* easier for command line tools */
     if (env)
-        level = strtoul(env, NULL, 0);
+        level = strtol(env, NULL, 0);
     else
         level = [[NSUserDefaults standardUserDefaults] integerForKey:name];
     
     if (level == 0) {
+#if REMOVE_OLD_LOG_FILES
         _RemoveLogFiles(name, nil);
+#endif
         return nil;
     }
 
@@ -189,12 +204,14 @@ static void _setPOSIXError(NSError **error, NSString *description)
     _fileLoggingQueue = [[NSOperationQueue alloc] init];
     _fileLoggingQueue.maxConcurrentOperationCount = 1;
 
+#if REMOVE_OLD_LOG_FILES
     NSDate *purgeBeforeDate = [NSDate dateWithTimeIntervalSinceNow: - _oneWeekInSeconds];
     _RemoveLogFiles(self.name, purgeBeforeDate);
     
     _logPurgeTimer = [NSTimer timerWithTimeInterval:_oneDayInSeconds target:self selector:@selector(_purgeOldLogFiles:) userInfo:nil repeats:YES];
     [[NSRunLoop mainRunLoop] addTimer:_logPurgeTimer forMode:NSDefaultRunLoopMode];
-    
+#endif
+
     return self;
 }
 
@@ -252,9 +269,12 @@ static void _setPOSIXError(NSError **error, NSString *description)
     return logFileURL;
 }
 
+#if REMOVE_OLD_LOG_FILES
 - (void)_purgeOldLogFiles:(NSTimer *)timer;
 {
     NSDate *purgeBeforeDate = [NSDate dateWithTimeIntervalSinceNow: - _oneWeekInSeconds];
     _RemoveLogFiles(self.name, purgeBeforeDate);
 }
+#endif
+
 @end

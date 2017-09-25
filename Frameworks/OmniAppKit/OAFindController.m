@@ -1,4 +1,4 @@
-// Copyright 1997-2016 Omni Development, Inc. All rights reserved.
+// Copyright 1997-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -38,6 +38,7 @@ RCS_ID("$Id$")
 @property (nonatomic, strong) IBOutlet NSBox *additionalControlsBox;
 @property (nonatomic, strong) IBOutlet NSView *stringControlsView;
 @property (nonatomic, strong) IBOutlet NSView *regularExpressionControlsView;
+@property (nonatomic, strong) NSCell *regularExpressionCell;
 
 - (id <OAFindPattern>)currentPatternWithBackwardsFlag:(BOOL)backwardsFlag;
 - (BOOL)findStringWithBackwardsFlag:(BOOL)backwardsFlag;
@@ -48,11 +49,44 @@ RCS_ID("$Id$")
 @implementation OAFindController
 {
     id <OAFindPattern> _currentPattern;
+    BOOL _hasMatch; // YES if the last find operation found a match.
 }
 
 - (instancetype)init;
 {
-    return [super initWithWindowNibName:@"OAFindPanel"];
+    if (!(self = [super initWithWindowNibName:@"OAFindPanel"])) {
+        return nil;
+    }
+
+    _supportsRegularExpressions = YES;
+
+    return self;
+}
+
+- (void)_updateFindTypeMatrix;
+{
+    NSInteger numberOfColumns = self.findTypeMatrix.numberOfColumns;
+    if (self.supportsRegularExpressions) {
+        if (numberOfColumns != 2) {
+            [self.findTypeMatrix addColumnWithCells:[NSArray arrayWithObject:self.regularExpressionCell]];
+            self.regularExpressionCell = nil;
+        }
+    } else {
+        if (numberOfColumns == 2) {
+            self.regularExpressionCell = [self.findTypeMatrix.cells objectAtIndex:1];
+            [self.findTypeMatrix removeColumn:1];
+            [self findTypeChanged:nil];
+        }
+    }
+}
+
+- (void)setSupportsRegularExpressions:(BOOL)supportsRegularExpressions;
+{
+    if (_supportsRegularExpressions == supportsRegularExpressions) {
+        return;
+    }
+    _supportsRegularExpressions = supportsRegularExpressions;
+    [self _updateFindTypeMatrix];
 }
 
 #pragma mark - Menu Actions
@@ -61,6 +95,11 @@ RCS_ID("$Id$")
 {
     NSWindow *window = [self window]; // Load interface if needed
     OBASSERT(window);
+
+    id target = self.target;
+    if ([target respondsToSelector:@selector(supportsFindRegularExpressions)]) {
+        self.supportsRegularExpressions = [target supportsFindRegularExpressions];
+    }
     
     [_searchTextField setStringValue:[self restoreFindText]];
     [window setFrame:[OAWindowCascade unobscuredWindowFrameFromStartingFrame:window.frame avoidingWindows:nil] display:YES animate:YES];
@@ -132,19 +171,25 @@ RCS_ID("$Id$")
         NSBeep();
         return;
     }
-    
-    NSString *replacement = [_replaceTextField stringValue];
-    if (_currentPattern) {
-        [_currentPattern setReplacementString:replacement];
-        replacement = [_currentPattern replacementStringForLastFind];
+
+    if (!_currentPattern || !_hasMatch) {
+        NSBeep();
+        return;
     }
+
+    NSString *replacement = [_replaceTextField stringValue];
+    [_currentPattern setReplacementString:replacement];
+    replacement = [_currentPattern replacementStringForLastFind];
 
     [target replaceSelectionWithString:replacement];
 }
 
 - (IBAction)replaceAndFind:(id)sender;
 {
-    [self replace:sender];
+    // Clicking 'Find and Replace' w/o having previously done a find should just find the next match.
+    if (_currentPattern && _hasMatch) {
+        [self replace:sender];
+    }
     [self panelFindNext:sender];
 }
 
@@ -356,6 +401,8 @@ RCS_ID("$Id$")
     }
     
     _currentPattern = pattern;
+    _hasMatch = NO;
+
     return pattern;
 }
 
@@ -365,7 +412,6 @@ RCS_ID("$Id$")
 {
     id <OAFindControllerTarget> target;
     id <OAFindPattern> pattern;
-    BOOL result;
 
     pattern = [self currentPatternWithBackwardsFlag:backwardsFlag];
     if (!pattern)
@@ -375,9 +421,9 @@ RCS_ID("$Id$")
     if (!target)
         return NO;
 
-    result = [target findPattern:pattern backwards:backwardsFlag wrap:YES];
+    _hasMatch = [target findPattern:pattern backwards:backwardsFlag wrap:YES];
     [_searchTextField selectText:self];
-    return result;
+    return _hasMatch;
 }
 
 - (NSText *)enterSelectionTarget;

@@ -1,4 +1,4 @@
-// Copyright 1997-2015 Omni Development, Inc. All rights reserved.
+// Copyright 1997-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -79,10 +79,8 @@ extern void OBLogAssertionFailure(const char *type, const char *expression, cons
 
 #if defined(OMNI_ASSERTIONS_ON)
     
-    extern void OBSetAssertionFailureHandler(OBAssertionFailureHandler handler);
-
     extern void OBInvokeAssertionFailureHandler(const char *type, const char *expression, const char *file, unsigned int lineNumber, NSString *fmt, ...) NS_FORMAT_FUNCTION(5,6) CLANG_ANALYZER_NORETURN;
-    extern void OBAssertFailed(void) __attribute__((noinline)); // This is a convenience breakpoint for in the debugger.
+    extern void OBAssertFailed(const char *message);
     
     extern BOOL OBEnableExpensiveAssertions;
     
@@ -108,6 +106,15 @@ extern void OBLogAssertionFailure(const char *type, const char *expression, cons
     do { \
         if ((condition) && !(implication)) \
             OBInvokeAssertionFailureHandler("ASSERT_IF", expr_str, file, line, @"" __VA_ARGS__); \
+    } while (NO)
+
+    #define OBASSERT_IFF(condition, implication, ...) _OBASSERT_IFF0(condition, implication, #condition " <==> " #implication, __FILE__, __LINE__, __VA_ARGS__)
+    #define _OBASSERT_IFF0(condition, implication, expr_str, file, line, ...) \
+    do { \
+        BOOL OB_condition_value_ = (condition)? YES : NO; \
+        BOOL OB_implication_value_ = (implication)? YES : NO; \
+        if ((OB_condition_value_ && !OB_implication_value_) || (!OB_condition_value_ && OB_implication_value_)) \
+            OBInvokeAssertionFailureHandler("ASSERT_IFF", expr_str, file, line, @"" __VA_ARGS__); \
     } while (NO)
 
     #define OBPRECONDITION_EXPENSIVE(expression, ...) do { \
@@ -168,14 +175,26 @@ extern void OBLogAssertionFailure(const char *type, const char *expression, cons
         #define OBASSERT_NOT_IMPLEMENTED(obj, selName) _OBAssertNotImplemented(obj, #selName)
     #endif
     
+    #define OBASSERT_DISPATCH_QUEUE(__queue) do { \
+        if (dispatch_assert_queue) { \
+            dispatch_assert_queue(__queue); \
+        } \
+    } while(0)
+    #define OBASSERT_DISPATCH_QUEUE_NOT(__queue) do { \
+        if (dispatch_assert_queue_not) { \
+            dispatch_assert_queue_not(__queue); \
+        } \
+    } while(0)
+
 #else	// else insert blank lines into the code
 
     #define OBPRECONDITION(expression, ...) do {} while(0)
     #define OBPOSTCONDITION(expression, ...) do {} while(0)
     #define OBINVARIANT(expression, ...) do {} while(0)
     #define OBASSERT(expression, ...) do {} while(0)
-    #define OBASSERT_NOT_REACHED(...) do { OBRecordBacktrace("NOTREACHED", OBBacktraceBuffer_OBAssertionFailure); } while(0)
+    #define OBASSERT_NOT_REACHED(...) do { OBRecordBacktrace("NOTREACHED", OBBacktraceBuffer_OBAssertionFailure); OBAnalyzerNotReached(); } while(0)
     #define OBASSERT_IF(condition, implication, ...) do {} while(0)
+    #define OBASSERT_IFF(condition, implication, ...) do {} while(0)
 
     #define OBPRECONDITION_EXPENSIVE(expression, ...) do {} while(0)
     #define OBPOSTCONDITION_EXPENSIVE(expression, ...) do {} while(0)
@@ -203,6 +222,9 @@ extern void OBLogAssertionFailure(const char *type, const char *expression, cons
         #define OBASSERT_NO_SUPER_BECAUSE(...)
         #define OBASSERT_NOT_IMPLEMENTED(obj, sel, ...)
     #endif
+    
+    #define OBASSERT_DISPATCH_QUEUE(__queue) do {} while(0)
+    #define OBASSERT_DISPATCH_QUEUE_NOT(__queue) do {} while(0)
 #endif
 #if defined(__cplusplus)
 } // extern "C"

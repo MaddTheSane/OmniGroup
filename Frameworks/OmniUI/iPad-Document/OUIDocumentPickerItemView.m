@@ -1,4 +1,4 @@
-// Copyright 2010-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -29,7 +29,7 @@ RCS_ID("$Id$");
 
 NSString * const OUIDocumentPickerItemViewPreviewsDidLoadNotification = @"OUIDocumentPickerItemViewPreviewsDidLoadNotification";
 
-@interface OUIDocumentPickerItemView (/*Private*/)
+@interface OUIDocumentPickerItemView () <UIDragInteractionDelegate>
 - (void)_loadOrDeferLoadingPreviewsForViewsStartingAtIndex:(NSUInteger)index;
 @property (nonatomic, strong) NSArray *cachedCustomAccessibilityActions;
 @property (nonatomic, strong) NSTimer *hackyTimerToGetRenamingToWorkWithProKeyboard;
@@ -136,6 +136,10 @@ static id _commonInit(OUIDocumentPickerItemView *self)
     [self _updateRasterizesLayer];
     
     [self _setupAccessibilityActions];
+
+    UIDragInteraction *dragInteraction = [[UIDragInteraction alloc] initWithDelegate:self];
+    [self addInteraction:dragInteraction];
+
     return self;
 }
 
@@ -673,8 +677,10 @@ static NSString * const EditingAnimationKey = @"editingAnimation";
     // In the case that a new document is appearing from iCloud/iTunes, the one second timestamp of the filesystem is not enough to ensure that our rewritten preview is considered newer than the placeholder that is initially generated. <bug:///75191> (Added a document to the iPad via iTunes File Sharing doesn't add a preview)
     for (OUIDocumentPreviewView *previewView in _contentView.sortedPreviewViews)
         previewView.preview.superseded = YES;
-    
-    [self loadPreviews];
+
+    if (self.window) {
+        [self loadPreviews];
+    }
 }
 
 - (NSArray *)loadedPreviews;
@@ -813,6 +819,37 @@ static NSString * const EditingAnimationKey = @"editingAnimation";
     }
     
     return YES;
+}
+
+#pragma mark - UIDragInteractionDelegate
+
+- (NSArray<UIDragItem *> *)_itemsForDragSession:(id<UIDragSession>)session;
+{
+    ODSItem *item = self.item;
+    if (![item isKindOfClass:[ODSFileItem class]])
+        return @[];
+    ODSFileItem *fileItem = (ODSFileItem *)item;
+
+    NSItemProvider *itemProvider = [[NSItemProvider alloc] init];
+    itemProvider.suggestedName = fileItem.name;
+    [itemProvider registerFileRepresentationForTypeIdentifier:fileItem.fileType fileOptions:NSItemProviderFileOptionOpenInPlace visibility:NSItemProviderRepresentationVisibilityAll loadHandler:^NSProgress * _Nullable(void (^ _Nonnull completionHandler)(NSURL * _Nullable, BOOL, NSError * _Nullable)) {
+        completionHandler(fileItem.fileURL, YES, nil);
+        return nil;
+    }];
+
+    UIDragItem *dragItem = [[UIDragItem alloc] initWithItemProvider:itemProvider];
+    dragItem.localObject = item;
+    return @[dragItem];
+}
+
+- (NSArray<UIDragItem *> *)dragInteraction:(UIDragInteraction *)interaction itemsForBeginningSession:(id<UIDragSession>)session;
+{
+    return [self _itemsForDragSession:session];
+}
+
+- (NSArray<UIDragItem *> *)dragInteraction:(UIDragInteraction *)interaction itemsForAddingToSession:(id<UIDragSession>)session withTouchAtPoint:(CGPoint)point;
+{
+    return [self _itemsForDragSession:session];
 }
 
 #pragma mark - Private
@@ -959,6 +996,8 @@ static NSString * const EditingAnimationKey = @"editingAnimation";
     } else if (_item.isUploaded == NO) {
         statusImage = [UIImage imageNamed:@"OUIDocumentStatusNotUploaded" inBundle:OMNI_BUNDLE compatibleWithTraitCollection:nil];
         OBASSERT(statusImage);
+    } else if (_item.scope.isExternal) {
+        statusImage = [UIImage imageNamed:@"OUIDocumentStatusLinked" inBundle:OMNI_BUNDLE compatibleWithTraitCollection:nil];
     }
     self.statusImage = statusImage;
     
@@ -979,7 +1018,7 @@ static NSString * const EditingAnimationKey = @"editingAnimation";
 
 - (void)_updateMetadataInteraction;
 {
-    if (self.isReadOnly || _item.scope == nil || ![_item.scope canRenameDocuments]) {
+    if (self.isReadOnly || !_item.isValid || _item.scope == nil || ![_item.scope canRenameDocuments]) {
         _metadataView.userInteractionEnabled = NO;
         return;
     }

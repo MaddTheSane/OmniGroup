@@ -1,4 +1,4 @@
-// Copyright 2008-2015 Omni Development, Inc. All rights reserved.
+// Copyright 2008-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -10,6 +10,7 @@
 #import <OmniDataObjects/ODOObject.h>
 #import <OmniDataObjects/ODOEditingContext.h>
 #import <OmniDataObjects/ODOModel.h>
+#import <OmniFoundation/NSArray-OFExtensions.h>
 
 #import "ODOProperty-Internal.h"
 #import "ODOEntity-SQL.h"
@@ -40,6 +41,7 @@ RCS_ID("$Id$")
     [_attributes release];
     [_primaryKeyAttribute release];
     [_snapshotProperties release];
+    [_snapshotAttributes release];
     [_schemaProperties release];
 
     // We just hold uniquing keys for the statements since the database can't close if we have open statements (and the model might be used by multiple database connections anyway).
@@ -50,6 +52,7 @@ RCS_ID("$Id$")
 
     [_derivedPropertyNameSet release];
     [_nonDateModifyingPropertyNameSet release];
+    [_calculatedTransientPropertyNameSet release];
     
     [super dealloc];
 }
@@ -232,6 +235,12 @@ static CFComparisonResult _comparePropertyName(const void *val1, const void *val
     return _nonDateModifyingPropertyNameSet;
 }
 
+- (NSSet *)calculatedTransientPropertyNameSet;
+{
+    OBPRECONDITION(_calculatedTransientPropertyNameSet);
+    return _calculatedTransientPropertyNameSet;
+}
+
 #ifdef DEBUG
 - (NSMutableDictionary *)debugDictionary;
 {
@@ -254,16 +263,13 @@ static CFComparisonResult _comparePropertyName(const void *val1, const void *val
     // primaryKey == nil means that the object should make a new primary key
     
     ODOEntity *entity = [self entityForName:entityName inEditingContext:context];
-    if (!entity) {
+    if (entity == nil) {
         OBASSERT_NOT_REACHED("Bad entity name passed in?");
         return nil;
     }
     
-    ODOObject *object = [[[entity instanceClass] alloc] initWithEditingContext:context entity:entity primaryKey:primaryKey];
-    [context insertObject:object]; // retains it
-    [object release];
-    
-    return object;
+    ODOObject *object = [[[entity instanceClass] alloc] initWithEntity:entity primaryKey:primaryKey insertingIntoEditingContext:context];
+    return [object autorelease];
 }
 
 + (id)insertNewObjectForEntityForName:(NSString *)entityName inEditingContext:(ODOEditingContext *)context;
@@ -296,6 +302,9 @@ static CFComparisonResult _compareByName(const void *val1, const void *val2, voi
 extern ODOEntity *ODOEntityCreate(NSString *entityName, NSString *insertKey, NSString *updateKey, NSString *deleteKey, NSString *pkQueryKey,
                                   NSString *instanceClassName, NSArray *properties)
 {
+    // We don't support inheritance, so require at least some properties for now. This may need revisiting in the future if we come up with a good use case for a zero-property entity, like an abstract parent.
+    OBPRECONDITION([properties count] > 0, "ODO expects every entity to have at least one property");
+    
     ODOEntity *entity = [[ODOEntity alloc] init];
     entity->_nonretained_model = (id)0xdeadbeef; // TODO: Hook this up
 
@@ -392,8 +401,11 @@ extern ODOEntity *ODOEntityCreate(NSString *entityName, NSString *insertKey, NSS
     OBASSERT(OFCFArrayIsSortedAscendingUsingFunction((CFArrayRef)entity->_properties, _compareByName, NULL));
     
     // Make immutable CFArrays that do NOT use CFEqual for equality, but just pointer equality (since we've interned our property names and selectors are pointer-uniqued).
-    {
-        CFIndex propertyCount = [entity->_properties count];
+    CFIndex propertyCount = [entity->_properties count];
+    if (propertyCount == 0) { // Avoid clang-sa warnings about malloc(0)
+        entity->_propertyGetSelectors = CFArrayCreate(kCFAllocatorDefault, NULL, 0, NULL);
+        entity->_propertySetSelectors = CFArrayCreate(kCFAllocatorDefault, NULL, 0, NULL);
+    } else {
         NSString **propertyNamesCArray = malloc(sizeof(NSString *) * propertyCount);
 
         for (CFIndex propertyIndex = 0; propertyIndex < propertyCount; propertyIndex++)
@@ -411,8 +423,8 @@ extern ODOEntity *ODOEntityCreate(NSString *entityName, NSString *insertKey, NSS
         
         
         // Some of the setters may be NULL (eventually) when we support read-only properties.
-        SEL *getters = malloc(sizeof(SEL) * MAX(propertyCount, 1)); // Avoid clang-sa warning about malloc(0)
-        SEL *setters = malloc(sizeof(SEL) * MAX(propertyCount, 1));
+        SEL *getters = malloc(sizeof(SEL) * propertyCount);
+        SEL *setters = malloc(sizeof(SEL) * propertyCount);
         
         for (CFIndex propertyIndex = 0; propertyIndex < propertyCount; propertyIndex++) {
             ODOProperty *property = [entity->_properties objectAtIndex:propertyIndex];
@@ -456,6 +468,15 @@ void ODOEntityBind(ODOEntity *self, ODOModel *model)
     _snapshotProperties = [[NSArray alloc] initWithArray:snapshotProperties];
     [snapshotProperties release];
     
+    _snapshotAttributes = [[_snapshotProperties arrayByPerformingBlock:^(ODOProperty *prop){
+        struct _ODOPropertyFlags flags = ODOPropertyFlags(prop);
+        if (!flags.relationship) {
+            return (ODOAttribute *)prop;
+        } else {
+            return (ODOAttribute *)nil;
+        }
+    }] copy];
+
     // Since we don't support many-to-many relationships, to-manys are totally derived from the inverse to-one.  Let the instance class add more derived properties.
     NSMutableSet *derivedPropertyNameSet = [NSMutableSet set];
     [_instanceClass addDerivedPropertyNames:derivedPropertyNameSet withEntity:self];
@@ -474,12 +495,22 @@ void ODOEntityBind(ODOEntity *self, ODOModel *model)
         }
     }
 
-    for (ODORelationship *rel in _toManyRelationships)
+    for (ODORelationship *rel in _toManyRelationships) {
         OBASSERT([derivedPropertyNameSet member:rel.name]);
+    }
 #endif
+    
+    NSMutableSet *calculatedTransientPropertyNameSet = [NSMutableSet set];
+    for (ODOProperty *property in _properties) {
+        struct _ODOPropertyFlags flags = ODOPropertyFlags(property);
+        if (!flags.relationship && flags.transient && flags.calculated) {
+            [calculatedTransientPropertyNameSet addObject:property.name];
+        }
+    }
     
     _derivedPropertyNameSet = [derivedPropertyNameSet copy];
     _nonDateModifyingPropertyNameSet = [nonDateModifyingPropertyNameSet copy];
+    _calculatedTransientPropertyNameSet = [calculatedTransientPropertyNameSet copy];
 
     // Old API that our instance class shouldn't try to implement any more since we aren't going to use it!
     OBASSERT(OBClassImplementingMethod(_instanceClass, @selector(derivedPropertyNameSet)) == Nil);
@@ -489,10 +520,16 @@ void ODOEntityBind(ODOEntity *self, ODOModel *model)
     OBASSERT(ODOPropertySetterImpl(_primaryKeyAttribute) == NULL);
 }
 
-- (NSArray *)snapshotProperties;
+- (NSArray <__kindof ODOProperty *> *)snapshotProperties;
 {
     OBPRECONDITION(_snapshotProperties);
     return _snapshotProperties;
+}
+
+- (NSArray <ODOAttribute *> *)snapshotAttributes;
+{
+    OBPRECONDITION(_snapshotAttributes);
+    return _snapshotAttributes;
 }
 
 - (ODOProperty *)propertyWithSnapshotIndex:(NSUInteger)snapshotIndex;

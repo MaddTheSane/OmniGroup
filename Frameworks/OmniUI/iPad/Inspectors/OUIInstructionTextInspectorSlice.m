@@ -1,4 +1,4 @@
-// Copyright 2010-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -8,6 +8,7 @@
 #import <OmniUI/OUIInstructionTextInspectorSlice.h>
 
 #import <OmniUI/OUIInspector.h>
+#import <OmniUI/OUIInspectorAppearance.h>
 #import <OmniUI/OUIInspectorSlice.h>
 #import <OmniUI/OUIInspectorWell.h>
 #import <OmniUI/OUIDrawing.h>
@@ -72,43 +73,67 @@ RCS_ID("$Id$");
 
 - (BOOL)includesInspectorSliceGroupSpacerOnTop;
 {
-    return YES;
+    CGFloat topInset = [self class].sliceAlignmentInsets.top;
+    return (topInset > 0);
 }
 
 - (BOOL)includesInspectorSliceGroupSpacerOnBottom;
 {
-    return YES;
+    CGFloat bottomInset = [self class].sliceAlignmentInsets.bottom;
+    return (bottomInset > 0);
 }
 
 #pragma mark - UIViewController subclass
 
 - (void)loadView;
 {
-    UIView *containerView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, [OUIInspector defaultInspectorContentWidth], 0)];
-    self.label = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, [OUIInspector defaultInspectorContentWidth], 0)];
+    self.contentView = [[UIView alloc] init];
+    self.contentView.translatesAutoresizingMaskIntoConstraints = NO;
+    
+    self.label = [[UILabel alloc] init];
+    self.label.translatesAutoresizingMaskIntoConstraints = NO;
     [self.label applyStyle:OUILabelStyleInspectorSliceInstructionText];
     
     self.label.numberOfLines = 0; // No limit
     self.label.text = _instructionText;
     self.label.lineBreakMode = NSLineBreakByWordWrapping;
 
-    [containerView addSubview:self.label];
+    [self.contentView addSubview:self.label];
 
     //constraints
-    containerView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.label.translatesAutoresizingMaskIntoConstraints = NO;
 
     [NSLayoutConstraint activateConstraints:
      @[
-       [self.label.leftAnchor constraintEqualToAnchor:containerView.layoutMarginsGuide.leftAnchor],
-       [self.label.rightAnchor constraintEqualToAnchor:containerView.layoutMarginsGuide.rightAnchor],
-       [self.label.topAnchor constraintEqualToAnchor:containerView.topAnchor constant:self.class.sliceAlignmentInsets.top],
-       [self.label.bottomAnchor constraintEqualToAnchor:containerView.bottomAnchor constant:self.class.sliceAlignmentInsets.bottom]
+       [self.label.leftAnchor constraintEqualToAnchor:self.contentView.layoutMarginsGuide.leftAnchor],
+       [self.label.rightAnchor constraintEqualToAnchor:self.contentView.layoutMarginsGuide.rightAnchor],
+       [self.label.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:self.class.sliceAlignmentInsets.top],
+       [self.label.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:self.class.sliceAlignmentInsets.bottom]
        ]];
 
-    self.view = containerView;
+    UIView *view = [[UIView alloc] init];
+    [view addSubview:self.contentView];
+    
+    [self.contentView.topAnchor constraintEqualToAnchor:view.topAnchor].active = YES;
+    [self.contentView.rightAnchor constraintEqualToAnchor:view.rightAnchor].active = YES;
+    [self.contentView.bottomAnchor constraintEqualToAnchor:view.bottomAnchor].active = YES;
+    [self.contentView.leftAnchor constraintEqualToAnchor:view.leftAnchor].active = YES;
+    
+    self.view = view;
     
     [self sizeChanged];
+}
+
+#pragma mark OUIInspectorThemedApperance
+
+- (void)themedAppearanceDidChange:(OUIThemedAppearance *)changedAppearance;
+{
+    [super themedAppearanceDidChange:changedAppearance];
+    
+    OUIInspectorAppearance *appearance = OB_CHECKED_CAST_OR_NIL(OUIInspectorAppearance, changedAppearance);
+    
+    self.contentView.backgroundColor = appearance.InspectorBackgroundColor;
+    self.label.textColor = appearance.InspectorTextColor;
+    
 }
 
 @end

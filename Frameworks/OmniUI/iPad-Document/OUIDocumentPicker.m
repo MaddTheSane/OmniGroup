@@ -1,4 +1,4 @@
-// Copyright 2010-2015 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -18,7 +18,6 @@
 #import <OmniUIDocument/OUIDocumentCreationTemplatePickerViewController.h>
 #import <OmniUIDocument/OUIDocumentPickerHomeScreenViewController.h>
 #import <OmniUIDocument/OUIDocumentPickerViewController.h>
-#import <OmniUIDocument/OUIDocumentProviderPreferencesViewController.h>
 #import <OmniUIDocument/OmniUIDocumentAppearance.h>
 #import <OmniUI/UIPopoverPresentationController-OUIExtensions.h>
 
@@ -55,19 +54,6 @@ RCS_ID("$Id$")
         return nil;
     
     _documentStore = documentStore;
-    
-    [[NSNotificationCenter defaultCenter] addObserverForName:OUIDocumentProviderPreferencesCloudDocumentsPreferenceTurnedOffNotification
-                                                      object:nil
-                                                       queue:[NSOperationQueue mainQueue]
-                                                  usingBlock:^(NSNotification *note) {
-                                                      if ([[self.topLevelNavigationController.viewControllers lastObject] isKindOfClass:[OUIDocumentPickerViewController class]]) {
-                                                          if ([[(OUIDocumentPickerViewController*)[self.topLevelNavigationController.viewControllers lastObject] selectedScope] isExternal]) {
-                                                              [self dismissViewControllerAnimated:YES completion:^{
-                                                                  [self.topLevelNavigationController popViewControllerAnimated:YES];
-                                                              }];
-                                                          }
-                                                      }
-                                                  }];
     
     return self;
 }
@@ -213,15 +199,31 @@ RCS_ID("$Id$")
     [self.topLevelNavigationController setViewControllers:newViewControllers animated:animated];
 }
 
-- (void)navigateToContainerForItem:(ODSItem *)item dismissingAnyOpenDocument:(BOOL)dismissOpenDocument animated:(BOOL)animated;
+
+/**
+ @param item The thing we want visible in the document picker
+ @param dismissOpenDocument Should we go ahead and hide the document?
+ @param animated
+ @return Did we find a container to navigate to?
+ */
+- (BOOL)navigateToContainerForItem:(ODSItem *)item dismissingAnyOpenDocument:(BOOL)dismissOpenDocument animated:(BOOL)animated;
 {
     UINavigationController *topLevelNavController = self.topLevelNavigationController;
 
-    void (^completionBlock)() = ^() {
-        ODSScope *scope = item.scope;
-        if (!scope || ![_documentStore.scopes containsObject:scope]) {
-            return;
-        } else if (topLevelNavController.viewControllers.count > 1
+    __block ODSScope *scope = item.scope;
+    if (!scope || [scope isExternal] || ![_documentStore.scopes containsObject:scope]) {
+        // The item is external or otherwise unfindable
+        return NO;
+    }
+
+    ODSFolderItem* containingFolder = [scope folderItemContainingItem:item];
+    if (containingFolder == nil && ![scope.rootFolder.childItems containsObject:item]) {
+        // The scope doesn't have it.
+        return NO;
+    }
+
+    void (^completionBlock)(void) = ^() {
+        if (topLevelNavController.viewControllers.count > 1
                    && ![topLevelNavController.viewControllers.lastObject isKindOfClass:[OUIDocumentCreationTemplatePickerViewController class]]
                    && [topLevelNavController.viewControllers.lastObject respondsToSelector:@selector(filteredItems)]
                    && [[(OUIDocumentPickerViewController *)topLevelNavController.viewControllers.lastObject filteredItems] containsObject:item]) {
@@ -243,10 +245,25 @@ RCS_ID("$Id$")
     } else {
         completionBlock();
     }
+    return YES;
+}
+
+// Navigate to the item if possible, otherwise navigate *somewhere* sensible
+- (void)navigateToBestEffortContainerForItem:(ODSFileItem *)fileItem
+{
+    BOOL success = [self navigateToContainerForItem:fileItem dismissingAnyOpenDocument:NO animated:NO];
+    if (!success) {
+        [self navigateToScope:[self localDocumentsScope] animated:NO];
+    }
 }
 
 - (void)navigateToScope:(ODSScope *)scope animated:(BOOL)animated;
 {
+#if defined(DEBUG_lizard)
+    if ([scope isExternal]) {
+        OBStopInDebugger("<bug:///147708> (Frameworks-iOS Bug: Remove Other Documents)");
+    }
+#endif
     [self _endEditingMode];
     
     // dismiss any modals
@@ -424,6 +441,9 @@ RCS_ID("$Id$")
         }
     }
     
+    if ([_delegate respondsToSelector:@selector(documentPicker:viewWillAppear:)])
+        [_delegate documentPicker:self viewWillAppear:animated];
+
     [super viewWillAppear:animated];
 }
 
@@ -442,8 +462,13 @@ RCS_ID("$Id$")
     UIImage *backgroundImage;
     UIColor *barTintColor;
     NSDictionary *barTitleAttributes;
+    BOOL wantsVisibleNavigationBarAtRoot = NO;
     
-    if (!_isSetUpForCompact && (viewController == _homeScreenContainer || viewController == _homeScreenViewController)) {
+    if ([self.delegate respondsToSelector:@selector(documentPickerWantsVisibleNavigationBarAtRoot:)]) {
+        wantsVisibleNavigationBarAtRoot = [self.delegate documentPickerWantsVisibleNavigationBarAtRoot:self];
+    }
+    
+    if (!wantsVisibleNavigationBarAtRoot && (!_isSetUpForCompact && (viewController == _homeScreenContainer || viewController == _homeScreenViewController))) {
         static UIImage *blankImage;
         static dispatch_once_t onceToken;
         dispatch_once(&onceToken, ^{

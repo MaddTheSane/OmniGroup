@@ -1,11 +1,11 @@
-// Copyright 2014-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2014-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
 // distributed with this project and can also be found at
 // <http://www.omnigroup.com/developer/sourcecode/sourcelicense/>.
 
-#import "OFTestCase.h"
+#import "OFCryptoTest.h"
 
 #import <OmniBase/macros.h>
 #import <OmniBase/rcsid.h>
@@ -16,28 +16,29 @@
 #import <OmniFoundation/OFASN1Utilities.h>
 #import <OmniFoundation/NSData-OFEncoding.h>
 #import <OmniFoundation/OFSecurityUtilities.h>
+#import <OmniFoundation/OFSymmetricKeywrap.h>
 @import OmniFoundation.Private;
 
 RCS_ID("$Id$");
 
 #define DAT(x) [NSData dataWithBytesNoCopy:(x) length:sizeof(x) freeWhenDone:NO]
 
-@interface OFCryptoTests : OFTestCase
-@end
-
 @implementation OFCryptoTests
 
-- (void)testKeyWrap;
+/* We're just testing Apple's implementation of RFC3394 KeyWrap here, since Apple probably doesn't */
+
+- (void)testSymmetricKeyWrapSizeComputation;
 {
-    uint8_t buffer[512];
-    
-    /* We're just testing Apple's implementation of RFC3394 KeyWrap here, since Apple probably doesn't */
-    
     /* Size computation. RFC3394 only operates on whole numbers of 64-bit halfblocks, and the output is always 64 bits (8 bytes) wider than the input. */
     XCTAssertEqual(CCSymmetricWrappedSize(kCCWRAPAES, 16), (size_t)24);
     XCTAssertEqual(CCSymmetricWrappedSize(kCCWRAPAES, 24), (size_t)32);
     XCTAssertEqual(CCSymmetricUnwrappedSize(kCCWRAPAES, 32), (size_t)24);
     XCTAssertEqual(CCSymmetricUnwrappedSize(kCCWRAPAES, 24), (size_t)16);
+}
+
+- (void)testSymmetricKeyWrapRFC3394Vectors;
+{
+    uint8_t buffer[512];
     
     /* Some test vectors from RFC3394. Apple's tests include these, so they're kind of redundant here, but whatever */
 #define TEST_WRAP(fun, inp, outp) { size_t dummy = sizeof(buffer); memset(buffer, '?', sizeof(buffer)); int rv = fun(kCCWRAPAES, CCrfc3394_iv, CCrfc3394_ivLen, kek, sizeof(kek), inp, sizeof(inp), buffer, &dummy); XCTAssertEqual(rv, kCCSuccess); XCTAssert(memcmp(buffer, outp, sizeof(outp)) == 0); }
@@ -49,6 +50,7 @@ RCS_ID("$Id$");
         
         TEST_WRAP(CCSymmetricKeyWrap, cek, wrapped);
         TEST_WRAP(CCSymmetricKeyUnwrap, wrapped, cek);
+        TEST_WRAP(OFSymmetricKeyUnwrap, wrapped, cek);
     }
     
     {
@@ -58,6 +60,7 @@ RCS_ID("$Id$");
         
         TEST_WRAP(CCSymmetricKeyWrap, cek, wrapped);
         TEST_WRAP(CCSymmetricKeyUnwrap, wrapped, cek);
+        TEST_WRAP(OFSymmetricKeyUnwrap, wrapped, cek);
     }
     
     {
@@ -67,30 +70,41 @@ RCS_ID("$Id$");
         
         TEST_WRAP(CCSymmetricKeyWrap, cek, wrapped);
         TEST_WRAP(CCSymmetricKeyUnwrap, wrapped, cek);
+        TEST_WRAP(OFSymmetricKeyUnwrap, wrapped, cek);
     }
-
     
+#undef TEST_WRAP
+}
+
+- (void)testSymmetricKeyWrapIntegrityChecks;
+{
     /* Verify that Apple's function is actually checking the integrity field / IV --- this is the important part of these tests, since Apple doesn't unit-test this */
-    {
-        static const uint8_t kek[] = { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F };
-        
-        /* A garbled wrapped value */
-        static const uint8_t wrapped1[] = { 0x1F, 0xA6, 0x8B, 0x0A, 0x81, 0x12, 0xB4, 0x46, 0xAE, 0xF3, 0x4B, 0xD8, 0xFB, 0x5A, 0x7B, 0x82, 0x9D, 0x3E, 0x86, 0x23, 0x71, 0xD2, 0xCF, 0xE5 };
-        
-        size_t dummy = sizeof(buffer);
-        int rv = CCSymmetricKeyUnwrap(kCCWRAPAES, CCrfc3394_iv, CCrfc3394_ivLen, kek, sizeof(kek), wrapped1, sizeof(wrapped1), buffer, &dummy);
-        XCTAssertNotEqual(rv, kCCSuccess);
-        
-        /* A wrapped value encrypted with a different IV */
-        static const uint8_t wrapped2[] = { 0xEB, 0xBB, 0x15, 0x88, 0x2, 0xE9, 0x75, 0xE2, 0x3F, 0xB6, 0xAE, 0x0, 0x7F, 0x37, 0x83, 0x55, 0xF6, 0x13, 0xF4, 0x5E, 0x8A, 0x1F, 0x25, 0x6A };
-        
-        dummy = sizeof(buffer);
-        rv = CCSymmetricKeyUnwrap(kCCWRAPAES, CCrfc3394_iv, CCrfc3394_ivLen, kek, sizeof(kek), wrapped2, sizeof(wrapped2), buffer, &dummy);
-        XCTAssertNotEqual(rv, kCCSuccess);
-    }
+    uint8_t buffer[512];
+    static const uint8_t kek[] = { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F };
+    
+    /* A garbled wrapped value */
+    static const uint8_t wrapped1[] = { 0x1F, 0xA6, 0x8B, 0x0A, 0x81, 0x12, 0xB4, 0x46, 0xAE, 0xF3, 0x4B, 0xD8, 0xFB, 0x5A, 0x7B, 0x82, 0x9D, 0x3E, 0x86, 0x23, 0x71, 0xD2, 0xCF, 0xE5 };
+    
+    size_t dummy = sizeof(buffer);
+    
+    int rv = CCSymmetricKeyUnwrap(kCCWRAPAES, CCrfc3394_iv, CCrfc3394_ivLen, kek, sizeof(kek), wrapped1, sizeof(wrapped1), buffer, &dummy);
+    XCTAssertNotEqual(rv, kCCSuccess);
+    
+    int ofrv = OFSymmetricKeyUnwrap(kCCWRAPAES, CCrfc3394_iv, CCrfc3394_ivLen, kek, sizeof(kek), wrapped1, sizeof(wrapped1), buffer, &dummy);
+    XCTAssertEqual(ofrv, kCCDecodeError); // The OF wrapper function should provide a more specific error
+    
+    /* A wrapped value encrypted with a different IV */
+    static const uint8_t wrapped2[] = { 0xEB, 0xBB, 0x15, 0x88, 0x2, 0xE9, 0x75, 0xE2, 0x3F, 0xB6, 0xAE, 0x0, 0x7F, 0x37, 0x83, 0x55, 0xF6, 0x13, 0xF4, 0x5E, 0x8A, 0x1F, 0x25, 0x6A };
+    
+    dummy = sizeof(buffer);
+    
+    rv = CCSymmetricKeyUnwrap(kCCWRAPAES, CCrfc3394_iv, CCrfc3394_ivLen, kek, sizeof(kek), wrapped2, sizeof(wrapped2), buffer, &dummy);
+    XCTAssertNotEqual(rv, kCCSuccess);
+    
+    ofrv = OFSymmetricKeyUnwrap(kCCWRAPAES, CCrfc3394_iv, CCrfc3394_ivLen, kek, sizeof(kek), wrapped2, sizeof(wrapped2), buffer, &dummy);
+    XCTAssertEqual(ofrv, kCCDecodeError); // The OF wrapper function should provide a more specific error
 
     /* Note that CCSymmetricKeyUnwrap() does not check for output buffer overrun in CommonCrypto-60061 -- in the released code, the overrun check is commented out (probably because it is wrong: they swapped <= and >= ). Not even bothering to file a RADAR on that one... they don't even look at ivLen at all, either...*/
-
 }
 
 #if 0
@@ -370,7 +384,7 @@ static void fpstr(NSString *s, FILE *fp)
                                     [NSDate dateWithTimeIntervalSince1970:1455476195] ]));
 
     unsigned int keySize = 0;
-    XCTAssertEqual(OFASN1KeyInfoGetAlgorithm(spki, &keySize, NULL), ka_RSA);
+    XCTAssertEqual(OFASN1KeyInfoGetAlgorithm(spki, &keySize, NULL, NULL), ka_RSA);
     XCTAssertEqual(keySize, 2048u);
     
     SecCertificateRef cfCert = SecCertificateCreateWithData(kCFAllocatorDefault, (__bridge CFDataRef)cert);
@@ -419,7 +433,7 @@ static void fpstr(NSString *s, FILE *fp)
                                     [NSDate dateWithTimeIntervalSince1970:1423705914] ]));
     
     keySize = 0;
-    XCTAssertEqual(OFASN1KeyInfoGetAlgorithm(spki, &keySize, NULL), ka_EC);
+    XCTAssertEqual(OFASN1KeyInfoGetAlgorithm(spki, &keySize, NULL, NULL), ka_EC);
     XCTAssertEqual(keySize, 256u);
     
     cfCert = SecCertificateCreateWithData(kCFAllocatorDefault, (__bridge CFDataRef)cert);

@@ -8,7 +8,6 @@
 // $Id$
 
 #import <OmniInspector/OAApplication-OIExtensions.h>
-#import <OmniInspector/OAToolbarWindowController-OIExtensions.h>
 
 #import <OmniInspector/OIAppearance.h>
 #import <OmniInspector/OIButtonMatrixBackgroundView.h>
@@ -24,7 +23,6 @@
 #import <OmniInspector/OIInspectorWindow.h>
 #import <OmniInspector/OIMatrix.h>
 #import <OmniInspector/OIScrollingTabbedInspector.h>
-#import <OmniInspector/OISectionedInspector.h>
 #import <OmniInspector/OIStackedSlicesInspector.h>
 #import <OmniInspector/OITabCell.h>
 #import <OmniInspector/OITabMatrix.h>

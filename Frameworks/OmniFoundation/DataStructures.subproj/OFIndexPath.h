@@ -1,4 +1,4 @@
-// Copyright 2008-2011, 2013 Omni Development, Inc. All rights reserved.
+// Copyright 2008-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -9,8 +9,9 @@
 
 #import <OmniFoundation/OFObject.h>
 
+NS_ASSUME_NONNULL_BEGIN
 
-@interface OFIndexPath : OFObject
+@interface OFIndexPath : OFObject <NSCopying>
 
 + (OFIndexPath *)emptyIndexPath;
 + (OFIndexPath *)indexPathWithIndex:(NSUInteger)anIndex;
@@ -19,7 +20,7 @@
 - (OFIndexPath *)indexPathByRemovingLastIndex;
 
 - (NSUInteger)indexAtPosition:(NSUInteger)position;
-- (NSUInteger)length;
+@property (nonatomic, readonly) NSUInteger length;
 
 - (void)getIndexes:(NSUInteger *)indexes;
 - (void)enumerateIndexesUsingBlock:(void (^)(NSUInteger index, BOOL *stop))block;
@@ -28,3 +29,12 @@
 - (NSComparisonResult)parentsLastCompare:(OFIndexPath *)otherObject;
 
 @end
+
+@interface OFIndexPath (PropertyListSerialization)
+
++ (OFIndexPath *)indexPathWithPropertyListRepresentation:(NSArray<NSNumber *> *)propertyListRepresentation;
+@property (nonatomic, readonly) NSArray<NSNumber *> *propertyListRepresentation;
+
+@end
+
+NS_ASSUME_NONNULL_END

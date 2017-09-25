@@ -1,4 +1,4 @@
-// Copyright 2007-2014 Omni Development, Inc. All rights reserved.
+// Copyright 2007-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -28,13 +28,7 @@ static NSInteger OFCompletionMatchScoreCapitalLetter = 0;
 static OFCharacterSet *_WhitespaceOFCharacterSet = nil;
 static OFCharacterSet *_UppercaseLetterOFCharacterSet = nil;
 
-@interface OFCompletionMatch () {
-  @private
-    NSString *_string;
-    OFIndexPath *_wordIndexPath;
-    OFIndexPath *_characterIndexPath;
-    NSInteger _score;
-}
+@interface OFCompletionMatch ()
 
 - (id)initWithString:(NSString *)string;
 - (OFCompletionMatch *)_preretainedSequenceByAddingWordIndex:(NSUInteger)wordIndex characterIndex:(NSUInteger)characterIndex withScore:(NSInteger)score NS_RETURNS_RETAINED;
@@ -84,7 +78,7 @@ static void filterIntoResults(
     OFCompletionMatchScoreCapitalLetter = [preferences integerForKey:@"OFCompletionMatchScoreForCapitalLetter"];
 }
 
-+ (OFCompletionMatch *)bestMatchFromMatches:(NSArray *)matches;
++ (OFCompletionMatch *)bestMatchFromMatches:(NSArray<OFCompletionMatch *> *)matches;
 {
     OFCompletionMatch *bestMatch = nil;
     
@@ -97,7 +91,7 @@ static void filterIntoResults(
     return bestMatch;
 }
 
-+ (NSArray *)matchesForFilter:(NSString *)filter inArray:(NSArray *)candidates shouldSort:(BOOL)shouldSort shouldUnique:(BOOL)shouldUnique;
++ (NSArray<OFCompletionMatch *> *)matchesForFilter:(NSString *)filter inArray:(NSArray<NSString *> *)candidates shouldSort:(BOOL)shouldSort shouldUnique:(BOOL)shouldUnique;
 {
     NSMutableArray *results = [NSMutableArray array];
     NSMutableArray *matches = shouldUnique ? [[NSMutableArray alloc] init] : nil;
@@ -135,7 +129,7 @@ static void filterIntoResults(
     return results;
 }
 
-+ (NSArray *)matchesForFilter:(NSString *)filter inString:(NSString *)name;
++ (NSArray<OFCompletionMatch *> *)matchesForFilter:(NSString *)filter inString:(NSString *)name;
 {
     NSMutableArray *results = [NSMutableArray array];
     [self addMatchesForFilter:filter inString:name toResults:results];
@@ -162,6 +156,8 @@ static void filterIntoResults(
 
 - (id)initWithString:(NSString *)string wordIndexPath:(OFIndexPath *)wordIndexPath characterIndexPath:(OFIndexPath *)characterIndexPath score:(NSInteger)score;
 {
+    self = [super init];
+
     _string = [string retain];
     _wordIndexPath = [wordIndexPath retain];
     _characterIndexPath = [characterIndexPath retain];
@@ -207,26 +203,6 @@ static void filterIntoResults(
 - (OFCompletionMatch *)sequenceByAddingScore:(NSInteger)score;
 {
     return [[[[self class] alloc] initWithString:_string wordIndexPath:_wordIndexPath characterIndexPath:_characterIndexPath score:_score + score] autorelease];
-}
-
-- (NSString *)string;
-{
-    return _string;
-}
-
-- (OFIndexPath *)wordIndexPath;
-{
-    return _wordIndexPath;
-}
-
-- (OFIndexPath *)characterIndexPath;
-{
-    return _characterIndexPath;
-}
-
-- (NSInteger)score;
-{
-    return _score;
 }
 
 - (NSUInteger)lastWordIndex;

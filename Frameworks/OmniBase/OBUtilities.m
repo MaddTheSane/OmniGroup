@@ -1,4 +1,4 @@
-// Copyright 1997-2016 Omni Development, Inc. All rights reserved.
+// Copyright 1997-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -356,19 +356,15 @@ void _OBRejectInvalidCall(id self, SEL _cmd, const char *file, unsigned int line
     exit(1);  // not reached, but needed to pacify the compiler
 }
 
-void _OBFinishPorting(const char *header, const char *function)
+void _OBFinishPorting(const char *text)
 {
-    NSLog(@"%s in %s", header, function);
+    NSLog(@"%s", text);
     abort();
 }
 
-void _OBFinishPortingLater(const char *header, const char *function, const char *message)
+void _OBFinishPortingLater(const char *text)
 {
-#ifdef DEBUG
-    NSLog(@"%s in %s -- %s", header, function, message);
-#else
-    NSLog(@"%s in %s", header, function);
-#endif
+    NSLog(@"%s", text);
 }
 
 BOOL OBIsBeingDebugged(void)
@@ -389,7 +385,21 @@ BOOL OBIsBeingDebugged(void)
     return (rc == 0 && (info.kp_proc.p_flag & P_TRACED) != 0);
 }
 
-#if !defined(TARGET_OS_WATCH) || !TARGET_OS_WATCH
+void OBTrap(void)
+{
+#if __x86_64__
+    asm("\tint3");
+#elif __arm__
+    #if defined(TARGET_OS_WATCH) && TARGET_OS_WATCH
+        // Fall through to the abort() -- building for watchOS doesn't allow inline assembly
+    #else
+        asm("\tbkpt");
+    #endif
+#else
+    kill(getpid(), SIGTRAP);
+#endif
+    abort();
+}
 
 void _OBStopInDebugger(const char *file, unsigned int line, const char *function, const char *message)
 {
@@ -398,17 +408,10 @@ void _OBStopInDebugger(const char *file, unsigned int line, const char *function
     BOOL isBeingDebugged = OBIsBeingDebugged();
     OBASSERT(isBeingDebugged);
     if (isBeingDebugged) {
-#if __x86_64__
-        asm("\tint3");
-#elif __arm__
-        asm("\tbkpt");
-#else
+        // N.B. This should not use OBTrap. The intent here is to stop in the debugger if we are being debugged, but in non-fatally, such that you can to continue and debug the application in it's current state.
         kill(getpid(), SIGTRAP);
-#endif
     }
 }
-
-#endif
 
 DEFINE_NSSTRING(OBAbstractImplementation);
 DEFINE_NSSTRING(OBUnusedImplementation);

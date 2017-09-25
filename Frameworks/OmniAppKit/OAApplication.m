@@ -1,4 +1,4 @@
-// Copyright 1997-2016 Omni Development, Inc. All rights reserved.
+// Copyright 1997-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -32,7 +32,7 @@ RCS_ID("$Id$")
 NSString * const OAFlagsChangedNotification = @"OAFlagsChangedNotification";
 NSString * const OAFlagsChangedQueuedNotification = @"OAFlagsChangedNotification (Queued)";
 
-static NSUInteger launchModifierFlags;
+static NSEventModifierFlags launchModifierFlags;
 static BOOL OATargetSelection;
 
 BOOL OATargetSelectionEnabled(void)
@@ -44,6 +44,12 @@ BOOL OATargetSelectionEnabled(void)
 OBDEPRECATED_METHOD(-handleRunException:)
 OBDEPRECATED_METHOD(-handleInitException:)
 OBDEPRECATED_METHOD(-currentRunExceptionPanel)
+
+@interface OAApplication ()
+
+@property (nonatomic, assign) BOOL isTerminating;
+
+@end
 
 @implementation OAApplication
 {
@@ -269,8 +275,11 @@ BOOL OADebugTargetSelection = NO;
     OBRecordBacktrace(sel_getName(theAction), OBBacktraceBuffer_PerformSelector);
 
     if (OATargetSelection) {
+        DEBUG_TARGET_SELECTION(@"Checking for modal panel with target %@, key window %@, is modal %d", OBShortObjectDescription(theTarget), OBShortObjectDescription([self keyWindow]), [[self keyWindow] isModalPanel]);
+
         // The normal NSApplication version, sadly, uses internal target lookup for the nil case. It should really call -targetForAction:to:from:.
-        if (!theTarget)
+        // The AppKit version of this uses _NSTargetForSendAction() which has fewer restrictions on the nil target case (since it 'knows' it will pick the right thing _objectFromResponderChainWhichRespondsToAction()). Even if we return the exact same result as it would have calculated, it bails when we are in a modal session and have a menu item targetting a view in the modal window. See bug:///136395 (Mac-OmniOutliner Bug: Should allow pasting into the password decryption field)
+        if (!theTarget && ![[self keyWindow] isModalPanel])
             theTarget = [self targetForAction:theAction to:nil from:sender];
     }
     
@@ -391,8 +400,10 @@ static void _applyFullSearch(OAApplication *self, SEL theAction, id theTarget, i
 {
     if (!theAction || !OATargetSelection)
         return [super targetForAction:theAction];
-    else
+    else {
+        DEBUG_TARGET_SELECTION(@"Forwarding -targetForAction: to targetForAction:to:from: for action %@", NSStringFromSelector(theAction));
         return [self targetForAction:theAction to:nil from:nil];
+    }
 }
 
 - (id)targetForAction:(SEL)theAction to:(id)theTarget from:(id)sender;
@@ -460,6 +471,12 @@ static void _applyFullSearch(OAApplication *self, SEL theAction, id theTarget, i
         [super reportException:anException];
 }
 
+- (void)terminate:(id)sender
+{
+    self.isTerminating = YES;
+    [super terminate:sender];
+}
+
 #pragma mark NSResponder subclass
 
 - (void)presentError:(NSError *)error modalForWindow:(NSWindow *)window delegate:(id)delegate didPresentSelector:(SEL)didPresentSelector contextInfo:(void *)contextInfo;
@@ -475,7 +492,13 @@ static void _applyFullSearch(OAApplication *self, SEL theAction, id theTarget, i
         NSBeep();
         return;
     }
-    
+
+    if (self.isTerminating) {
+        // Can’t run a modal error while terminating. This avoids a crash-on-quit.
+        NSLog(@"%s called while terminating with error: %@", __PRETTY_FUNCTION__, error);
+        return;
+    }
+
     // nil/NULL here can crash in the superclass crash trying to build an NSInvocation from this goop.  Let's not.
     if (!delegate) {
         delegate = self;
@@ -529,7 +552,7 @@ static void _applyFullSearch(OAApplication *self, SEL theAction, id theTarget, i
     return [self mouseButtonIsDownAtIndex:2];
 }
 
-- (NSUInteger)launchModifierFlags;
+- (NSEventModifierFlags)launchModifierFlags;
 {
     return launchModifierFlags;
 }
@@ -629,6 +652,16 @@ static void _applyFullSearch(OAApplication *self, SEL theAction, id theTarget, i
     NSBeep();
 }
 
+- (NSString *)helpIndexFilename;
+{
+    return @"index";
+}
+
+- (NSString *)anchorsPlistFilename;
+{
+    return @"anchors";
+}
+
 - (NSURL *)builtInHelpURLForHelpURLString:(NSString *)helpURLString;
 {
     NSBundle *mainBundle = [NSBundle mainBundle];
@@ -636,11 +669,11 @@ static void _applyFullSearch(OAApplication *self, SEL theAction, id theTarget, i
     NSString *helpFolder = [infoDict objectForKey:@"OAHelpFolder"];
 
     if (helpFolder != nil) {
-        NSURL *indexPageURL = [[NSBundle mainBundle] URLForResource:@"index" withExtension:@"html" subdirectory:helpFolder];
+        NSURL *indexPageURL = [[NSBundle mainBundle] URLForResource:[self helpIndexFilename] withExtension:@"html" subdirectory:helpFolder];
         NSURL *targetURL = [NSURL URLWithString:helpURLString relativeToURL:indexPageURL];
 
         if (OFISEQUAL([targetURL scheme], @"anchor")) {
-            NSURL *anchorsPlistURL = [[NSBundle mainBundle] URLForResource:@"anchors" withExtension:@"plist" subdirectory:helpFolder];
+            NSURL *anchorsPlistURL = [[NSBundle mainBundle] URLForResource:[self anchorsPlistFilename] withExtension:@"plist" subdirectory:helpFolder];
             NSDictionary *anchorsDictionary = [NSDictionary dictionaryWithContentsOfURL:anchorsPlistURL];
             NSString *anchorURLString = [anchorsDictionary objectForKey:helpURLString];
             if (anchorURLString == nil) {
@@ -911,7 +944,7 @@ static void _applyFullSearch(OAApplication *self, SEL theAction, id theTarget, i
 {
     // Probably not worth building a hash table for the (likely) low number of documents.
     for (OADocument *document in [self orderedDocuments]) {
-        // Needed so that -identifer on OADocument(Scriptability) doesn't recurse infinitely
+        // Needed so that -identifier on OADocument(Scriptability) doesn't recurse infinitely
         if (document == ignoringDocument)
             continue;
         
@@ -945,9 +978,9 @@ static void _applyFullSearch(OAApplication *self, SEL theAction, id theTarget, i
 
 + (void)_setupOmniApplication;
 {
-    [OBObject self]; // Trigger +[OBPostLoader processClasses]
+    [OBObject self]; // Trigger OBInvokeRegisteredLoadActions()
     
-    // Wait until defaults are registered with OBPostLoader to look this up.
+    // Wait until defaults are registered via OBInvokeRegisteredLoadActions() to look this up.
     OATargetSelection = [[NSUserDefaults standardUserDefaults] boolForKey:@"OATargetSelection"];
 
     // make these images available to client nibs and whatnot (retaining them so they stick around in cache).

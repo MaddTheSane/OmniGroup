@@ -1,4 +1,4 @@
-// Copyright 1997-2015 Omni Development, Inc. All rights reserved.
+// Copyright 1997-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -10,6 +10,8 @@
 // OFBundleRegistry searches for loadable bundles, then processes the OFRegistrations for all software components (i.e. frameworks, the application, and any loadable bundles).
 
 #import <OmniFoundation/OFObject.h>
+
+NS_ASSUME_NONNULL_BEGIN
 
 @class NSArray, NSBundle;
 
@@ -25,19 +27,17 @@ extern NSString * const OFBundleRegistryDisabledBundlesDefaultsKey;
 @interface OFBundleRegistry : OFObject
 
 + (void)registerKnownBundles;
-    // Called automatically when using OBPostloader
+    // Called automatically via OBInvokeRegisteredLoadActions()
 
 + (NSDictionary<NSString *, NSString *> *)softwareVersionDictionary;
     // Returns a dictionary of the registered software versions
 + (NSArray *)knownBundles;
     // Returns the known bundle descriptions (see comments in the implementation for details)
 
-+ (void)noteAdditionalBundles:(NSArray *)additionalBundles owner:bundleOwner;
++ (void)noteAdditionalBundles:(nullable NSArray *)additionalBundles owner:(id)bundleOwner;
     // Objects that maintain bundles or plugins that are not known to OFBundleRegistry can note their descriptions here and they will be included in +knownBundles
 
 @end
 
-// OFBundleRegistryTarget informal protocol
-@protocol OFBundleRegistryTarget
-+ (void)registerItemName:(NSString *)itemName bundle:(NSBundle *)bundle description:(NSDictionary *)description;
-@end
+NS_ASSUME_NONNULL_END
+

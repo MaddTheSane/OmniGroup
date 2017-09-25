@@ -1,4 +1,4 @@
-// Copyright 2003-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2003-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -12,13 +12,16 @@
 #import <CoreFoundation/CFURL.h>
 #import <OmniFoundation/OFXMLWhitespaceBehavior.h>
 #import <OmniFoundation/OFXMLParserTarget.h>
+#import <OmniFoundation/OFXMLElementParser.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
-@class OFXMLCursor, OFXMLElement, OFXMLWhitespaceBehavior;
+@class OFXMLCursor, OFXMLDocument, OFXMLElement, OFXMLElementParser, OFXMLWhitespaceBehavior;
 @class NSArray, NSMutableArray, NSDate, NSData, NSURL, NSError, NSInputStream;
 
-@interface OFXMLDocument : OFXMLIdentifierRegistry <OFXMLParserTarget>
+typedef void (^OFXMLDocumentPrepareParser)(__kindof OFXMLDocument *document, OFXMLParser *parser);
+
+@interface OFXMLDocument : OFXMLIdentifierRegistry <OFXMLParserTarget, OFXMLElementParserDelegate>
 
 - (instancetype)init NS_UNAVAILABLE;
 - (id)initWithRegistry:(OFXMLIdentifierRegistry *)registry NS_UNAVAILABLE;
@@ -26,9 +29,18 @@ NS_ASSUME_NONNULL_BEGIN
 - (nullable instancetype)initWithRootElement:(OFXMLElement *)rootElement
           dtdSystemID:(nullable CFURLRef)dtdSystemID
           dtdPublicID:(nullable NSString *)dtdPublicID
+             schemaID:(nullable CFURLRef)schemaID
+      schemaNamespace:(nullable NSString *)schemaNamespace
    whitespaceBehavior:(nullable OFXMLWhitespaceBehavior *)whitespaceBehavior
        stringEncoding:(CFStringEncoding)stringEncoding
                 error:(NSError **)outError NS_DESIGNATED_INITIALIZER;
+
+- (nullable instancetype)initWithRootElement:(OFXMLElement *)rootElement
+                                 dtdSystemID:(nullable CFURLRef)dtdSystemID
+                                 dtdPublicID:(nullable NSString *)dtdPublicID
+                          whitespaceBehavior:(nullable OFXMLWhitespaceBehavior *)whitespaceBehavior
+                              stringEncoding:(CFStringEncoding)stringEncoding
+                                       error:(NSError **)outError;
 
 - (nullable instancetype)initWithRootElementName:(NSString *)rootElementName
               dtdSystemID:(nullable CFURLRef)dtdSystemID
@@ -36,6 +48,14 @@ NS_ASSUME_NONNULL_BEGIN
        whitespaceBehavior:(nullable OFXMLWhitespaceBehavior *)whitespaceBehavior
            stringEncoding:(CFStringEncoding)stringEncoding
                     error:(NSError **)outError;
+
+- (nullable instancetype)initWithRootElementName:(NSString *)rootElementName
+                                        schemaID:(nullable CFURLRef)schemaID
+                                 schemaNamespace:(nullable NSString *)schemaNamespace
+                                    namespaceURL:(nullable NSURL *)rootElementNameSpace
+                              whitespaceBehavior:(nullable OFXMLWhitespaceBehavior *)whitespaceBehavior
+                                  stringEncoding:(CFStringEncoding)stringEncoding
+                                           error:(NSError **)outError;
 
 - (nullable instancetype)initWithRootElementName:(NSString *)rootElementName
              namespaceURL:(nullable NSURL *)rootElementNameSpace
@@ -47,14 +67,20 @@ NS_ASSUME_NONNULL_BEGIN
 
 // xmlData marked nullable for testing purposes. This will return a nil document.
 - (nullable instancetype)initWithData:(NSData *)xmlData whitespaceBehavior:(nullable OFXMLWhitespaceBehavior *)whitespaceBehavior error:(NSError **)outError;
+- (nullable instancetype)initWithData:(NSData *)xmlData whitespaceBehavior:(nullable OFXMLWhitespaceBehavior *)whitespaceBehavior prepareParser:(nullable NS_NOESCAPE OFXMLDocumentPrepareParser)prepareParser error:(NSError **)outError;
 - (nullable instancetype)initWithData:(NSData *)xmlData whitespaceBehavior:(nullable OFXMLWhitespaceBehavior *)whitespaceBehavior defaultWhitespaceBehavior:(OFXMLWhitespaceBehaviorType)defaultWhitespaceBehavior error:(NSError **)outError;
 - (nullable instancetype)initWithInputStream:(NSInputStream *)inputStream whitespaceBehavior:(nullable OFXMLWhitespaceBehavior *)whitespaceBehavior error:(NSError **)outError;
-- (nullable instancetype)initWithInputStream:(NSInputStream *)inputStream whitespaceBehavior:(nullable OFXMLWhitespaceBehavior *)whitespaceBehavior defaultWhitespaceBehavior:(OFXMLWhitespaceBehaviorType)defaultWhitespaceBehavior error:(NSError **)outError NS_DESIGNATED_INITIALIZER;
+- (nullable instancetype)initWithInputStream:(NSInputStream *)inputStream whitespaceBehavior:(nullable OFXMLWhitespaceBehavior *)whitespaceBehavior defaultWhitespaceBehavior:(OFXMLWhitespaceBehaviorType)defaultWhitespaceBehavior error:(NSError **)outError;
+- (nullable instancetype)initWithInputStream:(NSInputStream *)inputStream whitespaceBehavior:(nullable OFXMLWhitespaceBehavior *)whitespaceBehavior defaultWhitespaceBehavior:(OFXMLWhitespaceBehaviorType)defaultWhitespaceBehavior prepareParser:(nullable NS_NOESCAPE OFXMLDocumentPrepareParser)prepareParser error:(NSError **)outError NS_DESIGNATED_INITIALIZER;
+
+- (__kindof OFXMLElementParser *)makeElementParser;
 
 @property(nonatomic,readonly) OFXMLWhitespaceBehavior *whitespaceBehavior;
 @property(nonatomic,readonly,nullable) CFURLRef dtdSystemID;
 @property(nonatomic,readonly,nullable) NSString *dtdPublicID;
 @property(nonatomic,readonly) CFStringEncoding stringEncoding;
+@property(nonatomic,readonly,nullable) CFURLRef schemaID;
+@property(nonatomic,readonly,nullable) NSString *schemaNamespace;
 
 @property(nonatomic,nullable,readonly) NSArray *loadWarnings;
 
@@ -84,14 +110,14 @@ NS_ASSUME_NONNULL_BEGIN
 
 @property(nonatomic,readonly) OFXMLElement *topElement;
 - (void) appendString: (NSString *) string;
-- (void) appendString: (NSString *) string quotingMask: (unsigned int) quotingMask newlineReplacment: (NSString *) newlineReplacment;
+- (void) appendString: (NSString *) string quotingMask: (unsigned int) quotingMask newlineReplacment: (nullable NSString *) newlineReplacment;
 - (void) setAttribute: (NSString *) name string: (nullable NSString *) value;
 - (void) setAttribute: (NSString *) name value: (nullable id) value;
 - (void) setAttribute: (NSString *) name integer: (int) value;
 - (void) setAttribute: (NSString *) name real: (float) value;  // "%g"
 - (void) setAttribute: (NSString *) name real: (float) value format: (NSString *) formatString;
 - (void) setAttribute: (NSString *) name double: (double) value;  // "%.15g"
-- (void) setAttribute: (NSString *) name double: (float) value format: (NSString *) formatString;
+- (void) setAttribute: (NSString *) name double: (double) value format: (NSString *) formatString;
 - (OFXMLElement *)appendElement:(NSString *)elementName;
 - (OFXMLElement *)appendElement:(NSString *)elementName containingString:(NSString *) contents;
 - (OFXMLElement *)appendElement:(NSString *)elementName containingInteger:(int) contents;
@@ -108,10 +134,6 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)parser:(OFXMLParser *)parser setSystemID:(NSURL *)systemID publicID:(NSString *)publicID;
 - (void)parser:(OFXMLParser *)parser addProcessingInstructionNamed:(NSString *)piName value:(NSString *)piValue;
 - (void)parser:(OFXMLParser *)parser startElementWithQName:(OFXMLQName *)qname multipleAttributeGenerator:(id <OFXMLParserMultipleAttributeGenerator>)multipleAttributeGenerator singleAttributeGenerator:(id <OFXMLParserSingleAttributeGenerator>)singleAttributeGenerator;
-- (void)parser:(OFXMLParser *)parser addWhitespace:(NSString *)whitespace;
-- (void)parser:(OFXMLParser *)parser addString:(NSString *)string;
-- (void)parserEndElement:(OFXMLParser *)parser;
-- (void)parser:(OFXMLParser *)parser endUnparsedElementWithQName:(OFXMLQName *)qname identifier:(NSString *)identifier contents:(NSData *)contents;
 
 @end
 

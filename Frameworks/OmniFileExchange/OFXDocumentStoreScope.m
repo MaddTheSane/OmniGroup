@@ -1,4 +1,4 @@
-// Copyright 2013-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2013-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -35,13 +35,13 @@ RCS_ID("$Id$");
     
     NSString *_identifier;
     NSURL *_documentsURL;
-    OFXRegistrationTable *_metadataItemRegistrationTable;
-    NSDictionary *_previouslyAppliedMetadataItemsByIdentifier;
+    OFXRegistrationTable <OFXFileMetadata *> *_metadataItemRegistrationTable;
+    NSDictionary <NSString *, OFXFileMetadata *> *_previouslyAppliedMetadataItemsByIdentifier;
     
-    NSMutableSet *_fileItemsToAutomaticallyDownload;
+    NSMutableSet <ODSFileItem *> *_fileItemsToAutomaticallyDownload;
     
     // In the local directory scope, we can scan the filesystem to check the current state, here we get notified of file items in background. We could assume file stubs exist and scan, but instead we maintain a set of used URLs here.
-    NSArray *_usedFileURLs;
+    NSArray <NSURL *> *_usedFileURLs;
 }
 
 static unsigned MetadataRegistrationContext;
@@ -102,7 +102,7 @@ static unsigned MetadataRegistrationContext;
 
 - (NSURL *)documentsURL;
 {
-    OBPRECONDITION(_documentsURL); // OBFinishPorting: May need to synchronously wait for this... Yuck.
+    OBPRECONDITION(_documentsURL); // OBFinishPorting: <bug:///147840> (iOS-OmniOutliner Bug: OFXDocumentStoreScope.m:105 - May need to synchronously wait for documentsURL)
     return _documentsURL;
 }
 
@@ -117,7 +117,7 @@ static unsigned MetadataRegistrationContext;
     return YES;
 }
 
-- (void)deleteItems:(NSSet *)items completionHandler:(void (^)(NSSet *deletedFileItems, NSArray *errorsOrNil))completionHandler;
+- (void)deleteItems:(NSSet <ODSItem *> *)items completionHandler:(void (^)(NSSet *deletedFileItems, NSArray *errorsOrNil))completionHandler;
 {
     OBPRECONDITION([items all:^BOOL(ODSItem *item) { return item.scope == self; }]);
     OBPRECONDITION([NSThread isMainThread]); // Synchronize with updating of fileItems, and this is the queue we'll invoke the completion handler on.
@@ -129,15 +129,15 @@ static unsigned MetadataRegistrationContext;
     // TODO: Delete of mix of downloaded/undownloaded
     // TODO: Delete of folder with downloaded and undownloaded item
     
-    NSMutableSet *deletedFileItems = [NSMutableSet new];
-    NSMutableArray *errors = [NSMutableArray new];
+    NSMutableSet <ODSFileItem *> *deletedFileItems = [NSMutableSet new];
+    NSMutableArray <NSError *> *errors = [NSMutableArray new];
     
     NSBlockOperation *allDeletionsCompleted = [NSBlockOperation blockOperationWithBlock:^{
         if (completionHandler)
             completionHandler(deletedFileItems, errors);
     }];
     
-    NSMutableSet *undownloadedFileItems = [NSMutableSet new];
+    NSMutableSet <ODSFileItem *> *undownloadedFileItems = [NSMutableSet new];
     {
         for (ODSItem *item in items) {
             [item eachFile:^(ODSFileItem *fileItem){
@@ -178,7 +178,7 @@ static unsigned MetadataRegistrationContext;
         return;
     }
 
-    OBFinishPorting;
+    OBFinishPortingWithNote("<bug:///147905> (iOS-OmniOutliner Bug: Handle the case where trashScope is nil - in -[OFXDocumentStoreScope deleteItems:completionHandler:])");
 #if 0
     // This will do file coordination if the document is downloaded (so other presenters will notice), otherwise just a metadata-based deletion.
     [_syncAgent deleteItemAtURL:fileItem.fileURL completionHandler:completionHandler];
@@ -408,7 +408,7 @@ static void _updateFlagFromAttributes(ODSFileItem *fileItem, NSString *bindingKe
 {
     OBPRECONDITION([NSThread isMainThread]);
     
-    NSMutableArray *fileURLs = [NSMutableArray new];
+    NSMutableArray <NSURL *> *fileURLs = [NSMutableArray new];
     for (ODSFileItem *fileItem in self.fileItems)
         [fileURLs addObject:fileItem.fileURL];
 
@@ -573,7 +573,7 @@ static void _updateFlagFromAttributes(ODSFileItem *fileItem, NSString *bindingKe
     if ([fileItems any:^BOOL(ODSFileItem *fileItem) { return fileItem.isDownloading || fileItem.downloadRequested; }])
         return;
     
-    // OBFinishPorting: iCloud supposedly eagerly downloads all files on the Mac. We don't have -preferredFileItemForNextAutomaticDownload: on the Mac (it up-calls to the UI to see what previews are on screen), and we are only downloading small files on the Mac.
+    // OBFinishPorting: <bug:///147839> (iOS-OmniOutliner Engineering:) iCloud supposedly eagerly downloads all files on the Mac. We don't have -preferredFileItemForNextAutomaticDownload: on the Mac (it up-calls to the UI to see what previews are on screen), and we are only downloading small files on the Mac.
     ODSFileItem *fileItem = [self.documentStore preferredFileItemForNextAutomaticDownload:_fileItemsToAutomaticallyDownload];
     if (!fileItem)
         fileItem = [_fileItemsToAutomaticallyDownload anyObject];

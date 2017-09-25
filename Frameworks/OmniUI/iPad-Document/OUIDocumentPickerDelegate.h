@@ -1,4 +1,4 @@
-// Copyright 2010-2015 Omni Development, Inc. All rights reserved.
+// Copyright 2010-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -29,6 +29,7 @@
 - (NSArray *)documentPickerAvailableFilters:(OUIDocumentPicker *)picker; // array of OUIDocumentPickerFilter
 - (BOOL)documentPickerShouldOpenButNotDisplayUTType:(NSString *)fileType;
 - (NSPredicate *)documentPickerAvailableUTTypesPredicate:(OUIDocumentPicker *)picker; //expects a string of the fileType
+- (BOOL)documentPickerShouldAlwaysStackFilterControls;
 
 // Open
 - (void)documentPicker:(OUIDocumentPicker *)picker openTappedFileItem:(ODSFileItem *)fileItem;
@@ -44,6 +45,9 @@
 
 // Default documentStoreFilter's filterPredicate
 - (NSPredicate *)defaultDocumentStoreFilterFilterPredicate:(OUIDocumentPicker *)picker;
+
+// Notification that the document picker is about to appear
+- (void)documentPicker:(OUIDocumentPicker *)picker viewWillAppear:(BOOL)animated;
 
 // Your opportunity to customize the default item view before it's in its superview
 - (void)documentPicker:(OUIDocumentPicker *)picker willDisplayItemView:(OUIDocumentPickerItemView *)itemView;
@@ -65,6 +69,7 @@
 // Only called if there are 2 or more files being duplicated (not if any items are folders). The return value should be a format string taking one %ld argument. The file items are provided in case the receiver would return a different title based on the file types.
 - (NSString *)documentPickerAlertTitleFormatForDuplicatingFileItems:(NSSet *)fileItems;
 
+- (BOOL)documentPickerWantsVisibleNavigationBarAtRoot:(OUIDocumentPicker *)picker;
 
 // Deprecated
 - (NSString *)documentPicker:(OUIDocumentPicker *)picker toolbarPromptForRenamingFileItem:(ODSFileItem *)fileItem OB_DEPRECATED_ATTRIBUTE;

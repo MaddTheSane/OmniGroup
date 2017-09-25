@@ -1,4 +1,4 @@
-// Copyright 2002-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2002-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -63,7 +63,7 @@ NSComparisonResult OISortByDefaultDisplayOrderInGroup(OIInspectorController *a, 
 
 // Init and dealloc
 
-- (id)initWithInspector:(OIInspector <OIConcreteInspector> *)anInspector;
+- (id)initWithInspector:(OIInspector <OIConcreteInspector> *)anInspector inspectorRegistry:(OIInspectorRegistry *)inspectorRegistry;
 {
     OBPRECONDITION([anInspector conformsToProtocol:@protocol(OIConcreteInspector)]);
 
@@ -71,6 +71,8 @@ NSComparisonResult OISortByDefaultDisplayOrderInGroup(OIInspectorController *a, 
         return nil;
 
     inspector = anInspector;
+    _weak_inspectorRegistry = inspectorRegistry;
+    
     _isExpanded = !anInspector.isCollapsible;
     self.interfaceType = anInspector.preferredInterfaceType;
     
@@ -96,6 +98,8 @@ NSComparisonResult OISortByDefaultDisplayOrderInGroup(OIInspectorController *a, 
 {
     return inspector;
 }
+
+@synthesize inspectorRegistry = _weak_inspectorRegistry;
 
 - (NSWindow *)window;
 {
@@ -143,8 +147,9 @@ NSComparisonResult OISortByDefaultDisplayOrderInGroup(OIInspectorController *a, 
 
 - (CGFloat)desiredHeightWhenExpanded;
 {
-    OBPRECONDITION(headingButton); // That is, -loadInterface must have been called.
-    CGFloat headingButtonHeight = headingButton ? NSHeight([headingButton frame]) : 0.0f;
+    // PBS 22 Nov. 2016: headingButton is optional.
+    // OBPRECONDITION(headingButton); // That is, -loadInterface must have been called.
+    CGFloat headingButtonHeight = headingButton ? self.headingHeight : 0.0f;
     return NSHeight([[self _inspectorView] frame]) + headingButtonHeight;
 }
 
@@ -285,7 +290,7 @@ NSComparisonResult OISortByDefaultDisplayOrderInGroup(OIInspectorController *a, 
     OBPRECONDITION(self.interfaceType == OIInspectorInterfaceTypeFloating);
     
     if (window) {
-        BOOL shouldBeExpandedBeforeDisplay = [OIWorkspace.sharedWorkspace objectForKey:self.inspectorIdentifier] != nil;
+        BOOL shouldBeExpandedBeforeDisplay = [[OIWorkspace sharedWorkspace] inspectorIsDisclosedForIdentifier:self.inspectorIdentifier];
         if (shouldBeExpandedBeforeDisplay != _isExpanded) {
             /* Expanding might cause our inspector to load its interface and lay itself out, thus informing us of the resize and reentering this method. So don't assume that _isExpanded is false because we set it that way in init.
              
@@ -590,9 +595,11 @@ NSComparisonResult OISortByDefaultDisplayOrderInGroup(OIInspectorController *a, 
         [[self containerView] addSubview:view positioned:NSWindowBelow relativeTo:headingButton];
         [window setFrame:windowFrame display:YES animate:animate];
         [view setAutoresizingMask:NSViewHeightSizable | NSViewMinXMargin | NSViewMaxXMargin];
-        [OIWorkspace.sharedWorkspace updateInspectorsWithBlock:^(NSMutableDictionary *dictionary) {
-            [dictionary setObject:@"YES" forKey:self.inspectorIdentifier];
-        }];
+
+        [[NSNotificationCenter defaultCenter] postNotificationName:OIWorkspaceWillChangeNotification object:self];
+        [[OIWorkspace sharedWorkspace] setInspectorIsDisclosed:YES forIdentifier:self.inspectorIdentifier];
+        [[NSNotificationCenter defaultCenter] postNotificationName:OIWorkspaceDidChangeNotification object:self];
+
     } else {
 	[window makeFirstResponder:window];
 
@@ -614,11 +621,11 @@ NSComparisonResult OISortByDefaultDisplayOrderInGroup(OIInspectorController *a, 
         
         if (updateInspector)
             [self inspectNothing];
-        
-        [OIWorkspace.sharedWorkspace updateInspectorsWithBlock:^(NSMutableDictionary *dictionary) {
-            [dictionary removeObjectForKey:self.inspectorIdentifier];
-        }];
-    }
+
+        [[NSNotificationCenter defaultCenter] postNotificationName:OIWorkspaceWillChangeNotification object:self];
+        [[OIWorkspace sharedWorkspace] setInspectorIsDisclosed:NO forIdentifier:self.inspectorIdentifier];
+            [[NSNotificationCenter defaultCenter] postNotificationName:OIWorkspaceDidChangeNotification object:self];
+        }
     
     NSRect headingFrame;
     if (additionalHeaderHeight > 0) {
@@ -704,11 +711,10 @@ NSComparisonResult OISortByDefaultDisplayOrderInGroup(OIInspectorController *a, 
 {
     NSSize size = [[self _inspectorView] frame].size;
 
-    [OIWorkspace.sharedWorkspace updateInspectorsWithBlock:^(NSMutableDictionary *dictionary) {
-        [dictionary setObject:[NSNumber numberWithCGFloat:size.height] forKey:[NSString stringWithFormat:@"%@-Height", self.inspectorIdentifier]];
-    }];
-
-    [OIWorkspace.sharedWorkspace save];
+    [[NSNotificationCenter defaultCenter] postNotificationName:OIWorkspaceWillChangeNotification object:self];
+    [[OIWorkspace sharedWorkspace] setHeight:size.height forInspectorIdentifier:self.inspectorIdentifier];
+    [[NSNotificationCenter defaultCenter] postNotificationName:OIWorkspaceDidChangeNotification object:self];
+    [[OIWorkspace sharedWorkspace] save];
 }
 
 - (BOOL)_groupCanBeginResizingOperation;

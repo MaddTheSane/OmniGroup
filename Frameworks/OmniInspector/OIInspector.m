@@ -1,4 +1,4 @@
-// Copyright 2005-2016 Omni Development, Inc. All rights reserved.
+// Copyright 2005-2017 Omni Development, Inc. All rights reserved.
 //
 // This software may only be used and reproduced according to the
 // terms in the file OmniSourceLicense.html, which should be
@@ -14,8 +14,10 @@
 #import <OmniBase/OmniBase.h>
 #import <OmniFoundation/OFEnumNameTable-OFFlagMask.h>
 #import <OmniFoundation/OmniFoundation.h>
+#import <OmniInspector/OIInspectableControllerProtocol.h>
 #import <OmniInspector/OIInspectorController.h>
 #import <OmniInspector/OIInspectorHeaderView.h>
+#import <OmniInspector/OIInspectionSet.h>
 #import <OmniInspector/OIInspectorRegistry.h>
 #import <OmniInspector/OITabbedInspector.h>
 
@@ -197,7 +199,10 @@ static OFEnumNameTable *OIVisibilityStateNameTable = nil;
     _isCollapsible = YES;
     if ([dict objectForKey:@"isCollapsible"])
         _isCollapsible = [dict boolForKey:@"isCollapsible"];
-    
+    if ([dict objectForKey:@"pinningDisabled"]) {
+        _pinningDisabled = [dict boolForKey:@"pinningDisabled"];
+    }
+
     return self;
 }
 
@@ -371,6 +376,28 @@ static OFEnumNameTable *OIVisibilityStateNameTable = nil;
     }
     
     return dict;
+}
+
+@end
+
+@implementation OIInspector (OISelectionRelativeNames)
+
+- (nullable NSString *)selectionRelativeNameForObject:(id)object amongObjects:(NSArray *)inspectedObjects;
+{
+    // TODO: This is gross -- better would be to have the inspection set passed down to all the inspectors and have that call -inspectObjects:.
+    OIInspectionSet *inspectionSet = self.inspectorController.inspectorRegistry.inspectionSet;
+    OBASSERT_NOTNULL(inspectionSet);
+
+    for (id <OIInspectableController> controller in inspectionSet.inspectableControllers) {
+        if ([controller conformsToProtocol:@protocol(OIInspectedObjectSelectionRelativeNames)]) {
+            id <OIInspectedObjectSelectionRelativeNames> selectionRelativeNames = (typeof(selectionRelativeNames))controller;
+            NSString *name = [selectionRelativeNames inspector:self selectionRelativeNameForObject:object amongObjects:inspectedObjects inspectionSet:inspectionSet];
+            if (name)
+                return name;
+        }
+    }
+
+    return nil;
 }
 
 @end
